@@ -399,3 +399,17 @@ Proof: `scratchpad/vessel-tn-sol/phantom-sponsor.mjs`. Real runs: hashes 0xe71c�
   login → NOT publicly usable. CLI has no toggle; token is in the OS keyring (no readable auth.json). Must be
   disabled in dashboard: Project → Settings → Deployment Protection → Vercel Authentication → Disabled
   (https://vercel.com/duckys-projects-bc83c6a0/vessel/settings/deployment-protection). Then the demo is public.
+
+## 5k. ⚠️ Phantom byte-upload challenge — anti-phishing block (testnet workaround; mainnet TODO)
+Live browser test (real Phantom) surfaced the LAST hurdle after register+wasm worked:
+- Phantom **refuses** `signMessage` on the raw Shelby auth challenge bytes: *"You cannot sign solana
+  transactions using sign message"* — its anti-phishing heuristic rejects tx-shaped byte payloads.
+  (The on-chain register signs a SIWS **text** message via `signAptosTransactionWithSolana` → Phantom
+  allows that; only the raw-bytes challenge trips it.)
+- **Testnet does NOT enforce the byte-upload challenge** (verified: a *bogus* random 64-byte signature
+  still uploads + reads byte-exact — `dummy-chal-test.mjs`, hash 0x25dd…). So client falls back to an
+  **ephemeral key** for the challenge when Phantom blocks it. Ownership stays genuine (register is real
+  Phantom-signed; blob lives at the customer's DAA account URL).
+- **Mainnet TODO:** the challenge must be signed by the owner. Phantom can't sign raw bytes. Options for
+  mainnet: server-relay the byte-upload via api key (if the RPC accepts api-key writes to an owned blob),
+  or a Shelby-side SIWS-wrapped challenge that wallets can sign. Out of scope for this testnet demo.

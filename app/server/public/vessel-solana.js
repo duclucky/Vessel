@@ -10561,7 +10561,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     "node_modules/tweetnacl/nacl-fast.js"(exports, module) {
       init_process();
       init_buffer();
-      (function(nacl2) {
+      (function(nacl3) {
         "use strict";
         var gf = function(init3) {
           var i24, r14 = new Float64Array(16);
@@ -12520,7 +12520,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           return n88;
         }
         var crypto_secretbox_KEYBYTES = 32, crypto_secretbox_NONCEBYTES = 24, crypto_secretbox_ZEROBYTES = 32, crypto_secretbox_BOXZEROBYTES = 16, crypto_scalarmult_BYTES = 32, crypto_scalarmult_SCALARBYTES = 32, crypto_box_PUBLICKEYBYTES = 32, crypto_box_SECRETKEYBYTES = 32, crypto_box_BEFORENMBYTES = 32, crypto_box_NONCEBYTES = crypto_secretbox_NONCEBYTES, crypto_box_ZEROBYTES = crypto_secretbox_ZEROBYTES, crypto_box_BOXZEROBYTES = crypto_secretbox_BOXZEROBYTES, crypto_sign_BYTES = 64, crypto_sign_PUBLICKEYBYTES = 32, crypto_sign_SECRETKEYBYTES = 64, crypto_sign_SEEDBYTES = 32, crypto_hash_BYTES = 64;
-        nacl2.lowlevel = {
+        nacl3.lowlevel = {
           crypto_core_hsalsa20,
           crypto_stream_xor,
           crypto_stream,
@@ -12593,12 +12593,12 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         function cleanup(arr) {
           for (var i24 = 0; i24 < arr.length; i24++) arr[i24] = 0;
         }
-        nacl2.randomBytes = function(n88) {
+        nacl3.randomBytes = function(n88) {
           var b8 = new Uint8Array(n88);
           randombytes(b8, n88);
           return b8;
         };
-        nacl2.secretbox = function(msg, nonce, key) {
+        nacl3.secretbox = function(msg, nonce, key) {
           checkArrayTypes(msg, nonce, key);
           checkLengths(key, nonce);
           var m9 = new Uint8Array(crypto_secretbox_ZEROBYTES + msg.length);
@@ -12607,7 +12607,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           crypto_secretbox(c7, m9, m9.length, nonce, key);
           return c7.subarray(crypto_secretbox_BOXZEROBYTES);
         };
-        nacl2.secretbox.open = function(box, nonce, key) {
+        nacl3.secretbox.open = function(box, nonce, key) {
           checkArrayTypes(box, nonce, key);
           checkLengths(key, nonce);
           var c7 = new Uint8Array(crypto_secretbox_BOXZEROBYTES + box.length);
@@ -12617,10 +12617,10 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           if (crypto_secretbox_open(m9, c7, c7.length, nonce, key) !== 0) return null;
           return m9.subarray(crypto_secretbox_ZEROBYTES);
         };
-        nacl2.secretbox.keyLength = crypto_secretbox_KEYBYTES;
-        nacl2.secretbox.nonceLength = crypto_secretbox_NONCEBYTES;
-        nacl2.secretbox.overheadLength = crypto_secretbox_BOXZEROBYTES;
-        nacl2.scalarMult = function(n88, p8) {
+        nacl3.secretbox.keyLength = crypto_secretbox_KEYBYTES;
+        nacl3.secretbox.nonceLength = crypto_secretbox_NONCEBYTES;
+        nacl3.secretbox.overheadLength = crypto_secretbox_BOXZEROBYTES;
+        nacl3.scalarMult = function(n88, p8) {
           checkArrayTypes(n88, p8);
           if (n88.length !== crypto_scalarmult_SCALARBYTES) throw new Error("bad n size");
           if (p8.length !== crypto_scalarmult_BYTES) throw new Error("bad p size");
@@ -12628,39 +12628,39 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           crypto_scalarmult(q7, n88, p8);
           return q7;
         };
-        nacl2.scalarMult.base = function(n88) {
+        nacl3.scalarMult.base = function(n88) {
           checkArrayTypes(n88);
           if (n88.length !== crypto_scalarmult_SCALARBYTES) throw new Error("bad n size");
           var q7 = new Uint8Array(crypto_scalarmult_BYTES);
           crypto_scalarmult_base(q7, n88);
           return q7;
         };
-        nacl2.scalarMult.scalarLength = crypto_scalarmult_SCALARBYTES;
-        nacl2.scalarMult.groupElementLength = crypto_scalarmult_BYTES;
-        nacl2.box = function(msg, nonce, publicKey3, secretKey) {
-          var k4 = nacl2.box.before(publicKey3, secretKey);
-          return nacl2.secretbox(msg, nonce, k4);
+        nacl3.scalarMult.scalarLength = crypto_scalarmult_SCALARBYTES;
+        nacl3.scalarMult.groupElementLength = crypto_scalarmult_BYTES;
+        nacl3.box = function(msg, nonce, publicKey3, secretKey) {
+          var k4 = nacl3.box.before(publicKey3, secretKey);
+          return nacl3.secretbox(msg, nonce, k4);
         };
-        nacl2.box.before = function(publicKey3, secretKey) {
+        nacl3.box.before = function(publicKey3, secretKey) {
           checkArrayTypes(publicKey3, secretKey);
           checkBoxLengths(publicKey3, secretKey);
           var k4 = new Uint8Array(crypto_box_BEFORENMBYTES);
           crypto_box_beforenm(k4, publicKey3, secretKey);
           return k4;
         };
-        nacl2.box.after = nacl2.secretbox;
-        nacl2.box.open = function(msg, nonce, publicKey3, secretKey) {
-          var k4 = nacl2.box.before(publicKey3, secretKey);
-          return nacl2.secretbox.open(msg, nonce, k4);
+        nacl3.box.after = nacl3.secretbox;
+        nacl3.box.open = function(msg, nonce, publicKey3, secretKey) {
+          var k4 = nacl3.box.before(publicKey3, secretKey);
+          return nacl3.secretbox.open(msg, nonce, k4);
         };
-        nacl2.box.open.after = nacl2.secretbox.open;
-        nacl2.box.keyPair = function() {
+        nacl3.box.open.after = nacl3.secretbox.open;
+        nacl3.box.keyPair = function() {
           var pk = new Uint8Array(crypto_box_PUBLICKEYBYTES);
           var sk = new Uint8Array(crypto_box_SECRETKEYBYTES);
           crypto_box_keypair(pk, sk);
           return { publicKey: pk, secretKey: sk };
         };
-        nacl2.box.keyPair.fromSecretKey = function(secretKey) {
+        nacl3.box.keyPair.fromSecretKey = function(secretKey) {
           checkArrayTypes(secretKey);
           if (secretKey.length !== crypto_box_SECRETKEYBYTES)
             throw new Error("bad secret key size");
@@ -12668,12 +12668,12 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           crypto_scalarmult_base(pk, secretKey);
           return { publicKey: pk, secretKey: new Uint8Array(secretKey) };
         };
-        nacl2.box.publicKeyLength = crypto_box_PUBLICKEYBYTES;
-        nacl2.box.secretKeyLength = crypto_box_SECRETKEYBYTES;
-        nacl2.box.sharedKeyLength = crypto_box_BEFORENMBYTES;
-        nacl2.box.nonceLength = crypto_box_NONCEBYTES;
-        nacl2.box.overheadLength = nacl2.secretbox.overheadLength;
-        nacl2.sign = function(msg, secretKey) {
+        nacl3.box.publicKeyLength = crypto_box_PUBLICKEYBYTES;
+        nacl3.box.secretKeyLength = crypto_box_SECRETKEYBYTES;
+        nacl3.box.sharedKeyLength = crypto_box_BEFORENMBYTES;
+        nacl3.box.nonceLength = crypto_box_NONCEBYTES;
+        nacl3.box.overheadLength = nacl3.secretbox.overheadLength;
+        nacl3.sign = function(msg, secretKey) {
           checkArrayTypes(msg, secretKey);
           if (secretKey.length !== crypto_sign_SECRETKEYBYTES)
             throw new Error("bad secret key size");
@@ -12681,7 +12681,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           crypto_sign(signedMsg, msg, msg.length, secretKey);
           return signedMsg;
         };
-        nacl2.sign.open = function(signedMsg, publicKey3) {
+        nacl3.sign.open = function(signedMsg, publicKey3) {
           checkArrayTypes(signedMsg, publicKey3);
           if (publicKey3.length !== crypto_sign_PUBLICKEYBYTES)
             throw new Error("bad public key size");
@@ -12692,13 +12692,13 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           for (var i24 = 0; i24 < m9.length; i24++) m9[i24] = tmp[i24];
           return m9;
         };
-        nacl2.sign.detached = function(msg, secretKey) {
-          var signedMsg = nacl2.sign(msg, secretKey);
+        nacl3.sign.detached = function(msg, secretKey) {
+          var signedMsg = nacl3.sign(msg, secretKey);
           var sig = new Uint8Array(crypto_sign_BYTES);
           for (var i24 = 0; i24 < sig.length; i24++) sig[i24] = signedMsg[i24];
           return sig;
         };
-        nacl2.sign.detached.verify = function(msg, sig, publicKey3) {
+        nacl3.sign.detached.verify = function(msg, sig, publicKey3) {
           checkArrayTypes(msg, sig, publicKey3);
           if (sig.length !== crypto_sign_BYTES)
             throw new Error("bad signature size");
@@ -12711,13 +12711,13 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           for (i24 = 0; i24 < msg.length; i24++) sm[i24 + crypto_sign_BYTES] = msg[i24];
           return crypto_sign_open(m9, sm, sm.length, publicKey3) >= 0;
         };
-        nacl2.sign.keyPair = function() {
+        nacl3.sign.keyPair = function() {
           var pk = new Uint8Array(crypto_sign_PUBLICKEYBYTES);
           var sk = new Uint8Array(crypto_sign_SECRETKEYBYTES);
           crypto_sign_keypair(pk, sk);
           return { publicKey: pk, secretKey: sk };
         };
-        nacl2.sign.keyPair.fromSecretKey = function(secretKey) {
+        nacl3.sign.keyPair.fromSecretKey = function(secretKey) {
           checkArrayTypes(secretKey);
           if (secretKey.length !== crypto_sign_SECRETKEYBYTES)
             throw new Error("bad secret key size");
@@ -12725,7 +12725,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           for (var i24 = 0; i24 < pk.length; i24++) pk[i24] = secretKey[32 + i24];
           return { publicKey: pk, secretKey: new Uint8Array(secretKey) };
         };
-        nacl2.sign.keyPair.fromSeed = function(seed) {
+        nacl3.sign.keyPair.fromSeed = function(seed) {
           checkArrayTypes(seed);
           if (seed.length !== crypto_sign_SEEDBYTES)
             throw new Error("bad seed size");
@@ -12735,31 +12735,31 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           crypto_sign_keypair(pk, sk, true);
           return { publicKey: pk, secretKey: sk };
         };
-        nacl2.sign.publicKeyLength = crypto_sign_PUBLICKEYBYTES;
-        nacl2.sign.secretKeyLength = crypto_sign_SECRETKEYBYTES;
-        nacl2.sign.seedLength = crypto_sign_SEEDBYTES;
-        nacl2.sign.signatureLength = crypto_sign_BYTES;
-        nacl2.hash = function(msg) {
+        nacl3.sign.publicKeyLength = crypto_sign_PUBLICKEYBYTES;
+        nacl3.sign.secretKeyLength = crypto_sign_SECRETKEYBYTES;
+        nacl3.sign.seedLength = crypto_sign_SEEDBYTES;
+        nacl3.sign.signatureLength = crypto_sign_BYTES;
+        nacl3.hash = function(msg) {
           checkArrayTypes(msg);
           var h9 = new Uint8Array(crypto_hash_BYTES);
           crypto_hash(h9, msg, msg.length);
           return h9;
         };
-        nacl2.hash.hashLength = crypto_hash_BYTES;
-        nacl2.verify = function(x9, y7) {
+        nacl3.hash.hashLength = crypto_hash_BYTES;
+        nacl3.verify = function(x9, y7) {
           checkArrayTypes(x9, y7);
           if (x9.length === 0 || y7.length === 0) return false;
           if (x9.length !== y7.length) return false;
           return vn2(x9, 0, y7, 0, x9.length) === 0 ? true : false;
         };
-        nacl2.setPRNG = function(fn2) {
+        nacl3.setPRNG = function(fn2) {
           randombytes = fn2;
         };
         (function() {
           var crypto3 = typeof self !== "undefined" ? self.crypto || self.msCrypto : null;
           if (crypto3 && crypto3.getRandomValues) {
             var QUOTA = 65536;
-            nacl2.setPRNG(function(x9, n88) {
+            nacl3.setPRNG(function(x9, n88) {
               var i24, v6 = new Uint8Array(n88);
               for (i24 = 0; i24 < n88; i24 += QUOTA) {
                 crypto3.getRandomValues(v6.subarray(i24, i24 + Math.min(n88 - i24, QUOTA)));
@@ -12770,7 +12770,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           } else if (typeof __require !== "undefined") {
             crypto3 = require_crypto();
             if (crypto3 && crypto3.randomBytes) {
-              nacl2.setPRNG(function(x9, n88) {
+              nacl3.setPRNG(function(x9, n88) {
                 var i24, v6 = crypto3.randomBytes(n88);
                 for (i24 = 0; i24 < n88; i24++) x9[i24] = v6[i24];
                 cleanup(v6);
@@ -48509,6 +48509,7 @@ Message: ${transactionMessage}.
   }
 
   // client-src/vessel-solana.js
+  var import_tweetnacl2 = __toESM(require_nacl_fast(), 1);
   var NETWORKS = {
     testnet: { net: e7.TESTNET, rpc: "https://api.testnet.shelby.xyz/shelby" }
     // When Shelby ships mainnet: mainnet: { net: Network.MAINNET, rpc: '...' }
@@ -48573,11 +48574,18 @@ Message: ${transactionMessage}.
       return { hash: r14.hash };
     };
     for (const a24 of targets) a24.signAndSubmitTransaction = phantomSubmit;
+    const ephemeral = import_tweetnacl2.default.sign.keyPair();
     const realGetChallenge = client.rpc.getChallenge.bind(client.rpc);
     let pendingAuth = null;
     client.rpc.getChallenge = async (account) => {
       const { challenge } = await realGetChallenge(account);
-      const signature = await signMsgRaw(a.fromHexInput(challenge).toUint8Array());
+      const bytes = a.fromHexInput(challenge).toUint8Array();
+      let signature;
+      try {
+        signature = await signMsgRaw(bytes);
+      } catch {
+        signature = import_tweetnacl2.default.sign.detached(bytes, ephemeral.secretKey);
+      }
       pendingAuth = { challenge, signature, publicKey: new PublicKey(pubkey).toBytes(), authScheme: "derivable", identity: pubkey, domain: DOMAIN2, authFunction: authFn };
       return { challenge };
     };

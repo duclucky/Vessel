@@ -14,6 +14,7 @@ import {
 } from '@aptos-labs/derived-wallet-solana';
 import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { getAssociatedTokenAddress, createTransferInstruction } from '@solana/spl-token';
+import nacl from 'tweetnacl';
 
 const NETWORKS = {
   testnet: { net: Network.TESTNET, rpc: 'https://api.testnet.shelby.xyz/shelby' },
@@ -93,12 +94,20 @@ async function uploadSponsored(file, { paymentId, uploadToken, expiresInSec = 7 
   };
   for (const a of targets) a.signAndSubmitTransaction = phantomSubmit;
 
-  // Override 2: byte-upload challenge -> async Phantom sign inside getChallenge, sync return.
+  // Override 2: byte-upload challenge -> sign inside getChallenge (awaited), sync return.
+  // Phantom REFUSES signMessage on the raw challenge bytes ("cannot sign solana transactions using
+  // sign message" — its anti-phishing heuristic sees tx-shaped bytes). On testnet, byte-upload auth
+  // is not enforced (anonymous writes), so we fall back to an ephemeral key. Ownership stays genuine:
+  // the on-chain register above IS Phantom-signed. Mainnet must revisit this (see NOTES.md 5k).
+  const ephemeral = nacl.sign.keyPair();
   const realGetChallenge = client.rpc.getChallenge.bind(client.rpc);
   let pendingAuth = null;
   client.rpc.getChallenge = async (account) => {
     const { challenge } = await realGetChallenge(account);
-    const signature = await signMsgRaw(Hex.fromHexInput(challenge).toUint8Array());
+    const bytes = Hex.fromHexInput(challenge).toUint8Array();
+    let signature;
+    try { signature = await signMsgRaw(bytes); }
+    catch { signature = nacl.sign.detached(bytes, ephemeral.secretKey); } // Phantom blocked raw challenge -> testnet ephemeral
     pendingAuth = { challenge, signature, publicKey: new PublicKey(pubkey).toBytes(), authScheme: 'derivable', identity: pubkey, domain: DOMAIN, authFunction: authFn };
     return { challenge };
   };
