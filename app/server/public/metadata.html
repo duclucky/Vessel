@@ -1,271 +1,67 @@
-<!DOCTYPE html>
-
-<html class="dark" lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>VESSEL - NFT Metadata</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&amp;family=Space+Grotesk:wght@600;700&amp;family=Geist:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    "colors": {
-                        "on-error-container": "#ffdad6",
-                        "outline-variant": "#3c494c",
-                        "on-primary-fixed-variant": "#004e5a",
-                        "inverse-on-surface": "#2d3136",
-                        "on-secondary-container": "#5b3800",
-                        "surface-variant": "#31353b",
-                        "tertiary-container": "#ffaab2",
-                        "surface-bright": "#36393f",
-                        "on-tertiary": "#67001f",
-                        "error": "#ffb4ab",
-                        "surface-dim": "#101419",
-                        "on-tertiary-fixed": "#400010",
-                        "on-secondary": "#472a00",
-                        "surface-container-lowest": "#0a0e13",
-                        "on-error": "#690005",
-                        "surface-container-high": "#262a30",
-                        "inverse-primary": "#006877",
-                        "secondary": "#ffb95f",
-                        "on-primary-fixed": "#001f25",
-                        "primary-fixed": "#a2eeff",
-                        "secondary-container": "#ee9800",
-                        "on-tertiary-fixed-variant": "#891933",
-                        "on-tertiary-container": "#94223a",
-                        "inverse-surface": "#e0e2ea",
-                        "on-secondary-fixed-variant": "#653e00",
-                        "on-surface": "#e0e2ea",
-                        "tertiary-fixed": "#ffdadc",
-                        "surface-elevated": "#111826",
-                        "text-muted": "#94A3B8",
-                        "secondary-fixed": "#ffddb8",
-                        "primary-container": "#22d3ee",
-                        "text-on-dark": "#F8FAFC",
-                        "background": "#101419",
-                        "on-secondary-fixed": "#2a1700",
-                        "surface-container": "#1c2025",
-                        "on-primary": "#00363e",
-                        "error-container": "#93000a",
-                        "tertiary": "#ffd2d5",
-                        "secondary-fixed-dim": "#ffb95f",
-                        "surface-stroke": "#1E293B",
-                        "surface-container-highest": "#31353b",
-                        "on-surface-variant": "#bbc9cd",
-                        "outline": "#859397",
-                        "primary-fixed-dim": "#2fd9f4",
-                        "tertiary-fixed-dim": "#ffb2b9",
-                        "surface-tint": "#2fd9f4",
-                        "surface": "#101419",
-                        "on-background": "#e0e2ea",
-                        "on-primary-container": "#005763",
-                        "surface-container-low": "#181c21",
-                        "primary": "#8aebff"
-                    },
-                    "borderRadius": {
-                        "DEFAULT": "0.125rem",
-                        "lg": "0.25rem",
-                        "xl": "0.5rem",
-                        "full": "0.75rem"
-                    },
-                    "spacing": {
-                        "gutter": "24px",
-                        "container-max": "1200px",
-                        "stack-md": "16px",
-                        "margin-mobile": "16px",
-                        "stack-lg": "32px",
-                        "stack-sm": "8px"
-                    },
-                    "fontFamily": {
-                        "headline-lg": ["Space Grotesk"],
-                        "display-lg": ["Space Grotesk"],
-                        "body-md": ["Geist"],
-                        "data-sm": ["JetBrains Mono"],
-                        "label-caps": ["JetBrains Mono"],
-                        "headline-lg-mobile": ["Space Grotesk"],
-                        "data-lg": ["JetBrains Mono"]
-                    },
-                    "fontSize": {
-                        "headline-lg": ["32px", { "lineHeight": "40px", "fontWeight": "600" }],
-                        "display-lg": ["48px", { "lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700" }],
-                        "body-md": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
-                        "data-sm": ["13px", { "lineHeight": "18px", "fontWeight": "400" }],
-                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700" }],
-                        "headline-lg-mobile": ["24px", { "lineHeight": "32px", "fontWeight": "600" }],
-                        "data-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600" }]
-                    }
-                },
-            },
-        }
-    </script>
-<style>
-        body {
-            background-color: theme('colors.background');
-            color: theme('colors.on-background');
-        }
-        
-        /* Ghost border utility */
-        .ghost-border {
-            border: 1px solid theme('colors.surface-stroke');
-        }
-        
-        .ghost-border:hover {
-            border-color: theme('colors.primary/50');
-            box-shadow: 0 0 12px rgba(138, 235, 255, 0.1);
-        }
-        
-        /* Custom scrollbar for JSON view */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: theme('colors.surface-elevated'); 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: theme('colors.surface-stroke'); 
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: theme('colors.primary-container'); 
-        }
-    </style>
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Compose JSON metadata and store its TokenURI on ephemeral Shelby testnet storage.">
+  <title>VESSEL | Metadata Atelier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300..600" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/vessel.css">
 </head>
-<body class="antialiased min-h-screen flex flex-col pt-24 pb-8">
-<!-- Ephemeral Banner (Demo Environment) -->
-<div class="fixed top-0 left-0 w-full z-50 flex justify-center items-center h-8 bg-surface-elevated border-b border-primary-container/20">
-<span class="font-label-caps text-label-caps text-primary flex items-center gap-2">
-<span class="material-symbols-outlined text-[14px]">cloud_upload</span>
-            DEMO • SHELBY TESTNET • STORAGE VIA SOLANA DAA • DATA IS EPHEMERAL
-        </span>
-</div>
-<!-- Main Navigation -->
-<nav class="fixed top-8 left-0 w-full z-40 flex justify-between items-center px-gutter h-16 bg-surface/80 backdrop-blur-md border-b border-surface-stroke transition-all duration-200 ease-in-out">
-<div class="flex items-center gap-8">
-<div class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary">VESSEL</div>
-<div class="hidden md:flex gap-6">
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps uppercase tracking-widest" href="/identity.html">Identity</a>
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps uppercase tracking-widest" href="/upload.html">Upload</a>
-<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-caps text-label-caps uppercase tracking-widest" href="/gallery.html">Gallery</a>
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps uppercase tracking-widest" href="/latency.html">Latency</a>
-</div>
-</div>
-<div>
-<button class="bg-primary text-surface-container-lowest font-label-caps text-label-caps px-4 py-2 rounded uppercase tracking-widest font-bold hover:bg-primary-fixed transition-colors js-connect">
-                <span class="js-connect-label">Connect Wallet</span>
-            </button>
-</div>
-</nav>
-<!-- Main Content Grid -->
-<main class="flex-grow max-w-container-max mx-auto w-full px-gutter md:px-margin-mobile flex flex-col gap-stack-lg">
-<header class="flex flex-col gap-2 pt-8">
-<h1 class="font-display-lg text-display-lg text-on-background">NFT Metadata Generator</h1>
-<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">Construct verifiable, immutable JSON metadata for your digital assets. Data is pinned temporarily on testnet.</p>
-</header>
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-<!-- Left Column: Form & Gallery Selection -->
-<div class="lg:col-span-7 flex flex-col gap-stack-md">
-<!-- Asset Selection Card -->
-<div class="bg-surface-elevated/80 backdrop-blur-[12px] ghost-border p-6 rounded-lg transition-all duration-300">
-<h2 class="font-label-caps text-label-caps text-primary mb-4 flex items-center gap-2">
-<span class="material-symbols-outlined text-[16px]">image</span>
-                        SELECTED ASSET
-                    </h2>
-<div class="flex items-center gap-6">
-<!-- Thumbnail Preview -->
-<div class="w-32 h-32 rounded bg-surface-container ghost-border overflow-hidden relative flex-shrink-0 group cursor-pointer">
-<div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10">
-<span class="material-symbols-outlined text-on-background">swap_horiz</span>
-</div>
-<div class="absolute top-2 right-2 z-10 bg-surface/80 px-2 py-1 rounded font-label-caps text-[9px] text-primary">7D LEFT</div>
-<!-- Using CSS gradient pattern as requested for placeholder instead of image -->
-<div class="w-full h-full bg-[linear-gradient(45deg,theme('colors.surface-stroke')_25%,transparent_25%,transparent_75%,theme('colors.surface-stroke')_75%,theme('colors.surface-stroke')),linear-gradient(45deg,theme('colors.surface-stroke')_25%,transparent_25%,transparent_75%,theme('colors.surface-stroke')_75%,theme('colors.surface-stroke'))] bg-[length:20px_20px] bg-[position:0_0,10px_10px] opacity-20"></div>
-</div>
-<div class="flex-grow flex flex-col gap-2">
-<div id="meta-image-key" class="font-data-sm text-data-sm text-on-surface-variant break-all">(pick an image from Gallery)</div>
-<a href="/gallery.html" class="self-start text-xs font-label-caps text-primary border border-primary/30 px-3 py-1 rounded hover:bg-primary/10 transition-colors">Browse Gallery</a>
-</div>
-</div>
-</div>
-<!-- Metadata Form -->
-<div class="bg-surface-elevated/80 backdrop-blur-[12px] ghost-border p-6 rounded-lg flex flex-col gap-stack-md">
-<h2 class="font-label-caps text-label-caps text-primary mb-2 flex items-center gap-2">
-<span class="material-symbols-outlined text-[16px]">edit_document</span>
-                        METADATA DETAILS
-                    </h2>
-<div class="flex flex-col gap-2">
-<label class="font-label-caps text-label-caps text-on-surface-variant">Name</label>
-<input class="w-full bg-surface-container border border-surface-stroke text-on-background font-data-sm rounded p-3 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors placeholder:text-surface-variant" id="nft-name" placeholder="e.g., Vessel Genesis Block #001" type="text"/>
-</div>
-<div class="flex flex-col gap-2">
-<label class="font-label-caps text-label-caps text-on-surface-variant">Description</label>
-<textarea class="w-full bg-surface-container border border-surface-stroke text-on-background font-data-sm rounded p-3 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors placeholder:text-surface-variant resize-y" id="nft-desc" placeholder="Describe the utility, origin, or visual traits..." rows="4"></textarea>
-</div>
-<div class="flex flex-col gap-2">
-<label class="font-label-caps text-label-caps text-on-surface-variant">External Link (Optional)</label>
-<input class="w-full bg-surface-container border border-surface-stroke text-on-background font-data-sm rounded p-3 focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-colors placeholder:text-surface-variant" id="nft-link" placeholder="https://vessel.network/item/001" type="url"/>
-</div>
-</div>
-</div>
-<!-- Right Column: JSON Preview & Actions -->
-<div class="lg:col-span-5 flex flex-col gap-stack-md">
-<!-- JSON Preview -->
-<div class="bg-[#0B0F14] ghost-border rounded-lg flex flex-col h-full overflow-hidden">
-<div class="flex justify-between items-center p-4 border-b border-surface-stroke bg-surface-elevated/50">
-<h2 class="font-label-caps text-label-caps text-primary flex items-center gap-2">
-<span class="material-symbols-outlined text-[16px]">code</span>
-                            JSON PREVIEW
-                        </h2>
-<span class="font-data-sm text-[10px] text-text-muted">Auto-updating</span>
-</div>
-<div class="p-4 flex-grow overflow-y-auto bg-[#0B0F14]">
-<pre class="font-data-sm text-data-sm text-primary-container/80 whitespace-pre-wrap" id="json-preview">{
-  <span class="text-secondary">"name"</span>: <span class="text-tertiary">""</span>,
-  <span class="text-secondary">"description"</span>: <span class="text-tertiary">""</span>,
-  <span class="text-secondary">"image"</span>: <span class="text-tertiary">"<shelby image url>"</span>,
-  <span class="text-secondary">"external_url"</span>: <span class="text-tertiary">""</span>
-}</pre>
-</div>
-</div>
-<!-- Action Area -->
-<div class="bg-surface-elevated/80 backdrop-blur-[12px] ghost-border p-6 rounded-lg flex flex-col gap-4">
-<button class="w-full bg-primary text-surface-container-lowest font-label-caps text-label-caps py-4 rounded uppercase tracking-widest font-bold hover:bg-primary-fixed transition-colors flex justify-center items-center gap-2 relative overflow-hidden group" id="generate-btn">
-<span class="material-symbols-outlined">bolt</span>
-                        Generate TokenURI
-                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
-</button>
-<div class="hidden flex-col gap-2 mt-2" id="result-area">
-<label class="font-label-caps text-label-caps text-primary">Resulting TokenURI</label>
-<div class="flex bg-surface-container border border-surface-stroke rounded overflow-hidden">
-<input id="result-uri" class="w-full bg-transparent text-on-background font-data-sm p-3 focus:outline-none" readonly="" type="text" value=""/>
-<button id="copy-uri" class="bg-surface-stroke px-4 hover:bg-primary/20 hover:text-primary transition-colors flex items-center justify-center text-on-surface-variant">
-<span class="material-symbols-outlined text-[18px]">content_copy</span>
-</button>
-</div>
-<p class="font-data-sm text-[11px] text-text-muted mt-1 flex items-start gap-1">
-<span class="material-symbols-outlined text-[14px] text-secondary">info</span>
-                            Copy this URI directly into your NFT smart contract during minting.
-                        </p>
-</div>
-</div>
-</div>
-</div>
-</main>
-<!-- Footer -->
-<footer class="w-full py-8 px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto border-t border-surface-stroke mt-16 bg-surface">
-<div class="font-headline-lg text-primary mb-4 md:mb-0">VESSEL</div>
-<div class="font-label-caps text-label-caps text-on-surface-variant text-center md:text-left mb-4 md:mb-0">
-            © 2026 VESSEL DEMO • BUILT ON SHELBY/APTOS
-        </div>
-<div class="flex gap-6">
-<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Documentation</a>
-<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Terms</a>
-<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors uppercase" href="#">Github</a>
-</div>
-</footer>
+<body class="min-h-screen bg-background font-body text-on-surface antialiased">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div class="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center border-b border-white/5 bg-surface-lowest/90 px-3 text-center"><p class="vessel-technical truncate text-[10px] text-on-surface-variant sm:text-xs"><span class="mr-2 inline-block h-2 w-2 rounded-full bg-primary-container shadow-[0_0_10px_#5eead4]"></span>Shelby Testnet · Sponsored DAA · Data is Ephemeral</p></div>
+  <header class="fixed inset-x-0 top-8 z-40 px-3 pt-3 md:px-8 md:pt-4">
+    <nav class="vessel-nav mx-auto flex h-16 max-w-[92rem] items-center justify-between rounded-full px-4 md:h-20 md:px-8" aria-label="Primary navigation">
+      <a class="font-display text-2xl font-bold tracking-[-0.06em] text-primary md:text-3xl" href="/">VESSEL</a>
+      <div class="hidden items-center gap-7 md:flex"><a class="vessel-nav-link" href="/identity.html">Identity</a><a class="vessel-nav-link" href="/upload.html">Upload</a><a class="vessel-nav-link" href="/gallery.html">Gallery</a><a class="vessel-nav-link" href="/latency.html">Latency</a></div>
+      <div class="flex items-center gap-2"><details class="relative md:hidden"><summary class="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/10" aria-label="Open navigation menu"><span class="material-symbols-outlined" aria-hidden="true">menu</span></summary><div class="vessel-nav absolute right-0 top-14 flex w-52 flex-col rounded-3xl p-3 shadow-2xl"><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/identity.html">Identity</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/upload.html">Upload</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/gallery.html">Gallery</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/latency.html">Latency</a></div></details><a class="vessel-button vessel-button-secondary px-4 md:px-6" href="/gallery.html"><span class="material-symbols-outlined text-lg" aria-hidden="true">deployed_code</span><span class="hidden sm:inline">Vault</span></a></div>
+    </nav>
+  </header>
 
-<script type="module" src="/app.js"></script>
-</body></html>
+  <main id="main-content" class="vessel-page min-h-[75vh] pb-24 pt-40 md:pt-48">
+    <header class="max-w-4xl"><p class="vessel-kicker text-primary-container">Token composition</p><h1 class="mt-5 font-display text-6xl font-bold tracking-[-0.055em] md:text-8xl">Metadata Atelier</h1><p class="mt-6 max-w-3xl text-lg leading-8 text-on-surface-variant md:text-xl">Compose a TokenURI for the selected artifact, then host the JSON on ephemeral Shelby testnet storage.</p></header>
+
+    <div class="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div class="flex flex-col gap-6 lg:col-span-7">
+        <section class="vessel-glass rounded-vessel p-6 md:p-8" aria-labelledby="selected-asset-title">
+          <div class="flex flex-col gap-6 sm:flex-row sm:items-center"><div class="relative flex aspect-square w-full max-w-44 shrink-0 items-center justify-center overflow-hidden rounded-[2rem] border border-primary-container/15 bg-[radial-gradient(circle_at_30%_25%,rgba(94,234,212,.18),transparent_42%),radial-gradient(circle_at_75%_75%,rgba(196,181,253,.13),transparent_45%),#090d16]"><span class="material-symbols-outlined text-6xl text-primary/70" aria-hidden="true">deployed_code</span><span class="vessel-technical absolute right-3 top-3 rounded-full bg-surface-lowest/75 px-3 py-1 text-[9px] text-primary">Selected</span></div><div class="min-w-0"><p class="vessel-kicker text-primary-container">Source artifact</p><h2 id="selected-asset-title" class="mt-3 font-display text-2xl font-semibold">Selected from your Vault</h2><p id="meta-image-key" class="vessel-technical mt-4 break-all text-xs leading-6 text-on-surface-variant">(pick from gallery)</p><a class="mt-5 inline-flex min-h-11 items-center gap-2 rounded-full border border-white/10 px-5 text-sm text-primary hover:border-primary-container/35" href="/gallery.html"><span class="material-symbols-outlined text-lg" aria-hidden="true">swap_horiz</span>Browse Vault</a></div></div>
+        </section>
+
+        <section class="vessel-glass rounded-vessel p-6 md:p-8" aria-labelledby="metadata-details-title">
+          <div class="flex items-center justify-between gap-4"><div><p class="vessel-kicker text-primary-container">Fields</p><h2 id="metadata-details-title" class="mt-2 font-display text-2xl font-semibold">Artifact details</h2></div><span class="material-symbols-outlined text-primary/60" aria-hidden="true">edit_document</span></div>
+          <div class="mt-8 grid gap-6">
+            <div><label class="vessel-technical mb-2 block text-xs text-on-surface-variant" for="nft-name">Name</label><input id="nft-name" class="vessel-input" type="text" placeholder="e.g. Vessel Genesis #001" autocomplete="off"></div>
+            <div><label class="vessel-technical mb-2 block text-xs text-on-surface-variant" for="nft-desc">Description</label><textarea id="nft-desc" class="vessel-input min-h-32 resize-y" rows="4" placeholder="Describe the artifact, its origin, or its utility"></textarea></div>
+            <div><label class="vessel-technical mb-2 block text-xs text-on-surface-variant" for="nft-link">External link <span class="text-outline">(optional)</span></label><input id="nft-link" class="vessel-input" type="url" inputmode="url" placeholder="https://example.com/artifact/001"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="flex flex-col gap-6 lg:col-span-5">
+        <section class="vessel-glass flex min-h-[32rem] flex-1 flex-col overflow-hidden rounded-vessel" aria-labelledby="json-title">
+          <header class="flex items-center justify-between gap-4 border-b border-white/5 px-6 py-5"><div><p class="vessel-kicker text-tertiary-container">Live object</p><h2 id="json-title" class="mt-2 font-display text-2xl font-semibold">JSON preview</h2></div><span class="vessel-technical rounded-full border border-white/10 px-3 py-2 text-[9px] text-outline">Auto-updating</span></header>
+          <div class="relative flex-1 overflow-auto bg-surface-lowest/55 p-6"><div class="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,.018)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.018)_1px,transparent_1px)] bg-[size:24px_24px]"></div><pre id="json-preview" class="vessel-technical relative whitespace-pre-wrap break-words text-sm leading-7 text-primary">{
+  "name": "",
+  "description": "",
+  "image": "(upload an image first)"
+}</pre></div>
+        </section>
+
+        <section class="vessel-glass rounded-vessel p-6">
+          <button id="generate-btn" class="vessel-button vessel-button-primary w-full" type="button"><span class="material-symbols-outlined" aria-hidden="true">bolt</span>Generate TokenURI</button>
+          <div id="result-area" class="mt-5 hidden flex-col gap-3" role="status" aria-live="polite"><label class="vessel-technical text-xs text-primary" for="result-uri">Resulting TokenURI</label><div class="flex overflow-hidden rounded-2xl border border-white/10 bg-surface-lowest"><input id="result-uri" class="min-w-0 flex-1 bg-transparent px-4 py-3 font-mono text-xs text-on-surface outline-none" type="text" value="" readonly><button id="copy-uri" class="flex min-h-11 min-w-12 items-center justify-center border-l border-white/10 text-on-surface-variant hover:text-primary" type="button" aria-label="Copy TokenURI"><span class="material-symbols-outlined text-lg" aria-hidden="true">content_copy</span></button></div><p class="text-xs leading-5 text-outline">Use this URI only while the current testnet object remains available.</p></div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-white/5 bg-surface-lowest/60 py-10"><div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · Shelby testnet · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div></footer>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
