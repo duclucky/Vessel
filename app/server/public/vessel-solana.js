@@ -1,3 +1,4 @@
+globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "/" : "file:///");
 (() => {
   var __create = Object.create;
   var __defProp = Object.defineProperty;
@@ -30190,9 +30191,8 @@ KeylessErrorResolutionTip: ${r14}`, R7;
   }
 
   // node_modules/@shelby-protocol/clay-codes/dist/index.js
-  var import_meta = {};
   async function loadWasm() {
-    const wasmUrl = new URL("./clay.wasm", import_meta.url);
+    const wasmUrl = new URL("./clay.wasm", globalThis.__vesselBase);
     const defaultImports = {
       env: {
         abort: () => {
