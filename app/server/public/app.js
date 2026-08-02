@@ -172,7 +172,12 @@ function initUpload() {
   const SOL = () => window.VesselSolana;
 
   const stepPct = { signing: 35, paying: 55, sponsoring: 80, uploading: 92 };
-  const stepMsg = { signing: 'sign upload…', paying: 'pay USDC…', sponsoring: 'sponsoring…', uploading: 'storing…' };
+  const stepMsg = {
+    signing: 'SIGNING OWNERSHIP',
+    paying: 'VERIFYING USDC',
+    sponsoring: 'SPONSORING APTOS',
+    uploading: 'WRITING TO SHELBY',
+  };
   function setStep(s) { if (bar) bar.style.width = (stepPct[s] || 20) + '%'; if (pct) pct.textContent = stepMsg[s] || s; }
 
   async function doUpload(file) {
@@ -234,13 +239,19 @@ function initUpload() {
   function showPayGate(quote, have, faucets) {
     const host = $('#drop-zone')?.parentElement || document.body;
     let g = $('#pay-gate');
-    if (!g) { g = document.createElement('div'); g.id = 'pay-gate'; g.className = 'glass-panel ghost-border rounded-lg p-5 mt-4 w-full'; host.appendChild(g); }
-    g.innerHTML = `<div class="font-label-caps text-label-caps text-secondary mb-2">NEED TESTNET USDC TO PAY STORAGE</div>
-      <p class="font-data-sm text-data-sm text-on-surface-variant mb-3">This upload costs <span class="text-primary">${quote.amountUsdc} USDC</span> (you have ${have.toFixed(4)}). The app sponsors the Aptos gas + ShelbyUSD — you only pay stablecoin. Grab devnet USDC once:</p>
+    if (!g) {
+      g = document.createElement('div');
+      g.id = 'pay-gate';
+      g.setAttribute('role', 'alert');
+      g.className = 'vessel-glass rounded-vessel p-6 mt-6 w-full';
+      host.appendChild(g);
+    }
+    g.innerHTML = `<div class="vessel-kicker text-secondary mb-3">NEED TESTNET USDC TO PAY STORAGE</div>
+      <p class="text-sm leading-6 text-on-surface-variant mb-4">This upload costs <span class="vessel-technical text-primary">${quote.amountUsdc} USDC</span> (you have ${have.toFixed(4)}). The app sponsors the Aptos gas + ShelbyUSD — you only pay stablecoin. Grab devnet USDC once:</p>
       <div class="flex flex-wrap gap-3">
-        <a href="${faucets.usdc}" target="_blank" class="font-label-caps text-label-caps text-primary border border-primary px-3 py-2 rounded hover:bg-primary/10">GET DEVNET USDC →</a>
-        <a href="${faucets.sol}" target="_blank" class="font-label-caps text-label-caps text-primary border border-primary px-3 py-2 rounded hover:bg-primary/10">GET DEVNET SOL (gas) →</a>
-        <button id="pay-retry" class="font-label-caps text-label-caps text-surface-dim bg-primary px-3 py-2 rounded hover:bg-primary-fixed-dim">I HAVE USDC — RETRY</button>
+        <a href="${faucets.usdc}" target="_blank" rel="noreferrer" class="vessel-button vessel-button-secondary px-4 py-3">GET DEVNET USDC →</a>
+        <a href="${faucets.sol}" target="_blank" rel="noreferrer" class="vessel-button vessel-button-secondary px-4 py-3">GET DEVNET SOL →</a>
+        <button id="pay-retry" class="vessel-button vessel-button-primary px-4 py-3">I HAVE USDC — RETRY</button>
       </div>`;
     $('#pay-retry')?.addEventListener('click', async () => {
       const b = await SOL().usdcBalance();
