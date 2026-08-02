@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Latency Proof - VESSEL</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400&amp;family=JetBrains+Mono:wght@400;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error-container": "#ffdad6",
+                      "outline-variant": "#3c494c",
+                      "on-primary-fixed-variant": "#004e5a",
+                      "inverse-on-surface": "#2d3136",
+                      "on-secondary-container": "#5b3800",
+                      "surface-variant": "#31353b",
+                      "tertiary-container": "#ffaab2",
+                      "surface-bright": "#36393f",
+                      "on-tertiary": "#67001f",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#101419",
+                      "on-tertiary-fixed": "#400010",
+                      "on-secondary": "#472a00",
+                      "surface-container-lowest": "#0a0e13",
+                      "on-error": "#690005",
+                      "surface-container-high": "#262a30",
+                      "inverse-primary": "#006877",
+                      "secondary": "#ffb95f",
+                      "on-primary-fixed": "#001f25",
+                      "primary-fixed": "#a2eeff",
+                      "secondary-container": "#ee9800",
+                      "on-tertiary-fixed-variant": "#891933",
+                      "on-tertiary-container": "#94223a",
+                      "inverse-surface": "#e0e2ea",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "on-surface": "#e0e2ea",
+                      "tertiary-fixed": "#ffdadc",
+                      "surface-elevated": "#111826",
+                      "text-muted": "#94A3B8",
+                      "secondary-fixed": "#ffddb8",
+                      "primary-container": "#22d3ee",
+                      "text-on-dark": "#F8FAFC",
+                      "background": "#101419",
+                      "on-secondary-fixed": "#2a1700",
+                      "surface-container": "#1c2025",
+                      "on-primary": "#00363e",
+                      "error-container": "#93000a",
+                      "tertiary": "#ffd2d5",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "surface-stroke": "#1E293B",
+                      "surface-container-highest": "#31353b",
+                      "on-surface-variant": "#bbc9cd",
+                      "outline": "#859397",
+                      "primary-fixed-dim": "#2fd9f4",
+                      "tertiary-fixed-dim": "#ffb2b9",
+                      "surface-tint": "#2fd9f4",
+                      "surface": "#101419",
+                      "on-background": "#e0e2ea",
+                      "on-primary-container": "#005763",
+                      "surface-container-low": "#181c21",
+                      "primary": "#8aebff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "container-max": "1200px",
+                      "stack-md": "16px",
+                      "margin-mobile": "16px",
+                      "stack-lg": "32px",
+                      "stack-sm": "8px"
+              },
+              "fontFamily": {
+                      "headline-lg": ["Space Grotesk"],
+                      "display-lg": ["Space Grotesk"],
+                      "body-md": ["Geist"],
+                      "data-sm": ["JetBrains Mono"],
+                      "label-caps": ["JetBrains Mono"],
+                      "headline-lg-mobile": ["Space Grotesk"],
+                      "data-lg": ["JetBrains Mono"]
+              },
+              "fontSize": {
+                      "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "data-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "data-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+        }
+        .glass-panel {
+            background-color: rgba(17, 24, 38, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid theme('colors.surface-stroke');
+        }
+        .glow-hover:hover {
+            box-shadow: 0 0 16px 4px rgba(138, 235, 255, 0.2);
+            border-color: theme('colors.primary');
+            transition: all 0.3s ease;
+        }
+        .bar-chart-fill {
+            transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col font-body-md pt-24">
+<!-- Small TopAppBar (Ephemeral Banner) -->
+<div class="fixed top-0 left-0 w-full z-50 flex justify-center items-center h-8 bg-surface-elevated dark:bg-surface-elevated border-b border-primary/20">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 0;">cloud_upload</span>
+<span class="font-label-caps text-label-caps text-primary">DEMO ENVIRONMENT • DATA WIPED WEEKLY • TESTNET ONLY</span>
+</div>
+</div>
+<!-- Medium TopAppBar (Main Nav) -->
+<nav class="fixed top-8 left-0 w-full z-40 flex justify-between items-center px-gutter h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-surface-stroke">
+<div class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary dark:text-primary">
+            VESSEL
+        </div>
+<div class="hidden md:flex items-center gap-8">
+<a class="font-label-caps text-label-caps text-on-surface-variant font-medium hover:text-primary transition-colors" href="#">Identity</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant font-medium hover:text-primary transition-colors" href="#">Upload</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant font-medium hover:text-primary transition-colors" href="#">Gallery</a>
+<a class="font-label-caps text-label-caps text-primary font-bold border-b-2 border-primary pb-1" href="#">Latency</a>
+</div>
+<div>
+<button class="bg-primary text-surface-container-lowest font-label-caps text-label-caps px-4 py-2 rounded-DEFAULT hover:bg-primary/90 transition-colors">
+                Connect Wallet
+            </button>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-grow w-full max-w-container-max mx-auto px-margin-mobile md:px-gutter py-stack-lg">
+<!-- Header Section -->
+<div class="mb-12">
+<h1 class="font-display-lg text-display-lg md:text-display-lg text-headline-lg-mobile mb-4">Latency Proof</h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+                Prove the speed. Shelby provides sub-second decentralized reads. Real-time comparison against standard IPFS gateways across 20 samples.
+            </p>
+</div>
+<!-- Latency Dashboard Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Comparison Main Readout -->
+<div class="lg:col-span-12 glass-panel rounded-lg p-8 flex flex-col md:flex-row gap-8 items-center justify-between glow-hover">
+<div class="flex-1 w-full space-y-4">
+<div class="flex justify-between items-end border-b border-surface-stroke pb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">SHELBY (HOT STORAGE)</span>
+<span class="font-data-sm text-data-sm text-primary">20 SAMPLES</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-data-lg text-data-lg text-primary text-6xl" id="shelby-ms">124</span>
+<span class="font-data-sm text-data-sm text-primary">ms</span>
+</div>
+<!-- Bar Chart Shelby -->
+<div class="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full bar-chart-fill w-0" id="shelby-bar" style="width: 15%;"></div>
+</div>
+</div>
+<div class="hidden md:flex flex-col items-center justify-center px-4">
+<span class="font-label-caps text-label-caps text-surface-stroke mx-4">VS</span>
+</div>
+<div class="flex-1 w-full space-y-4">
+<div class="flex justify-between items-end border-b border-surface-stroke pb-2">
+<span class="font-label-caps text-label-caps text-on-surface-variant">IPFS (GATEWAY)</span>
+<span class="font-data-sm text-data-sm text-secondary">20 SAMPLES</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="font-data-lg text-data-lg text-secondary text-6xl" id="ipfs-ms">2450</span>
+<span class="font-data-sm text-data-sm text-secondary">ms</span>
+</div>
+<!-- Bar Chart IPFS -->
+<div class="w-full bg-surface-container h-2 rounded-full overflow-hidden">
+<div class="bg-secondary h-full bar-chart-fill w-0" id="ipfs-bar" style="width: 85%;"></div>
+</div>
+</div>
+</div>
+<!-- Metrics Breakdown - Shelby -->
+<div class="lg:col-span-6 glass-panel rounded-lg p-6 space-y-6 border-l-4 border-l-primary">
+<h3 class="font-label-caps text-label-caps text-primary">SHELBY PERFORMANCE METRICS</h3>
+<div class="grid grid-cols-3 gap-4">
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">MEDIAN</div>
+<div class="font-data-lg text-data-lg text-on-surface">124<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">MIN</div>
+<div class="font-data-lg text-data-lg text-on-surface">98<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">P90</div>
+<div class="font-data-lg text-data-lg text-on-surface">145<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+</div>
+</div>
+<!-- Metrics Breakdown - IPFS -->
+<div class="lg:col-span-6 glass-panel rounded-lg p-6 space-y-6 border-l-4 border-l-secondary">
+<h3 class="font-label-caps text-label-caps text-secondary">IPFS PERFORMANCE METRICS</h3>
+<div class="grid grid-cols-3 gap-4">
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">MEDIAN</div>
+<div class="font-data-lg text-data-lg text-on-surface">2450<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">MIN</div>
+<div class="font-data-lg text-data-lg text-on-surface">1800<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+<div class="space-y-1">
+<div class="font-label-caps text-label-caps text-on-surface-variant">P90</div>
+<div class="font-data-lg text-data-lg text-on-surface">4200<span class="text-data-sm text-text-muted">ms</span></div>
+</div>
+</div>
+</div>
+<!-- Action Area -->
+<div class="lg:col-span-12 flex justify-center mt-8">
+<button class="flex items-center gap-2 bg-transparent border border-surface-stroke text-on-surface font-label-caps text-label-caps px-6 py-3 rounded-DEFAULT hover:border-primary hover:text-primary transition-all group" onclick="runLatencyTest()">
+<span class="material-symbols-outlined text-[18px] group-hover:rotate-180 transition-transform duration-500" style="font-variation-settings: 'FILL' 0;">refresh</span>
+                    RE-RUN TEST
+                </button>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full py-8 px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto border-t border-surface-stroke bg-surface dark:bg-surface mt-auto">
+<div class="font-headline-lg text-primary mb-4 md:mb-0">
+            VESSEL
+        </div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mb-4 md:mb-0 text-center">
+            © 2024 VESSEL PROTOCOL. BUILT FOR APTOS.
+        </div>
+<div class="flex items-center gap-6">
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Terms</a>
+<a class="font-label-caps text-label-caps text-on-surface-variant hover:text-primary transition-colors" href="#">Github</a>
+</div>
+</footer>
+<script>
+        function animateValue(obj, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                obj.innerHTML = Math.floor(progress * (end - start) + start);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        function runLatencyTest() {
+            const shelbyEl = document.getElementById('shelby-ms');
+            const ipfsEl = document.getElementById('ipfs-ms');
+            const shelbyBar = document.getElementById('shelby-bar');
+            const ipfsBar = document.getElementById('ipfs-bar');
+
+            // Reset bars
+            shelbyBar.style.width = '0%';
+            ipfsBar.style.width = '0%';
+
+            setTimeout(() => {
+                // Animate Numbers
+                animateValue(shelbyEl, 0, 124, 1000);
+                animateValue(ipfsEl, 0, 2450, 1500);
+
+                // Animate Bars
+                shelbyBar.style.width = '15%';
+                ipfsBar.style.width = '85%';
+            }, 100);
+        }
+
+        // Run on initial load
+        document.addEventListener("DOMContentLoaded", () => {
+            runLatencyTest();
+        });
+    </script>
+</body></html>

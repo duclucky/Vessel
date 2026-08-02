@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VESSEL - Media Upload</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error-container": "#ffdad6",
+                      "outline-variant": "#3c494c",
+                      "on-primary-fixed-variant": "#004e5a",
+                      "inverse-on-surface": "#2d3136",
+                      "on-secondary-container": "#5b3800",
+                      "surface-variant": "#31353b",
+                      "tertiary-container": "#ffaab2",
+                      "surface-bright": "#36393f",
+                      "on-tertiary": "#67001f",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#101419",
+                      "on-tertiary-fixed": "#400010",
+                      "on-secondary": "#472a00",
+                      "surface-container-lowest": "#0a0e13",
+                      "on-error": "#690005",
+                      "surface-container-high": "#262a30",
+                      "inverse-primary": "#006877",
+                      "secondary": "#ffb95f",
+                      "on-primary-fixed": "#001f25",
+                      "primary-fixed": "#a2eeff",
+                      "secondary-container": "#ee9800",
+                      "on-tertiary-fixed-variant": "#891933",
+                      "on-tertiary-container": "#94223a",
+                      "inverse-surface": "#e0e2ea",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "on-surface": "#e0e2ea",
+                      "tertiary-fixed": "#ffdadc",
+                      "surface-elevated": "#111826",
+                      "text-muted": "#94A3B8",
+                      "secondary-fixed": "#ffddb8",
+                      "primary-container": "#22d3ee",
+                      "text-on-dark": "#F8FAFC",
+                      "background": "#101419",
+                      "on-secondary-fixed": "#2a1700",
+                      "surface-container": "#1c2025",
+                      "on-primary": "#00363e",
+                      "error-container": "#93000a",
+                      "tertiary": "#ffd2d5",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "surface-stroke": "#1E293B",
+                      "surface-container-highest": "#31353b",
+                      "on-surface-variant": "#bbc9cd",
+                      "outline": "#859397",
+                      "primary-fixed-dim": "#2fd9f4",
+                      "tertiary-fixed-dim": "#ffb2b9",
+                      "surface-tint": "#2fd9f4",
+                      "surface": "#101419",
+                      "on-background": "#e0e2ea",
+                      "on-primary-container": "#005763",
+                      "surface-container-low": "#181c21",
+                      "primary": "#8aebff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "container-max": "1200px",
+                      "stack-md": "16px",
+                      "margin-mobile": "16px",
+                      "stack-lg": "32px",
+                      "stack-sm": "8px"
+              },
+              "fontFamily": {
+                      "headline-lg": [
+                              "Space Grotesk"
+                      ],
+                      "display-lg": [
+                              "Space Grotesk"
+                      ],
+                      "body-md": [
+                              "Geist"
+                      ],
+                      "data-sm": [
+                              "JetBrains Mono"
+                      ],
+                      "label-caps": [
+                              "JetBrains Mono"
+                      ],
+                      "headline-lg-mobile": [
+                              "Space Grotesk"
+                      ],
+                      "data-lg": [
+                              "JetBrains Mono"
+                      ]
+              },
+              "fontSize": {
+                      "headline-lg": [
+                              "32px",
+                              {
+                                      "lineHeight": "40px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "display-lg": [
+                              "48px",
+                              {
+                                      "lineHeight": "56px",
+                                      "letterSpacing": "-0.02em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "body-md": [
+                              "16px",
+                              {
+                                      "lineHeight": "24px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "data-sm": [
+                              "13px",
+                              {
+                                      "lineHeight": "18px",
+                                      "fontWeight": "400"
+                              }
+                      ],
+                      "label-caps": [
+                              "11px",
+                              {
+                                      "lineHeight": "16px",
+                                      "letterSpacing": "0.1em",
+                                      "fontWeight": "700"
+                              }
+                      ],
+                      "headline-lg-mobile": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "fontWeight": "600"
+                              }
+                      ],
+                      "data-lg": [
+                              "24px",
+                              {
+                                      "lineHeight": "32px",
+                                      "letterSpacing": "-0.04em",
+                                      "fontWeight": "600"
+                              }
+                      ]
+              }
+      },
+          },
+        }
+      </script>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+            font-family: 'Geist', sans-serif;
+        }
+
+        .upload-zone {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        .upload-zone:hover {
+            border-color: theme('colors.primary');
+            background-color: rgba(138, 235, 255, 0.05);
+        }
+
+        .upload-zone.dragover {
+            border-color: theme('colors.primary');
+            background-color: rgba(138, 235, 255, 0.1);
+            box-shadow: 0 0 15px rgba(138, 235, 255, 0.2);
+        }
+
+        .progress-bar-inner {
+            transition: width 0.3s ease-out;
+            box-shadow: 0 0 10px theme('colors.primary');
+        }
+
+        /* Tonal Layer background */
+        .glass-panel {
+            background-color: rgba(17, 24, 38, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid theme('colors.surface-stroke');
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col relative pt-24 pb-8">
+<!-- Ephemeral Banner (Small TopAppBar) -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-center items-center h-8 bg-surface-elevated dark:bg-surface-elevated border-b border-primary/20">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[14px]">cloud_upload</span>
+<span class="font-label-caps text-label-caps text-primary">DEMO ENVIRONMENT • DATA WIPED WEEKLY • TESTNET ONLY</span>
+</div>
+</header>
+<!-- Main Navigation (Medium TopAppBar) -->
+<nav class="fixed top-8 left-0 w-full z-40 flex justify-between items-center px-gutter h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-surface-stroke">
+<div class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary dark:text-primary">
+            VESSEL
+        </div>
+<div class="hidden md:flex gap-6 items-center">
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors transition-all duration-200 ease-in-out font-label-caps text-label-caps hover:bg-primary/10 px-2 py-1 rounded" href="#">Identity</a>
+<a class="text-primary font-bold border-b-2 border-primary pb-1 transition-all duration-200 ease-in-out font-label-caps text-label-caps hover:bg-primary/10 px-2 py-1" href="#">Upload</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors transition-all duration-200 ease-in-out font-label-caps text-label-caps hover:bg-primary/10 px-2 py-1 rounded" href="#">Gallery</a>
+<a class="text-on-surface-variant font-medium hover:text-primary transition-colors transition-all duration-200 ease-in-out font-label-caps text-label-caps hover:bg-primary/10 px-2 py-1 rounded" href="#">Latency</a>
+</div>
+<div>
+<button class="bg-primary text-surface-dim font-label-caps text-label-caps px-4 py-2 rounded-DEFAULT hover:opacity-90 transition-opacity">
+                Connect Wallet
+            </button>
+</div>
+</nav>
+<!-- Main Content -->
+<main class="flex-grow w-full max-w-container-max mx-auto px-margin-mobile md:px-gutter mt-stack-lg">
+<div class="grid grid-cols-1 md:grid-cols-12 gap-gutter">
+<!-- Left Column: Context / Info -->
+<div class="md:col-span-4 flex flex-col gap-stack-md pt-4">
+<div>
+<h1 class="font-headline-lg text-headline-lg-mobile md:text-headline-lg text-primary mb-2">Initialize Storage</h1>
+<p class="font-body-md text-body-md text-text-muted">
+                        Securely upload assets to the decentralized hot storage layer. Data is processed locally before being distributed across the testnet nodes.
+                    </p>
+</div>
+<div class="glass-panel p-4 rounded-lg mt-4 border-l-2 border-l-primary/50">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary">info</span>
+<div>
+<h3 class="font-label-caps text-label-caps text-primary mb-1">Ephemeral Notice</h3>
+<p class="font-data-sm text-data-sm text-on-surface-variant">
+                                All uploaded data is ephemeral and hosted exclusively on the experimental testnet. Wipes occur weekly.
+                            </p>
+</div>
+</div>
+</div>
+<div class="glass-panel p-4 rounded-lg mt-2">
+<h3 class="font-label-caps text-label-caps text-primary/70 mb-2 border-b border-surface-stroke pb-1">Upload Specifications</h3>
+<ul class="font-data-sm text-data-sm text-on-surface-variant space-y-2 mt-3">
+<li class="flex justify-between"><span>Max File Size:</span> <span class="text-primary">25MB</span></li>
+<li class="flex justify-between"><span>Supported Types:</span> <span class="text-primary">IMG, VID, DOC</span></li>
+<li class="flex justify-between"><span>Encryption:</span> <span class="text-primary">AES-256 (Local)</span></li>
+</ul>
+</div>
+</div>
+<!-- Right Column: Upload Interface -->
+<div class="md:col-span-8">
+<div class="glass-panel rounded-xl p-8 relative overflow-hidden h-full min-h-[400px] flex flex-col items-center justify-center">
+<!-- View 1: Initial Upload State -->
+<div class="w-full h-full flex flex-col items-center justify-center" id="upload-initial-view">
+<div class="upload-zone w-full h-64 border-2 border-dashed border-surface-stroke rounded-lg flex flex-col items-center justify-center cursor-pointer mb-6" id="drop-zone">
+<span class="material-symbols-outlined text-4xl text-primary/50 mb-4">cloud_upload</span>
+<p class="font-body-md text-body-md text-on-surface mb-2">Drag and drop file here</p>
+<p class="font-data-sm text-data-sm text-text-muted mb-4">or</p>
+<label class="bg-surface border border-surface-stroke hover:border-primary text-on-surface font-label-caps text-label-caps px-6 py-3 rounded-DEFAULT cursor-pointer transition-all">
+                                Select File
+                                <input class="hidden" id="file-input" type="file"/>
+</label>
+</div>
+<p class="font-data-sm text-data-sm text-text-muted text-center">
+                            Supports up to 25MB per file on the current demo tier.
+                        </p>
+</div>
+<!-- View 2: Uploading State (Hidden initially) -->
+<div class="w-full h-full flex flex-col items-center justify-center hidden" id="upload-progress-view">
+<div class="w-full max-w-md">
+<div class="flex justify-between mb-2">
+<span class="font-label-caps text-label-caps text-primary pulse-text">Uploading to Shelby...</span>
+<span class="font-data-sm text-data-sm text-primary" id="progress-percentage">0%</span>
+</div>
+<div class="h-2 w-full bg-surface-container-high rounded-full overflow-hidden">
+<div class="h-full bg-primary progress-bar-inner rounded-full" id="progress-bar" style="width: 0%;"></div>
+</div>
+<div class="mt-4 font-data-sm text-data-sm text-text-muted text-center" id="upload-filename">
+                                filename.png (2.4MB)
+                            </div>
+</div>
+</div>
+<!-- View 3: Success / Post-Upload State (Hidden initially) -->
+<div class="w-full flex flex-col items-start hidden" id="upload-success-view">
+<div class="flex items-center gap-2 mb-6 w-full pb-4 border-b border-surface-stroke">
+<span class="material-symbols-outlined text-primary">check_circle</span>
+<h2 class="font-headline-lg-mobile md:text-headline-lg text-on-surface">Upload Complete</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+<!-- Thumbnail -->
+<div class="md:col-span-1 border border-surface-stroke rounded-lg overflow-hidden bg-surface-container aspect-square relative">
+<img alt="Uploaded Thumbnail" class="w-full h-full object-cover opacity-80" data-alt="A glowing, abstract geometric shape representing a secure data packet against a dark, minimalist digital background. High contrast, sharp edges, and a tech-noir aesthetic with neon cyan highlights." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAjFzbCJOYQpjIywzer4TibrwBIzkyAwIFixe7d36-IyZGcR8Gs8-H6952QPAg8pEFGavTS5IO15iQ_yN1YEpGfCJdtsG9d5Agrd_AjZfaSaVwMt2ZHFOeni0I6IexiTWjiYQkel8isYQ0S9QU0wAmLrj5doCB4gAEPTOaT4kdzTJlSf55C_M7WKd5qpXnE8a3Z2ZVXVuJkJPd-_tYbliF2j-KhOgJMqryUL8afI2HOZFZVvTDFYsUF"/>
+<div class="absolute top-2 right-2 bg-surface-elevated/90 px-2 py-1 rounded font-label-caps text-label-caps text-primary text-[9px]">7D LEFT</div>
+</div>
+<!-- Details -->
+<div class="md:col-span-2 flex flex-col gap-4 justify-center">
+<div>
+<label class="font-label-caps text-label-caps text-text-muted block mb-1">Unique Key Identifier</label>
+<div class="font-data-sm text-data-sm text-on-surface bg-surface-container-low p-3 rounded border border-surface-stroke break-all">
+                                        vssl_tx_9f8a7e6d5c4b3a210f9e8d7c6b5a493
+                                    </div>
+</div>
+<div>
+<label class="font-label-caps text-label-caps text-text-muted block mb-1">Public Resolvable URL</label>
+<div class="flex items-center gap-2">
+<div class="font-data-sm text-data-sm text-primary bg-surface-container-low p-3 rounded border border-surface-stroke flex-grow truncate overflow-hidden">
+                                            https://testnet.vessel.io/resolve/vssl_tx_9f8a...
+                                        </div>
+<button class="bg-surface border border-surface-stroke p-3 rounded hover:bg-primary/10 transition-colors group" title="Copy to clipboard">
+<span class="material-symbols-outlined text-on-surface group-hover:text-primary text-base">content_copy</span>
+</button>
+</div>
+</div>
+<div class="mt-2 flex gap-4">
+<button class="font-label-caps text-label-caps text-primary border border-primary px-4 py-2 rounded hover:bg-primary/10 transition-colors" onclick="resetUpload()">
+                                        Upload Another
+                                    </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full py-8 px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto bg-surface dark:bg-surface border-t border-surface-stroke mt-16 transition-opacity duration-200">
+<div class="font-headline-lg text-primary mb-4 md:mb-0">
+            VESSEL
+        </div>
+<div class="flex gap-6 items-center">
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:text-primary transition-colors" href="#">Terms</a>
+<a class="text-on-surface-variant font-label-caps text-label-caps hover:text-primary transition-colors" href="#">Github</a>
+</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant mt-4 md:mt-0">
+            © 2024 VESSEL PROTOCOL. BUILT FOR APTOS.
+        </div>
+</footer>
+<script>
+        // Simple Interaction Logic for Demo
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        
+        const initialView = document.getElementById('upload-initial-view');
+        const progressView = document.getElementById('upload-progress-view');
+        const successView = document.getElementById('upload-success-view');
+        
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-percentage');
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        // Highlight drop zone when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('dragover');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('dragover');
+        }
+
+        // Handle dropped files
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', handleFileSelect, false);
+
+        function handleDrop(e) {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            let files = e.target.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                document.getElementById('upload-filename').innerText = `${file.name} (${(file.size / (1024*1024)).toFixed(2)}MB)`;
+                simulateUpload();
+            }
+        }
+
+        function simulateUpload() {
+            // Switch views
+            initialView.classList.add('hidden');
+            progressView.classList.remove('hidden');
+            
+            let progress = 0;
+            progressBar.style.width = '0%';
+            progressText.innerText = '0%';
+
+            const interval = setInterval(() => {
+                progress += Math.random() * 15;
+                if (progress > 100) progress = 100;
+                
+                progressBar.style.width = `${progress}%`;
+                progressText.innerText = `${Math.round(progress)}%`;
+
+                if (progress === 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        progressView.classList.add('hidden');
+                        successView.classList.remove('hidden');
+                    }, 500); // short delay at 100%
+                }
+            }, 300);
+        }
+
+        function resetUpload() {
+            successView.classList.add('hidden');
+            initialView.classList.remove('hidden');
+            fileInput.value = ""; // clear input
+        }
+    </script>
+</body></html>

@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VESSEL - Decentralized Hot Storage</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-error-container": "#ffdad6",
+                      "outline-variant": "#3c494c",
+                      "on-primary-fixed-variant": "#004e5a",
+                      "inverse-on-surface": "#2d3136",
+                      "on-secondary-container": "#5b3800",
+                      "surface-variant": "#31353b",
+                      "tertiary-container": "#ffaab2",
+                      "surface-bright": "#36393f",
+                      "on-tertiary": "#67001f",
+                      "error": "#ffb4ab",
+                      "surface-dim": "#101419",
+                      "on-tertiary-fixed": "#400010",
+                      "on-secondary": "#472a00",
+                      "surface-container-lowest": "#0a0e13",
+                      "on-error": "#690005",
+                      "surface-container-high": "#262a30",
+                      "inverse-primary": "#006877",
+                      "secondary": "#ffb95f",
+                      "on-primary-fixed": "#001f25",
+                      "primary-fixed": "#a2eeff",
+                      "secondary-container": "#ee9800",
+                      "on-tertiary-fixed-variant": "#891933",
+                      "on-tertiary-container": "#94223a",
+                      "inverse-surface": "#e0e2ea",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "on-surface": "#e0e2ea",
+                      "tertiary-fixed": "#ffdadc",
+                      "surface-elevated": "#111826",
+                      "text-muted": "#94A3B8",
+                      "secondary-fixed": "#ffddb8",
+                      "primary-container": "#22d3ee",
+                      "text-on-dark": "#F8FAFC",
+                      "background": "#101419",
+                      "on-secondary-fixed": "#2a1700",
+                      "surface-container": "#1c2025",
+                      "on-primary": "#00363e",
+                      "error-container": "#93000a",
+                      "tertiary": "#ffd2d5",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "surface-stroke": "#1E293B",
+                      "surface-container-highest": "#31353b",
+                      "on-surface-variant": "#bbc9cd",
+                      "outline": "#859397",
+                      "primary-fixed-dim": "#2fd9f4",
+                      "tertiary-fixed-dim": "#ffb2b9",
+                      "surface-tint": "#2fd9f4",
+                      "surface": "#101419",
+                      "on-background": "#e0e2ea",
+                      "on-primary-container": "#005763",
+                      "surface-container-low": "#181c21",
+                      "primary": "#8aebff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "gutter": "24px",
+                      "container-max": "1200px",
+                      "stack-md": "16px",
+                      "margin-mobile": "16px",
+                      "stack-lg": "32px",
+                      "stack-sm": "8px"
+              },
+              "fontFamily": {
+                      "headline-lg": ["Space Grotesk", "sans-serif"],
+                      "display-lg": ["Space Grotesk", "sans-serif"],
+                      "body-md": ["Geist", "sans-serif"],
+                      "data-sm": ["JetBrains Mono", "monospace"],
+                      "label-caps": ["JetBrains Mono", "monospace"],
+                      "headline-lg-mobile": ["Space Grotesk", "sans-serif"],
+                      "data-lg": ["JetBrains Mono", "monospace"]
+              },
+              "fontSize": {
+                      "headline-lg": ["32px", {"lineHeight": "40px", "fontWeight": "600"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "data-sm": ["13px", {"lineHeight": "18px", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "16px", "letterSpacing": "0.1em", "fontWeight": "700"}],
+                      "headline-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                      "data-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.04em", "fontWeight": "600"}]
+              }
+            },
+          }
+        }
+    </script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&amp;family=Space+Grotesk:wght@600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            background-color: theme('colors.background');
+            color: theme('colors.on-background');
+        }
+        .ghost-border {
+            border: 1px solid theme('colors.surface-stroke');
+        }
+        .glass-panel {
+            background-color: rgba(17, 24, 38, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .glow-hover:hover {
+            box-shadow: 0 0 8px 2px rgba(34, 211, 238, 0.2);
+            border-color: theme('colors.primary-container');
+        }
+        .data-grid {
+            background-image: linear-gradient(theme('colors.surface-stroke') 1px, transparent 1px),
+                              linear-gradient(90deg, theme('colors.surface-stroke') 1px, transparent 1px);
+            background-size: 40px 40px;
+            background-position: center center;
+            opacity: 0.1;
+        }
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanner {
+            animation: scanline 4s linear infinite;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased min-h-screen flex flex-col relative overflow-x-hidden">
+<!-- Ambient Grid Background -->
+<div class="fixed inset-0 pointer-events-none z-0">
+<div class="absolute inset-0 data-grid"></div>
+<div class="absolute inset-0 bg-gradient-to-b from-transparent via-background/50 to-background"></div>
+</div>
+<!-- Ephemeral Banner (Small TopAppBar) -->
+<div class="bg-surface-elevated dark:bg-surface-elevated border-b border-primary/20 fixed top-0 left-0 w-full z-50 flex justify-center items-center h-8">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-primary">cloud_upload</span>
+<span class="font-label-caps text-label-caps text-primary">DEMO ENVIRONMENT • DATA WIPED WEEKLY • TESTNET ONLY</span>
+</div>
+</div>
+<!-- Main Navigation (Medium TopAppBar) -->
+<nav class="bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-surface-stroke fixed top-8 left-0 w-full z-40 flex justify-between items-center px-gutter h-16 transition-all duration-200 ease-in-out">
+<div class="flex items-center gap-8">
+<a class="flex items-center gap-3" href="#">
+<img alt="VESSEL Logo" class="w-8 h-8 object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPhxJZWu9RkE2Pd1pZCkgdnpTPe7eq1MHPbBqiMRcptavn5eptCAPTdIeQvuyy-OeeHqy8vurfnTbS8dLrEcaihH5Jg9PgCLzpHb5PTAtFs7qz5ZAm8vmc_7Gxrei57_mqWu4vgfVepSAsxeln2LBZy9a4BCxCZvDHZ0jIZnJ9rKfssQQV15n5HF5YQ9VV3H_qwHMl2DEWks4nmheGzi-6nHkbdtqWAd7gK6NUgYpR9Z_Q2ymY0W7C"/>
+<span class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary dark:text-primary">VESSEL</span>
+</a>
+<!-- Desktop Nav Links -->
+<div class="hidden md:flex items-center gap-6">
+<a class="text-on-surface-variant font-medium hover:bg-primary/10 hover:text-primary transition-colors px-3 py-1 rounded" href="#">Identity</a>
+<a class="text-on-surface-variant font-medium hover:bg-primary/10 hover:text-primary transition-colors px-3 py-1 rounded" href="#">Upload</a>
+<a class="text-on-surface-variant font-medium hover:bg-primary/10 hover:text-primary transition-colors px-3 py-1 rounded" href="#">Gallery</a>
+<a class="text-on-surface-variant font-medium hover:bg-primary/10 hover:text-primary transition-colors px-3 py-1 rounded" href="#">Latency</a>
+</div>
+</div>
+<div class="flex items-center">
+<button class="bg-primary-container text-surface-container-lowest font-label-caps text-label-caps px-4 py-2 rounded-DEFAULT hover:bg-primary transition-colors flex items-center gap-2">
+<span class="material-symbols-outlined text-[16px]">account_balance_wallet</span>
+                Connect Wallet
+            </button>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-32 pb-16 px-gutter max-w-container-max mx-auto w-full relative z-10 flex flex-col items-center justify-center min-h-[80vh]">
+<div class="w-full max-w-4xl mx-auto flex flex-col items-center text-center space-y-12">
+<!-- Hero Typography Section -->
+<div class="space-y-6">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full ghost-border bg-surface-elevated/50 backdrop-blur-sm mb-4">
+<span class="w-2 h-2 rounded-full bg-primary-container animate-pulse"></span>
+<span class="font-data-sm text-data-sm text-primary">Shelby Network Active</span>
+</div>
+<h1 class="font-display-lg text-display-lg md:text-[64px] md:leading-[72px] text-on-dark max-w-3xl mx-auto">
+                    Decentralized Hot Storage for the <span class="text-primary-container">NFT Era</span>
+</h1>
+<p class="font-body-md text-body-md md:text-xl text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
+                    Fast, cross-chain, and wallet-controlled storage powered by the Shelby network. Engineered for sovereign creators.
+                </p>
+</div>
+<!-- Primary Interaction Zone -->
+<div class="glass-panel ghost-border rounded-lg p-8 w-full max-w-md relative overflow-hidden group glow-hover transition-all duration-300">
+<!-- Abstract Data Packet Visual -->
+<div class="absolute inset-0 opacity-20 pointer-events-none">
+<div class="w-full h-1 bg-gradient-to-r from-transparent via-primary-container to-transparent scanner"></div>
+<div class="flex justify-between w-full h-full px-4 pt-4">
+<div class="w-px h-full bg-surface-stroke"></div>
+<div class="w-px h-full bg-surface-stroke"></div>
+<div class="w-px h-full bg-surface-stroke"></div>
+</div>
+</div>
+<div class="relative z-10 flex flex-col items-center space-y-6">
+<div class="w-16 h-16 rounded-full bg-surface-container-high border border-surface-stroke flex items-center justify-center mb-2">
+<span class="material-symbols-outlined text-[32px] text-primary-container">bolt</span>
+</div>
+<div class="text-center space-y-2">
+<h3 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Initialize Connection</h3>
+<p class="font-data-sm text-data-sm text-text-muted">Requires Ethereum or Solana wallet signature.</p>
+</div>
+<button class="w-full bg-primary-container text-surface-container-lowest font-label-caps text-label-caps px-6 py-4 rounded-DEFAULT hover:bg-primary transition-all duration-200 transform active:scale-[0.98] flex items-center justify-center gap-3">
+<span class="material-symbols-outlined">key</span>
+                        CONNECT WALLET TO START
+                    </button>
+<div class="flex items-center gap-4 text-text-muted font-data-sm text-[10px]">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">lock</span> End-to-end Encrypted</span>
+<span class="w-1 h-1 rounded-full bg-surface-stroke"></span>
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[12px]">timer</span> Sub-second Retrieval</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="w-full py-8 px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto border-t border-surface-stroke bg-surface dark:bg-surface relative z-20">
+<div class="font-headline-lg text-primary mb-4 md:mb-0">
+<span class="text-lg tracking-tight font-bold">VESSEL</span>
+</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant flex items-center gap-2 mb-4 md:mb-0">
+<span class="w-1.5 h-1.5 rounded-full bg-primary/50"></span>
+            © 2024 VESSEL PROTOCOL. BUILT FOR APTOS.
+        </div>
+<div class="flex gap-6 font-label-caps text-label-caps text-on-surface-variant">
+<a class="hover:text-primary transition-colors" href="#">Documentation</a>
+<a class="hover:text-primary transition-colors" href="#">Terms</a>
+<a class="hover:text-primary transition-colors" href="#">Github</a>
+</div>
+</footer>
+</body></html>
