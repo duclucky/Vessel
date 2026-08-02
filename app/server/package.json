@@ -7,7 +7,10 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "build:client": "node build-client.mjs"
+    "build:client": "node build-client.mjs",
+    "test": "node --test test/*.test.js",
+    "test:ui": "node --test test/*.test.js",
+    "check": "npm test && npm run build:client"
   },
   "dependencies": {
     "@aptos-labs/gas-station-client": "2.0.3",

@@ -48,12 +48,16 @@ function toast(msg, kind = 'info') {
   if (!host) {
     host = document.createElement('div');
     host.id = 'vessel-toast';
-    host.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:8px;';
+    host.setAttribute('role', 'status');
+    host.setAttribute('aria-live', 'polite');
+    host.className = 'fixed bottom-5 left-5 right-5 z-[9999] flex flex-col gap-2 sm:left-auto sm:max-w-md';
     document.body.appendChild(host);
   }
-  const colors = { info: '#22d3ee', error: '#ffb4ab', ok: '#22d3ee', warn: '#ffb95f' };
+  const colors = { info: '#5ee6ff', error: '#ffb4ab', ok: '#5eead4', warn: '#cebdff' };
   const el = document.createElement('div');
-  el.style.cssText = `font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.04em;background:rgba(17,24,38,.95);color:${colors[kind] || '#e0e2ea'};border:1px solid ${colors[kind] || '#1E293B'};border-radius:4px;padding:10px 14px;max-width:360px;backdrop-filter:blur(12px);box-shadow:0 0 12px rgba(34,211,238,.15)`;
+  el.className = 'vessel-glass vessel-technical rounded-control px-5 py-4 text-sm shadow-xl';
+  el.style.color = colors[kind] || '#e2e2e9';
+  el.style.borderColor = colors[kind] || 'rgba(255,255,255,.12)';
   el.textContent = msg;
   host.appendChild(el);
   setTimeout(() => { el.style.transition = 'opacity .3s'; el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3500);
@@ -111,10 +115,7 @@ function page() {
   return p.replace('.html', '') || 'index';
 }
 
-function initLanding() {
-  const cta = $('main .js-connect') || $('#cta-connect');
-  if (cta) cta.onclick = async (e) => { e.preventDefault(); const a = await connectWallet(); if (a) location.href = '/identity.html'; };
-}
+function initLanding() {}
 
 async function initIdentity() {
   const originEl = $('#origin-wallet'); const derivedEl = $('#derived-account');
