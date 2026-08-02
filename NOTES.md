@@ -386,3 +386,16 @@ dummy non-null `options.submit.transactionSubmitter = { submitTransaction: async
   Phantom: `signMessage` is keypair-backed here vs extension UI — identical signing bytes, same code path.
 
 Proof: `scratchpad/vessel-tn-sol/phantom-sponsor.mjs`. Real runs: hashes 0xe71c…, 0xd395…, 0x2cb2…, 0x4385….
+
+## 11. Deploy (GitHub + Vercel) — 2026-08-03
+- GitHub: https://github.com/duclucky/Vessel (public). Secrets kept out via .gitignore (.env excluded;
+  verified no key fragments in any tracked file). Dev test files (paytest.mjs) removed from repo.
+- Vercel project `duckys-projects-bc83c6a0/vessel` (prj_SkuAZlzwsoMelrXtyFjr9poLoJd3). Root = app/server.
+  `api/index.js` re-exports the Express app; `VERCEL=1` skips app.listen; vercel.json routes /api/*→function,
+  else→/public. 16 env vars set (production) incl. all secrets (SHELBY_API_KEY, *_SECRET_KEY, GAS_STATION_API_KEY,
+  PAY_SECRET). Build READY.
+- Production URLs: https://vessel-sage.vercel.app (+ vessel-njmyt5b8o-… deploy URL).
+- ⚠️ BLOCKER: Vercel **Deployment Protection (Vercel Authentication)** is ON by default → all URLs 302 to SSO
+  login → NOT publicly usable. CLI has no toggle; token is in the OS keyring (no readable auth.json). Must be
+  disabled in dashboard: Project → Settings → Deployment Protection → Vercel Authentication → Disabled
+  (https://vercel.com/duckys-projects-bc83c6a0/vessel/settings/deployment-protection). Then the demo is public.

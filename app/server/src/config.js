@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 export const config = {
   port: Number(process.env.PORT || 8787),
-  publicBase: process.env.PUBLIC_BASE || `http://localhost:${process.env.PORT || 8787}`,
+  publicBase: process.env.PUBLIC_BASE || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${process.env.PORT || 8787}`),
   storageBackend: process.env.STORAGE_BACKEND || 'mock', // mock | shelby
   network: process.env.SHELBY_NETWORK || 'testnet',
   shelbyApiKey: process.env.SHELBY_API_KEY || '',
