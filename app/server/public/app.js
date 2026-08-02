@@ -124,6 +124,8 @@ async function initIdentity() {
   if (SOL()?.state?.solana) {
     if (originEl) originEl.textContent = shortMid(SOL().state.solana);
     if (derivedEl) derivedEl.textContent = shortMid(SOL().state.storageAccount);
+    const status = $('#auth-status');
+    if (status) status.textContent = 'Wallet connected · storage identity derived';
     window.__storageSolana = SOL().state.solana; window.__storageAcct = SOL().state.storageAccount;
   } else {
     if (originEl) originEl.textContent = '—';
@@ -141,7 +143,7 @@ async function initIdentity() {
         const r = await SOL().connect();
         if (originEl) originEl.textContent = shortMid(r.solana);
         if (derivedEl) derivedEl.textContent = shortMid(r.storageAccount);
-        const status = $('#auth-status'); if (status) status.textContent = 'This is YOUR storage account ✓';
+        const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified · ready to upload';
         window.__storageSolana = r.solana; window.__storageAcct = r.storageAccount;
         toast('Connected — your wallet owns this storage identity', 'ok');
       } else {
@@ -150,7 +152,7 @@ async function initIdentity() {
         if (res) {
           if (derivedEl) derivedEl.textContent = shortMid(res.storageAccount || '');
           if (originEl) originEl.textContent = shortMid(res.address);
-          const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified ✓';
+          const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified · ready to upload';
         }
       }
     } catch (err) { toast(String(err?.message || err).slice(0, 140), 'error'); }

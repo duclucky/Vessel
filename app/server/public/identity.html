@@ -1,318 +1,78 @@
-<!DOCTYPE html>
-
-<html class="dark" lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>VESSEL - Storage Identity</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&amp;family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
-        tailwind.config = {
-          darkMode: "class",
-          theme: {
-            extend: {
-              "colors": {
-                      "on-error-container": "#ffdad6",
-                      "outline-variant": "#3c494c",
-                      "on-primary-fixed-variant": "#004e5a",
-                      "inverse-on-surface": "#2d3136",
-                      "on-secondary-container": "#5b3800",
-                      "surface-variant": "#31353b",
-                      "tertiary-container": "#ffaab2",
-                      "surface-bright": "#36393f",
-                      "on-tertiary": "#67001f",
-                      "error": "#ffb4ab",
-                      "surface-dim": "#101419",
-                      "on-tertiary-fixed": "#400010",
-                      "on-secondary": "#472a00",
-                      "surface-container-lowest": "#0a0e13",
-                      "on-error": "#690005",
-                      "surface-container-high": "#262a30",
-                      "inverse-primary": "#006877",
-                      "secondary": "#ffb95f",
-                      "on-primary-fixed": "#001f25",
-                      "primary-fixed": "#a2eeff",
-                      "secondary-container": "#ee9800",
-                      "on-tertiary-fixed-variant": "#891933",
-                      "on-tertiary-container": "#94223a",
-                      "inverse-surface": "#e0e2ea",
-                      "on-secondary-fixed-variant": "#653e00",
-                      "on-surface": "#e0e2ea",
-                      "tertiary-fixed": "#ffdadc",
-                      "surface-elevated": "#111826",
-                      "text-muted": "#94A3B8",
-                      "secondary-fixed": "#ffddb8",
-                      "primary-container": "#22d3ee",
-                      "text-on-dark": "#F8FAFC",
-                      "background": "#101419",
-                      "on-secondary-fixed": "#2a1700",
-                      "surface-container": "#1c2025",
-                      "on-primary": "#00363e",
-                      "error-container": "#93000a",
-                      "tertiary": "#ffd2d5",
-                      "secondary-fixed-dim": "#ffb95f",
-                      "surface-stroke": "#1E293B",
-                      "surface-container-highest": "#31353b",
-                      "on-surface-variant": "#bbc9cd",
-                      "outline": "#859397",
-                      "primary-fixed-dim": "#2fd9f4",
-                      "tertiary-fixed-dim": "#ffb2b9",
-                      "surface-tint": "#2fd9f4",
-                      "surface": "#101419",
-                      "on-background": "#e0e2ea",
-                      "on-primary-container": "#005763",
-                      "surface-container-low": "#181c21",
-                      "primary": "#8aebff"
-              },
-              "borderRadius": {
-                      "DEFAULT": "0.125rem",
-                      "lg": "0.25rem",
-                      "xl": "0.5rem",
-                      "full": "0.75rem"
-              },
-              "spacing": {
-                      "gutter": "24px",
-                      "container-max": "1200px",
-                      "stack-md": "16px",
-                      "margin-mobile": "16px",
-                      "stack-lg": "32px",
-                      "stack-sm": "8px"
-              },
-              "fontFamily": {
-                      "headline-lg": [
-                              "Space Grotesk"
-                      ],
-                      "display-lg": [
-                              "Space Grotesk"
-                      ],
-                      "body-md": [
-                              "Geist"
-                      ],
-                      "data-sm": [
-                              "JetBrains Mono"
-                      ],
-                      "label-caps": [
-                              "JetBrains Mono"
-                      ],
-                      "headline-lg-mobile": [
-                              "Space Grotesk"
-                      ],
-                      "data-lg": [
-                              "JetBrains Mono"
-                      ]
-              },
-              "fontSize": {
-                      "headline-lg": [
-                              "32px",
-                              {
-                                      "lineHeight": "40px",
-                                      "fontWeight": "600"
-                              }
-                      ],
-                      "display-lg": [
-                              "48px",
-                              {
-                                      "lineHeight": "56px",
-                                      "letterSpacing": "-0.02em",
-                                      "fontWeight": "700"
-                              }
-                      ],
-                      "body-md": [
-                              "16px",
-                              {
-                                      "lineHeight": "24px",
-                                      "fontWeight": "400"
-                              }
-                      ],
-                      "data-sm": [
-                              "13px",
-                              {
-                                      "lineHeight": "18px",
-                                      "fontWeight": "400"
-                              }
-                      ],
-                      "label-caps": [
-                              "11px",
-                              {
-                                      "lineHeight": "16px",
-                                      "letterSpacing": "0.1em",
-                                      "fontWeight": "700"
-                              }
-                      ],
-                      "headline-lg-mobile": [
-                              "24px",
-                              {
-                                      "lineHeight": "32px",
-                                      "fontWeight": "600"
-                              }
-                      ],
-                      "data-lg": [
-                              "24px",
-                              {
-                                      "lineHeight": "32px",
-                                      "letterSpacing": "-0.04em",
-                                      "fontWeight": "600"
-                              }
-                      }
-              }
-            },
-          }
-      </script>
-<style>
-        .glass-panel {
-            background: rgba(17, 24, 38, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-        }
-        .ghost-border {
-            border: 1px solid theme('colors.surface-stroke');
-        }
-        .glow-hover:hover {
-            box-shadow: 0 0 12px rgba(138, 235, 255, 0.2);
-            border-color: theme('colors.primary');
-        }
-        .pulsing-dot {
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.7); }
-            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(34, 211, 238, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
-        }
-      </style>
+<!doctype html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Derive a wallet-owned Shelby storage identity with Phantom.">
+  <title>VESSEL | Ethereal Identity</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@300..600" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/vessel.css">
 </head>
-<body class="bg-background text-on-surface font-body-md min-h-screen flex flex-col pt-24 pb-8 antialiased selection:bg-primary/30">
-<!-- Ephemeral Banner -->
-<div class="fixed top-0 left-0 w-full z-50 flex justify-center items-center h-8 bg-surface-elevated dark:bg-surface-elevated border-b border-primary/20 text-primary dark:text-primary font-label-caps text-label-caps leading-none">
-<span class="material-symbols-outlined text-[14px] mr-2" data-icon="experimental">cloud_upload</span>
-        DEMO • SHELBY TESTNET • STORAGE VIA SOLANA DAA • DATA IS EPHEMERAL
-    </div>
-<!-- Top Navigation -->
-<nav class="fixed top-8 left-0 w-full z-40 flex justify-between items-center px-gutter h-16 bg-surface/80 dark:bg-surface/80 backdrop-blur-md border-b border-surface-stroke transition-all duration-200 ease-in-out">
-<div class="font-headline-lg text-headline-lg font-bold tracking-tighter text-primary dark:text-primary">
-            VESSEL
+<body class="min-h-screen bg-background font-body text-on-surface antialiased">
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <div class="fixed inset-x-0 top-0 z-50 flex h-8 items-center justify-center border-b border-white/5 bg-surface-lowest/90 px-3 text-center">
+    <p class="vessel-technical truncate text-[10px] text-on-surface-variant sm:text-xs"><span class="mr-2 inline-block h-2 w-2 rounded-full bg-primary-container shadow-[0_0_10px_#5eead4]"></span>Shelby Testnet · Sponsored DAA · Data is Ephemeral</p>
+  </div>
+  <header class="fixed inset-x-0 top-8 z-40 px-3 pt-3 md:px-8 md:pt-4">
+    <nav class="vessel-nav mx-auto flex h-16 max-w-[92rem] items-center justify-between rounded-full px-4 md:h-20 md:px-8" aria-label="Primary navigation">
+      <a class="font-display text-2xl font-bold tracking-[-0.06em] text-primary md:text-3xl" href="/">VESSEL</a>
+      <div class="hidden items-center gap-7 md:flex"><a class="vessel-nav-link" aria-current="page" href="/identity.html">Identity</a><a class="vessel-nav-link" href="/upload.html">Upload</a><a class="vessel-nav-link" href="/gallery.html">Gallery</a><a class="vessel-nav-link" href="/latency.html">Latency</a></div>
+      <div class="flex items-center gap-2">
+        <details class="relative md:hidden"><summary class="flex min-h-11 min-w-11 cursor-pointer list-none items-center justify-center rounded-full border border-white/10" aria-label="Open navigation menu"><span class="material-symbols-outlined" aria-hidden="true">menu</span></summary><div class="vessel-nav absolute right-0 top-14 flex w-52 flex-col rounded-3xl p-3 shadow-2xl"><a class="rounded-2xl bg-white/5 px-4 py-3 text-primary" aria-current="page" href="/identity.html">Identity</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/upload.html">Upload</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/gallery.html">Gallery</a><a class="rounded-2xl px-4 py-3 hover:bg-white/5" href="/latency.html">Latency</a></div></details>
+        <a class="vessel-button vessel-button-secondary px-4 md:px-6" href="#sign-btn"><span class="material-symbols-outlined text-lg" aria-hidden="true">account_balance_wallet</span><span class="hidden sm:inline">Connect</span></a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content" class="vessel-page pb-24 pt-40 md:pt-52">
+    <header class="mx-auto max-w-3xl text-center">
+      <p class="vessel-kicker text-primary-container">Derived Account Abstraction</p>
+      <h1 class="mt-5 font-display text-5xl font-bold tracking-[-0.04em] md:text-7xl">Ethereal Identity</h1>
+      <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Your Phantom wallet controls a Shelby storage identity without creating another wallet or seed phrase.</p>
+    </header>
+
+    <section class="mt-14 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]" aria-label="Wallet-owned storage identity">
+      <article class="vessel-glass relative overflow-hidden rounded-vessel p-6 md:p-9">
+        <div class="vessel-bloom -left-16 -top-16 h-48 w-48 bg-primary-container/15"></div>
+        <div class="relative flex items-center gap-4">
+          <div class="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border border-primary-container/25 bg-primary-container/5 shadow-bloom"><span class="material-symbols-outlined text-3xl text-primary-container" aria-hidden="true">hub</span></div>
+          <div><p class="vessel-kicker text-on-surface-variant">Active identity node</p><p class="vessel-technical mt-2 flex items-center gap-2 text-sm text-primary"><span class="h-2 w-2 rounded-full bg-primary-container shadow-[0_0_10px_#5eead4]"></span>Phantom ready</p></div>
         </div>
-<div class="hidden md:flex space-x-8 items-center h-full">
-<a class="text-primary font-bold border-b-2 border-primary pb-1 font-label-caps text-label-caps h-full flex items-center mt-1" href="/identity.html">Identity</a>
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps h-full flex items-center hover:bg-primary/10 px-2 rounded" href="/upload.html">Upload</a>
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps h-full flex items-center hover:bg-primary/10 px-2 rounded" href="/gallery.html">Gallery</a>
-<a class="text-on-surface-variant font-medium hover:text-primary transition-colors font-label-caps text-label-caps h-full flex items-center hover:bg-primary/10 px-2 rounded" href="/latency.html">Latency</a>
-</div>
-<button class="bg-primary text-surface-dim font-label-caps text-label-caps px-4 py-2 rounded flex items-center gap-2 hover:bg-primary/90 transition-colors js-connect">
-<span class="w-2 h-2 rounded-full bg-surface-dim block"></span>
-            <span class="js-connect-label">Connect Wallet</span>
-        </button>
-</nav>
-<!-- Main Content -->
-<main class="flex-grow w-full max-w-container-max mx-auto px-margin-mobile md:px-gutter mt-8">
-<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
-<!-- Header Section -->
-<div class="col-span-1 lg:col-span-12 mb-stack-lg">
-<h1 class="font-display-lg text-display-lg text-on-surface mb-2">Storage Identity</h1>
-<p class="text-on-surface-variant font-body-md text-body-md max-w-2xl">
-                    This demo stores media on Shelby testnet via Solana Derived Account Abstraction: a Solana key controls the Aptos account that owns every blob. Connect an EVM wallet below to prove you can derive your own identity too.
-                </p>
-</div>
-<!-- Left Column: Identity Data -->
-<div class="col-span-1 lg:col-span-7 flex flex-col gap-stack-md">
-<!-- Wallet Binding Card -->
-<div class="glass-panel ghost-border rounded-lg p-6 relative overflow-hidden group">
-<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
-<h2 class="font-headline-lg-mobile md:font-headline-lg text-headline-lg-mobile md:text-headline-lg mb-6 flex items-center gap-3">
-<span class="material-symbols-outlined text-primary" data-icon="account_balance_wallet">account_balance_wallet</span>
-                        Your Storage Identity
-                    </h2>
-<div class="space-y-6">
-<!-- Origin Wallet -->
-<div class="bg-surface-container-highest/50 border border-surface-stroke rounded p-4">
-<label class="font-label-caps text-label-caps text-on-surface-variant mb-2 block uppercase tracking-wider">Controlling Key (Solana)</label>
-<div class="flex items-center justify-between bg-surface-dim rounded px-3 py-2 border border-surface-stroke focus-within:border-primary transition-colors">
-<span id="origin-wallet" class="font-data-lg text-data-lg text-on-surface truncate font-mono">—</span>
-<button class="text-on-surface-variant hover:text-primary transition-colors" title="Copy Address" class="js-copy-origin">
-<span class="material-symbols-outlined text-[20px]" data-icon="content_copy">content_copy</span>
-</button>
-</div>
-</div>
-<!-- Technical Link Visual -->
-<div class="flex flex-col items-center justify-center py-2 opacity-60">
-<div class="w-[1px] h-6 bg-surface-stroke"></div>
-<div class="border border-surface-stroke rounded-full p-1 my-1 bg-surface-dim flex items-center justify-center">
-<span class="material-symbols-outlined text-[16px] text-primary" data-icon="link">link</span>
-</div>
-<div class="w-[1px] h-6 bg-surface-stroke"></div>
-</div>
-<!-- Derived Storage Account -->
-<div class="bg-primary/5 border border-primary/20 rounded p-4">
-<div class="flex justify-between items-start mb-2">
-<label class="font-label-caps text-label-caps text-primary block uppercase tracking-wider flex items-center gap-2">
-                                    Derived Aptos Storage Account
-                                    <span class="material-symbols-outlined text-[14px]" data-icon="verified">verified</span>
-</label>
-</div>
-<div class="flex items-center justify-between bg-surface-dim rounded px-3 py-2 border border-primary/30 shadow-[0_0_8px_rgba(34,211,238,0.1)]">
-<span id="derived-account" class="font-data-lg text-data-lg text-primary truncate font-mono">(connect wallet)</span>
-<button class="text-primary/70 hover:text-primary transition-colors" title="Copy Address" class="js-copy-derived">
-<span class="material-symbols-outlined text-[20px]" data-icon="content_copy">content_copy</span>
-</button>
-</div>
-<p class="font-data-sm text-data-sm text-on-surface-variant mt-3 text-xs opacity-70">
-                                Derived from your wallet + dApp domain via DAA. No new seed phrase.
-                            </p>
-</div>
-</div>
-</div>
-</div>
-<!-- Right Column: Action & Auth -->
-<div class="col-span-1 lg:col-span-5 flex flex-col gap-stack-md">
-<!-- Signature Panel -->
-<div class="glass-panel ghost-border rounded-lg p-6 h-full flex flex-col">
-<div class="flex items-center gap-2 mb-4">
-<span class="material-symbols-outlined text-secondary" data-icon="key">key</span>
-<h3 class="font-headline-lg-mobile text-headline-lg-mobile">Authentication</h3>
-</div>
-<p class="font-body-md text-body-md text-on-surface-variant mb-6 flex-grow">
-                        To interact with your decentralized storage, you must cryptographically prove ownership of the origin wallet. No new seed phrases required.
-                    </p>
-<div class="bg-surface-container-highest/30 border border-surface-stroke rounded p-4 mb-6 relative overflow-hidden">
-<div class="absolute inset-0 pointer-events-none" style="background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(30, 41, 59, 0.2) 10px, rgba(30, 41, 59, 0.2) 20px);"></div>
-<p class="font-data-sm text-data-sm text-on-surface font-mono relative z-10 break-all leading-relaxed">
-                            Sign message:<br/>
-<span class="text-primary/80">"VESSEL_AUTH: Bind 0x71C...3d4f to Storage Session at 1715423890"</span>
-</p>
-</div>
-<button id="sign-btn" class="w-full bg-primary text-surface-dim font-label-caps text-label-caps py-4 rounded flex items-center justify-center gap-3 hover:bg-primary-fixed-dim transition-colors relative overflow-hidden group">
-<span class="w-2 h-2 rounded-full bg-surface-dim block pulsing-dot"></span>
-                        <span id="sign-btn-label">SIGN TO PROVE OWNERSHIP</span>
-                        <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out pointer-events-none"></div>
-</button>
-<!-- Progress / Status Indicator (Hidden initially, shown here for UI state) -->
-<div class="mt-4 flex items-center justify-between text-on-surface-variant font-data-sm text-data-sm opacity-50">
-<span class="flex items-center gap-2">
-<span class="material-symbols-outlined text-[16px]" data-icon="pending">pending</span>
-                            <span id="auth-status">Awaiting Signature...</span>
-                        </span>
-<span>0%</span>
-</div>
-</div>
-</div>
-</div>
-</main>
-<!-- Footer -->
-<footer class="w-full py-8 px-gutter flex flex-col md:flex-row justify-between items-center max-w-container-max mx-auto border-t border-surface-stroke bg-surface dark:bg-surface mt-16 transition-opacity duration-200">
-<div class="font-headline-lg text-primary mb-4 md:mb-0 text-xl font-bold tracking-tighter">
-            VESSEL
+
+        <div class="relative mt-8 rounded-control border border-white/5 bg-surface-lowest/70 p-5">
+          <p class="vessel-kicker text-on-surface-variant">Controlling wallet (Solana)</p>
+          <div class="mt-3 flex items-center justify-between gap-3"><span id="origin-wallet" class="vessel-technical min-w-0 truncate text-sm md:text-base">—</span><button class="js-copy-origin flex min-h-11 min-w-11 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:text-primary" aria-label="Copy controlling wallet address"><span class="material-symbols-outlined text-xl" aria-hidden="true">content_copy</span></button></div>
         </div>
-<div class="flex space-x-6 text-on-surface-variant font-label-caps text-label-caps">
-<a class="hover:text-primary transition-colors uppercase tracking-widest" href="#">Documentation</a>
-<a class="hover:text-primary transition-colors uppercase tracking-widest" href="#">Terms</a>
-<a class="hover:text-primary transition-colors uppercase tracking-widest" href="#">Github</a>
-</div>
-<div class="mt-4 md:mt-0 text-on-surface-variant font-label-caps text-label-caps opacity-50">
-            © 2026 VESSEL DEMO • BUILT ON SHELBY/APTOS
+
+        <div class="relative mt-4 rounded-control border border-secondary/10 bg-surface-lowest/70 p-5">
+          <p class="vessel-kicker text-secondary">Derived Aptos storage account</p>
+          <div class="mt-3 flex items-center justify-between gap-3"><span id="derived-account" class="vessel-technical min-w-0 truncate text-sm text-secondary md:text-base">(connect wallet)</span><button class="js-copy-derived flex min-h-11 min-w-11 items-center justify-center rounded-full border border-secondary/15 text-secondary/80 hover:text-secondary" aria-label="Copy derived storage account"><span class="material-symbols-outlined text-xl" aria-hidden="true">content_copy</span></button></div>
         </div>
-</footer>
-<script src="/vessel-solana.js"></script>
-<script type="module" src="/app.js"></script>
-</body></html>
+
+        <div class="relative mt-8 flex items-center gap-3 text-xs text-outline"><span class="material-symbols-outlined text-primary-container" aria-hidden="true">account_balance_wallet</span><span class="h-px flex-1 bg-gradient-to-r from-primary-container/30 to-secondary/30"></span><span class="vessel-kicker">controls</span><span class="h-px flex-1 bg-gradient-to-r from-secondary/30 to-primary-container/30"></span><span class="material-symbols-outlined text-secondary" aria-hidden="true">database</span></div>
+      </article>
+
+      <article class="vessel-glass relative flex flex-col justify-center overflow-hidden rounded-vessel p-7 md:p-12">
+        <div class="vessel-bloom -bottom-20 -right-16 h-56 w-56 bg-secondary-container/20"></div>
+        <div class="relative">
+          <p class="vessel-kicker text-tertiary-container">Wallet-owned storage</p>
+          <h2 class="mt-5 font-display text-3xl font-semibold tracking-tight md:text-5xl">Prove control with Phantom</h2>
+          <p class="mt-5 max-w-xl leading-7 text-on-surface-variant">One wallet signature derives and authorizes your Aptos-side Shelby identity. Your keys stay in Phantom; Vessel never receives a seed phrase.</p>
+          <div class="mt-8 rounded-control border border-white/5 bg-surface-lowest/55 p-5"><p class="vessel-kicker text-outline">Identity status</p><p id="auth-status" class="vessel-technical mt-3 text-sm text-primary" role="status">Ready for Phantom</p></div>
+          <button id="sign-btn" class="vessel-button vessel-button-primary mt-7 w-full px-6 py-5"><span class="material-symbols-outlined" aria-hidden="true">fingerprint</span><span id="sign-btn-label">CONNECT PHANTOM</span></button>
+          <div class="mt-5 flex flex-wrap gap-2"><span class="vessel-technical rounded-full border border-primary-container/15 bg-primary-container/5 px-4 py-2 text-[11px] text-primary">No bridge</span><span class="vessel-technical rounded-full border border-secondary/15 bg-secondary/5 px-4 py-2 text-[11px] text-secondary">No new seed phrase</span><span class="vessel-technical rounded-full border border-tertiary-container/15 bg-tertiary-container/5 px-4 py-2 text-[11px] text-tertiary">Testnet only</span></div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/5 bg-surface-lowest/60 py-10"><div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · Shelby testnet · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div></footer>
+  <script src="/vessel-solana.js"></script>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
