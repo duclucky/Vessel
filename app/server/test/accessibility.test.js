@@ -23,6 +23,10 @@ test('all six journeys share the accessible Ethereal shell', () => {
     assert.equal(hasInlineTailwindConfig(html), false, `${page}: no divergent Tailwind config`);
     assert.equal(getLinks(html).some((link) => link.href === '#'), false, `${page}: no placeholder links`);
     assert.doesNotMatch(html, /\bimmutable\b|\bencrypted\b/i, `${page}: no unsupported storage claim`);
+    const mobileIconOnlyLinks = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)]
+      .filter((match) => /class="[^"]*\bhidden\b[^"]*\bsm:inline\b/.test(match[2]))
+      .filter((match) => !/\baria-label=/.test(match[1]));
+    assert.equal(mobileIconOnlyLinks.length, 0, `${page}: mobile icon-only link needs an accessible name`);
   }
 });
 
@@ -32,6 +36,9 @@ test('shared CSS provides keyboard, touch, disabled, and reduced-motion states',
   assert.match(css, /touch-action:\s*manipulation/);
   assert.match(css, /:disabled/);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.match(css, /details\[open\]\s*>\s*\.vessel-nav/);
+  assert.match(css, /max-height:\s*500px/);
+  assert.match(readPage('index.html'), /vessel-landing-hero/);
 });
 
 test('browser modules parse after the shell consolidation', async () => {
