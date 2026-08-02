@@ -1,17 +1,11 @@
 // Vessel — shared frontend wiring. Vanilla ES module. Talks only to the backend REST API
 // (same origin). The only browser-side credential is the user's wallet signature.
 
-const API = location.origin;
-const LS = { addr: 'vessel_addr', sa: 'vessel_sa', verified: 'vessel_verified', sel: 'vessel_selected_key', mine: 'vessel_mine' };
+import { createLedger, LS } from './ledger.js';
 
-/* --- "my uploads" ledger (localStorage): the visitor owns these blobs on their DAA account --- */
-function loadMine() { try { return JSON.parse(localStorage.getItem(LS.mine) || '[]'); } catch { return []; } }
-function rememberMine(it) {
-  const list = loadMine().filter((x) => x.key !== it.key);
-  list.unshift(it);
-  localStorage.setItem(LS.mine, JSON.stringify(list.slice(0, 60)));
-}
-function forgetMine(key) { localStorage.setItem(LS.mine, JSON.stringify(loadMine().filter((x) => x.key !== key))); }
+const API = location.origin;
+const ledger = createLedger(localStorage);
+const { loadMine, forgetMine } = ledger;
 
 /* ------------------------------- state ------------------------------- */
 const state = {
@@ -266,9 +260,7 @@ function initUpload() {
     const urlEl = $('#result-url'); if (urlEl) urlEl.textContent = r.url;
     set('#result-size', `${(r.size / 1048576).toFixed(2)} MB`);
     const img = $('#result-thumb'); if (img && (r.contentType || '').startsWith('image/')) img.src = r.url;
-    localStorage.setItem(LS.sel, r.key);
-    localStorage.setItem(LS.sel + '_url', r.url);
-    if (r.ownedByYou) rememberMine({ key: r.key, url: r.url, size: r.size, contentType: r.contentType || '', expiresAt: Date.now() + 7 * 24 * 3600 * 1000, account: r.account });
+    ledger.commitUpload(r);
     if (r.ownedByYou) {
       const paid = r.paidUsdc ? ` · paid ${r.paidUsdc} USDC` : '';
       toast('Stored on Shelby — owned by YOUR wallet ✓' + (r.paidUsdc ? `, sponsored${paid}` : ''), 'ok');
@@ -291,11 +283,17 @@ async function initGallery() {
   if (!grid) return;
   // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
   const items = loadMine();
+  const count = $('#artifact-count');
+  if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
   if (!items.length) {
-    grid.innerHTML = `<div class="col-span-full text-center py-16"><div class="font-headline-lg-mobile text-on-surface-variant mb-2">No media yet</div><a href="/upload.html" class="font-label-caps text-label-caps text-primary hover:underline">UPLOAD YOUR FIRST FILE →</a></div>`;
+    grid.innerHTML = newSlot() + `<div class="vessel-glass flex min-h-80 flex-col items-center justify-center rounded-vessel p-8 text-center sm:col-span-1 lg:col-span-2"><span class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">deployed_code</span><h2 class="mt-5 font-display text-2xl font-semibold">The vault is waiting</h2><p class="mt-3 max-w-md text-sm leading-6 text-on-surface-variant">Complete one wallet-owned upload to populate your personal artifact collection.</p></div>`;
     return;
   }
-  grid.innerHTML = items.map(gcard).join('') + newSlot();
+  grid.innerHTML = newSlot() + items.map(gcard).join('');
+  $$('.js-artifact-image', grid).forEach((img) => img.addEventListener('error', () => {
+    img.classList.add('hidden');
+    img.parentElement?.querySelector('.js-artifact-fallback')?.classList.remove('hidden');
+  }, { once: true }));
   $$('.js-copy', grid).forEach((b) => (b.onclick = () => copy(b.dataset.url)));
   $$('.js-view', grid).forEach((b) => (b.onclick = () => window.open(b.dataset.url, '_blank')));
   $$('.js-del', grid).forEach((b) => (b.onclick = () => {
@@ -306,28 +304,24 @@ async function initGallery() {
 function ttl(expiresAt) {
   const ms = expiresAt - Date.now(); if (ms <= 0) return { t: 'EXPIRED', c: 'text-error' };
   const h = ms / 3600000; if (h < 24) return { t: `${Math.max(1, Math.round(h))}H LEFT`, c: 'text-error' };
-  const d = Math.round(h / 24); return { t: `${d}D LEFT`, c: d <= 2 ? 'text-secondary-fixed' : 'text-primary' };
+  const d = Math.round(h / 24); return { t: `${d}D LEFT`, c: d <= 2 ? 'text-secondary' : 'text-primary' };
 }
 function gcard(it) {
-  const k = ttl(it.expiresAt); const isImg = (it.contentType || '').startsWith('image/');
-  return `<div class="gallery-item rounded-lg overflow-hidden relative group flex flex-col aspect-square ghost-border">
-    <div class="absolute top-2 right-2 z-10 bg-surface-elevated/90 backdrop-blur border border-surface-stroke px-2 py-1 rounded font-label-caps text-label-caps ${k.c}">${k.t}</div>
-    <div class="flex-grow relative overflow-hidden bg-surface-dim flex items-center justify-center">
-      ${isImg ? `<img class="w-full h-full object-cover opacity-80" src="${it.url}"/>` : `<span class="material-symbols-outlined text-outline-variant" style="font-size:48px">description</span>`}
-      <div class="hover-overlay absolute inset-0 bg-surface-elevated/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 flex flex-col justify-center items-center gap-3 transition-opacity duration-200">
-        <button class="js-copy w-10 h-10 rounded-full bg-surface-stroke hover:bg-primary-container hover:text-surface-dim text-on-dark flex items-center justify-center transition-colors" data-url="${it.url}" title="Copy URL"><span class="material-symbols-outlined" style="font-size:20px">content_copy</span></button>
-        <button class="js-view w-10 h-10 rounded-full bg-surface-stroke hover:bg-primary-container hover:text-surface-dim text-on-dark flex items-center justify-center transition-colors" data-url="${it.url}" title="Open"><span class="material-symbols-outlined" style="font-size:20px">visibility</span></button>
-        <button class="js-del w-10 h-10 rounded-full bg-surface-stroke hover:bg-error hover:text-surface-dim text-on-dark flex items-center justify-center transition-colors" data-key="${it.key}" title="Delete"><span class="material-symbols-outlined" style="font-size:20px">delete</span></button>
-      </div>
+  const k = ttl(it.expiresAt);
+  const isImg = (it.contentType || '').startsWith('image/');
+  const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+  const url = safe(it.url); const key = safe(it.key); const type = safe((it.contentType || 'artifact').toUpperCase());
+  return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
+    <div class="relative aspect-square overflow-hidden bg-surface-lowest">
+      <span class="vessel-technical absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-surface-lowest/80 px-3 py-2 text-[10px] ${k.c}">${k.t}</span>
+      ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full items-center justify-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span></div>` : `<div class="flex h-full w-full items-center justify-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span></div>`}
     </div>
-    <div class="p-3 border-t border-surface-stroke bg-surface-elevated flex flex-col gap-1">
-      <div class="font-data-sm text-data-sm text-primary-fixed truncate">${shortMid(it.key, 8)}</div>
-      <div class="font-label-caps text-label-caps text-text-muted">${(it.contentType || '').toUpperCase()} • ${(it.size / 1048576).toFixed(1)} MB</div>
-    </div></div>`;
+    <div class="flex flex-1 flex-col p-5"><p class="vessel-kicker text-primary-container">Wallet-owned artifact</p><h2 class="vessel-technical mt-3 truncate text-base text-on-surface">${shortMid(key, 10)}</h2><div class="mt-5 border-t border-white/5 pt-4"><div class="flex items-center justify-between gap-4 text-xs"><span class="vessel-technical text-outline">${type}</span><span class="vessel-technical text-on-surface-variant">${(Number(it.size || 0) / 1048576).toFixed(2)} MB</span></div></div>
+      <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
+    </div></article>`;
 }
 function newSlot() {
-  return `<a class="gallery-item rounded-lg overflow-hidden relative group flex flex-col aspect-square border-dashed border-2 hover:border-solid items-center justify-center cursor-pointer ghost-border" href="/upload.html">
-    <div class="flex flex-col items-center gap-3 text-outline-variant group-hover:text-primary transition-colors"><span class="material-symbols-outlined" style="font-size:48px">upload_file</span><span class="font-label-caps text-label-caps">UPLOAD NEW</span></div></a>`;
+  return `<a class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/25 bg-primary-container/[0.025] p-8 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.05]" href="/upload.html"><span class="flex h-20 w-20 items-center justify-center rounded-full border border-primary-container/20 text-primary"><span class="material-symbols-outlined text-4xl" aria-hidden="true">add</span></span><h2 class="mt-6 font-display text-2xl font-semibold">Upload New</h2><p class="vessel-technical mt-3 text-xs text-outline">Initialize artifact</p></a>`;
 }
 
 async function initLatency() {
@@ -335,8 +329,9 @@ async function initLatency() {
   const btn = $('#rerun-btn');
   async function run() {
     // Prefer the visitor's own uploaded asset (their DAA account) via its real Shelby URL.
-    const url = localStorage.getItem(LS.sel + '_url');
-    let key = localStorage.getItem(LS.sel);
+    const selected = ledger.selected();
+    const url = selected.url;
+    let key = selected.key;
     if (!url && !key) { const m = loadMine(); if (m[0]) { key = m[0].key; } }
     if (!url && !key) { toast('Upload a file first to measure latency', 'warn'); return; }
     if (btn) btn.disabled = true;
@@ -379,8 +374,8 @@ function animate(el, from, to, dur) {
 async function initMetadata() {
   const name = $('#nft-name'), desc = $('#nft-desc'), link = $('#nft-link'), preview = $('#json-preview');
   const gen = $('#generate-btn'), result = $('#result-area');
-  const key = localStorage.getItem(LS.sel);
-  const imageUrl = localStorage.getItem(LS.sel + '_url') || (key ? `${API}/api/media/${key}` : '');
+  const { key, url } = ledger.selected();
+  const imageUrl = url || (key ? `${API}/api/media/${key}` : '');
   const imgPrev = $('#meta-image-key'); if (imgPrev) imgPrev.textContent = key ? shortMid(key, 10) : '(pick from gallery)';
   function build() {
     const o = { name: name?.value || '', description: desc?.value || '', image: imageUrl || '(upload an image first)' };
