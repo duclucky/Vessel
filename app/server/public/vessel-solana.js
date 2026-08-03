@@ -68872,7 +68872,9 @@ ${fields.join("\n")}`;
     contractSignature
   }) {
     const owner = provider2?.publicKey ? new import_web36.PublicKey(provider2.publicKey) : null;
-    if (!owner || typeof provider2?.signAndSendTransaction !== "function") {
+    const canSign = typeof provider2?.signTransaction === "function";
+    const canSignAndSend = typeof provider2?.signAndSendTransaction === "function";
+    if (!owner || !canSign && !canSignAndSend) {
       throw settlementError("Reconnect the selected Solana wallet", "settlement_unavailable");
     }
     if (Number(quote?.version) !== 1 || Number(quote?.chain) !== 2 || Number(quote?.network) !== 1) {
@@ -68937,8 +68939,39 @@ ${fields.join("\n")}`;
     const transaction = new import_web36.Transaction().add(verifyInstruction, settleInstruction);
     transaction.feePayer = owner;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-    const submitted = await provider2.signAndSendTransaction(transaction);
-    const rawSignature = submitted?.signature || submitted;
+    let rawSignature;
+    if (canSign) {
+      const expectedMessage = transaction.serializeMessage();
+      const signedResult = await provider2.signTransaction(transaction);
+      const signedBytes = signedResult?.signedTransaction || signedResult;
+      if (!(signedBytes instanceof Uint8Array)) {
+        throw settlementError(
+          "Solana wallet did not return signed transaction bytes",
+          "settlement_submission_failed"
+        );
+      }
+      const signedTransaction = import_web36.Transaction.from(signedBytes);
+      if (!Buffer2.from(signedTransaction.serializeMessage()).equals(Buffer2.from(expectedMessage))) {
+        throw settlementError(
+          "Solana wallet changed the settlement transaction",
+          "settlement_context_mismatch"
+        );
+      }
+      const payerSignature = signedTransaction.signatures.find(({ publicKey: signer }) => signer.equals(owner))?.signature;
+      if (!payerSignature || !signedTransaction.verifySignatures(true)) {
+        throw settlementError(
+          "Solana wallet returned an invalid payer signature",
+          "settlement_submission_failed"
+        );
+      }
+      rawSignature = await connection.sendRawTransaction(signedBytes, {
+        skipPreflight: false,
+        preflightCommitment: "confirmed"
+      });
+    } else {
+      const submitted = await provider2.signAndSendTransaction(transaction);
+      rawSignature = submitted?.signature || submitted;
+    }
     const transactionId = typeof rawSignature === "string" ? rawSignature : rawSignature instanceof Uint8Array ? esm_default2.encode(rawSignature) : "";
     if (!transactionId) {
       throw settlementError("Solana wallet did not return a transaction signature", "settlement_submission_failed");

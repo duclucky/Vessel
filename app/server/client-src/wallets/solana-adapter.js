@@ -21,6 +21,9 @@ export function createSolanaAdapter(descriptor) {
 
   let account = null;
   let storageAddress = '';
+  const signTransactionFeature = wallet?.features?.['solana:signTransaction'];
+  const canSignLegacy = typeof signTransactionFeature?.signTransaction === 'function'
+    && Array.from(signTransactionFeature.supportedTransactionVersions || []).includes('legacy');
 
   const feature = (name, method) => {
     const implementation = wallet?.features?.[name];
@@ -68,6 +71,23 @@ export function createSolanaAdapter(descriptor) {
       }
       return { signature: output.signature, signedMessage: output.signedMessage };
     },
+    ...(canSignLegacy ? {
+      async signTransaction(transaction) {
+        const serialized = transaction.serialize({
+          requireAllSignatures: false,
+          verifySignatures: false,
+        });
+        const [output] = await signTransactionFeature.signTransaction({
+          account: requireAccount(),
+          chain: DEVNET,
+          transaction: serialized,
+        });
+        if (!(output?.signedTransaction instanceof Uint8Array)) {
+          throw adapterError('Wallet did not return a signed transaction', 'provider_unavailable');
+        }
+        return { signedTransaction: output.signedTransaction };
+      },
+    } : {}),
     async signAndSendTransaction(transaction) {
       const serialized = transaction.serialize({
         requireAllSignatures: false,

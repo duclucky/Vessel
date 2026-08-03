@@ -162,7 +162,9 @@ export async function submitSolanaContractSettlement({
   contractSignature,
 }) {
   const owner = provider?.publicKey ? new PublicKey(provider.publicKey) : null;
-  if (!owner || typeof provider?.signAndSendTransaction !== 'function') {
+  const canSign = typeof provider?.signTransaction === 'function';
+  const canSignAndSend = typeof provider?.signAndSendTransaction === 'function';
+  if (!owner || (!canSign && !canSignAndSend)) {
     throw settlementError('Reconnect the selected Solana wallet', 'settlement_unavailable');
   }
   if (Number(quote?.version) !== 1 || Number(quote?.chain) !== 2 || Number(quote?.network) !== 1) {
@@ -237,8 +239,40 @@ export async function submitSolanaContractSettlement({
   const transaction = new Transaction().add(verifyInstruction, settleInstruction);
   transaction.feePayer = owner;
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-  const submitted = await provider.signAndSendTransaction(transaction);
-  const rawSignature = submitted?.signature || submitted;
+  let rawSignature;
+  if (canSign) {
+    const expectedMessage = transaction.serializeMessage();
+    const signedResult = await provider.signTransaction(transaction);
+    const signedBytes = signedResult?.signedTransaction || signedResult;
+    if (!(signedBytes instanceof Uint8Array)) {
+      throw settlementError(
+        'Solana wallet did not return signed transaction bytes',
+        'settlement_submission_failed',
+      );
+    }
+    const signedTransaction = Transaction.from(signedBytes);
+    if (!Buffer.from(signedTransaction.serializeMessage()).equals(Buffer.from(expectedMessage))) {
+      throw settlementError(
+        'Solana wallet changed the settlement transaction',
+        'settlement_context_mismatch',
+      );
+    }
+    const payerSignature = signedTransaction.signatures
+      .find(({ publicKey: signer }) => signer.equals(owner))?.signature;
+    if (!payerSignature || !signedTransaction.verifySignatures(true)) {
+      throw settlementError(
+        'Solana wallet returned an invalid payer signature',
+        'settlement_submission_failed',
+      );
+    }
+    rawSignature = await connection.sendRawTransaction(signedBytes, {
+      skipPreflight: false,
+      preflightCommitment: 'confirmed',
+    });
+  } else {
+    const submitted = await provider.signAndSendTransaction(transaction);
+    rawSignature = submitted?.signature || submitted;
+  }
   const transactionId = typeof rawSignature === 'string'
     ? rawSignature
     : rawSignature instanceof Uint8Array ? bs58.encode(rawSignature) : '';

@@ -652,6 +652,12 @@ function initUpload() {
         const message = error?.code === 'user_rejected'
           ? 'Payment approval was rejected'
           : String(error?.message || error).slice(0, 160);
+        activeUploadContext = quotedContext;
+        quoteUi.render({
+          kind: 'ready',
+          quote: quotedContext.quote,
+          message,
+        });
         toast(message, 'error');
         return;
       }

@@ -4,11 +4,13 @@ import {
   Ed25519Program,
   Keypair,
   PublicKey,
+  Transaction,
 } from '@solana/web3.js';
 import { getAssociatedTokenAddressSync } from '@solana/spl-token';
 import { submitSolanaContractSettlement } from '../client-src/wallets/solana-contract-settlement.js';
 
-const owner = Keypair.generate().publicKey;
+const ownerKeypair = Keypair.generate();
+const owner = ownerKeypair.publicKey;
 const mint = Keypair.generate().publicKey;
 const programId = Keypair.generate().publicKey;
 const quoteId = Buffer.alloc(32, 0x11);
@@ -47,18 +49,28 @@ const deployment = Object.freeze({
   quotePublicKey: '77'.repeat(32),
 });
 
-test('Solana wallet submits Ed25519 verification immediately before Vessel settlement', async () => {
+test('Solana wallet signs then broadcasts the verified transaction through Devnet RPC', async () => {
   let submitted;
+  let legacySubmissions = 0;
   const provider = {
     publicKey: owner,
-    async signAndSendTransaction(transaction) {
+    async signTransaction(transaction) {
       submitted = transaction;
-      return { signature: 'solana-contract-tx' };
+      transaction.partialSign(ownerKeypair);
+      return { signedTransaction: transaction.serialize() };
+    },
+    async signAndSendTransaction() {
+      legacySubmissions += 1;
     },
   };
+  let broadcasted;
   const connection = {
     async getLatestBlockhash() {
       return { blockhash: Keypair.generate().publicKey.toBase58() };
+    },
+    async sendRawTransaction(bytes, options) {
+      broadcasted = { bytes, options };
+      return 'solana-contract-tx';
     },
   };
 
@@ -71,6 +83,9 @@ test('Solana wallet submits Ed25519 verification immediately before Vessel settl
   });
 
   assert.deepEqual(result, { transactionId: 'solana-contract-tx' });
+  assert.equal(legacySubmissions, 0);
+  assert.equal(Transaction.from(broadcasted.bytes).verifySignatures(), true);
+  assert.equal(broadcasted.options.preflightCommitment, 'confirmed');
   assert.equal(submitted.instructions.length, 2);
   assert.equal(submitted.instructions[0].programId.toBase58(), Ed25519Program.programId.toBase58());
   assert.equal(submitted.instructions[1].programId.toBase58(), programId.toBase58());
@@ -83,6 +98,69 @@ test('Solana wallet submits Ed25519 verification immediately before Vessel settl
     submitted.instructions[1].keys.find(({ pubkey }) => pubkey.equals(owner)).isSigner,
     true,
   );
+});
+
+test('mutated or unsigned wallet results fail before Devnet broadcast', async () => {
+  for (const kind of ['mutated', 'unsigned']) {
+    let broadcasts = 0;
+    const provider = {
+      publicKey: owner,
+      async signTransaction(transaction) {
+        if (kind === 'mutated') {
+          transaction.recentBlockhash = Keypair.generate().publicKey.toBase58();
+          transaction.partialSign(ownerKeypair);
+          return { signedTransaction: transaction.serialize() };
+        }
+        return {
+          signedTransaction: transaction.serialize({
+            requireAllSignatures: false,
+            verifySignatures: false,
+          }),
+        };
+      },
+    };
+    const connection = {
+      getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58() }),
+      sendRawTransaction: async () => {
+        broadcasts += 1;
+        return 'must-not-broadcast';
+      },
+    };
+
+    await assert.rejects(
+      () => submitSolanaContractSettlement({
+        provider,
+        connection,
+        deployment,
+        contractQuote: quote,
+        contractSignature: '66'.repeat(64),
+      }),
+      kind === 'mutated' ? /changed/i : /signature/i,
+    );
+    assert.equal(broadcasts, 0);
+  }
+});
+
+test('wallets without signTransaction retain the signAndSend fallback', async () => {
+  let submissions = 0;
+  const result = await submitSolanaContractSettlement({
+    provider: {
+      publicKey: owner,
+      async signAndSendTransaction() {
+        submissions += 1;
+        return { signature: 'fallback-contract-tx' };
+      },
+    },
+    connection: {
+      getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58() }),
+    },
+    deployment,
+    contractQuote: quote,
+    contractSignature: '66'.repeat(64),
+  });
+
+  assert.deepEqual(result, { transactionId: 'fallback-contract-tx' });
+  assert.equal(submissions, 1);
 });
 
 test('mismatched payer and undeployed program fail before opening the wallet', async () => {

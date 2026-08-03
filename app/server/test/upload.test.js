@@ -83,3 +83,11 @@ test('Upload hashes the selected file and validates an immutable signed quote be
   assert.match(source, /requiresConfirmation/);
   assert.match(source, /pendingWalletWork\.abort\(\)/);
 });
+
+test('pre-submission wallet errors restore the signed quote for retry', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(
+    source,
+    /activeUploadContext = quotedContext;\s*quoteUi\.render\(\{\s*kind: 'ready',\s*quote: quotedContext\.quote,\s*message,/s,
+  );
+});

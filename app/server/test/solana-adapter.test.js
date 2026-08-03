@@ -8,15 +8,27 @@ import {
 
 const key = new PublicKey('EUrhHCRueCGE39yvNM1zV15fyCcizY2P8xLzDNdc418s');
 
-function standardWallet({ versions = ['legacy'], accounts } = {}) {
+function standardWallet({ versions = ['legacy'], accounts, signOnly = true } = {}) {
   const account = {
     address: key.toBase58(),
     publicKey: key.toBytes(),
     chains: ['solana:devnet'],
-    features: ['solana:signMessage', 'solana:signAndSendTransaction'],
+    features: [
+      'solana:signMessage',
+      ...(signOnly ? ['solana:signTransaction'] : []),
+      'solana:signAndSendTransaction',
+    ],
   };
   let silent;
   let changeListener;
+  const signTransactionFeature = signOnly ? {
+    supportedTransactionVersions: versions,
+    signTransaction: async ({ chain, transaction }) => {
+      assert.equal(chain, 'solana:devnet');
+      assert.ok(transaction instanceof Uint8Array);
+      return [{ signedTransaction: Uint8Array.from([...transaction, 7]) }];
+    },
+  } : undefined;
   const wallet = {
     name: 'Standard Wallet',
     chains: ['solana:devnet'],
@@ -42,6 +54,7 @@ function standardWallet({ versions = ['legacy'], accounts } = {}) {
           signature: Uint8Array.from({ length: 64 }, (_, index) => index),
         }],
       },
+      ...(signTransactionFeature ? { 'solana:signTransaction': signTransactionFeature } : {}),
       'solana:signAndSendTransaction': {
         supportedTransactionVersions: versions,
         signAndSendTransaction: async ({ chain, transaction }) => {
@@ -79,9 +92,10 @@ test('standard signAndSendTransaction returns a base58 signature', async () => {
   const adapter = createSolanaAdapter({
     id: 'solana:standard:1',
     name: 'Standard Wallet',
-    provider: standardWallet(),
+    provider: standardWallet({ signOnly: false }),
   });
   await adapter.daaProvider().connect();
+  assert.equal(adapter.daaProvider().signTransaction, undefined);
   const transaction = new Transaction();
   transaction.recentBlockhash = key.toBase58();
   transaction.feePayer = key;
@@ -91,6 +105,24 @@ test('standard signAndSendTransaction returns a base58 signature', async () => {
 
   assert.equal(typeof result.signature, 'string');
   assert.ok(result.signature.length > 40);
+});
+
+test('standard signTransaction returns Devnet wallet-signed transaction bytes', async () => {
+  const adapter = createSolanaAdapter({
+    id: 'solana:standard:1',
+    name: 'Standard Wallet',
+    provider: standardWallet(),
+  });
+  await adapter.daaProvider().connect();
+  const transaction = new Transaction();
+  transaction.recentBlockhash = key.toBase58();
+  transaction.feePayer = key;
+  transaction.add(SystemProgram.transfer({ fromPubkey: key, toPubkey: key, lamports: 0 }));
+  const unsigned = transaction.serialize({ requireAllSignatures: false, verifySignatures: false });
+
+  const result = await adapter.daaProvider().signTransaction(transaction);
+
+  assert.deepEqual([...result.signedTransaction], [...unsigned, 7]);
 });
 
 test('controller session and account events retain the selected wallet identity', async () => {
