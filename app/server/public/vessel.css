@@ -17,6 +17,19 @@ details[open] > .vessel-nav { z-index: 2; background: #090d16; border-color: rgb
 .vessel-button:hover { transform: translateY(-1px); filter: brightness(1.08); }
 .vessel-button:active { transform: translateY(0) scale(0.985); }
 .vessel-button:disabled { cursor: not-allowed; filter: grayscale(0.5); opacity: 0.55; }
+.vessel-retention-option { position: relative; display: grid; min-height: 52px; place-items: center; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; background: rgba(12, 14, 19, 0.55); color: #bbcac5; font: 700 12px/1 JetBrains Mono, monospace; letter-spacing: 0.05em; transition: border-color 0.2s, background-color 0.2s, color 0.2s, transform 0.2s; }
+.vessel-retention-option:hover { border-color: rgba(94, 234, 212, 0.36); color: #e2e2e9; transform: translateY(-1px); }
+.vessel-retention-option:has(input:focus-visible) { outline: 2px solid #5ee6ff; outline-offset: 3px; }
+.vessel-retention-option:has(input:checked) { border-color: rgba(94, 234, 212, 0.65); background: rgba(94, 234, 212, 0.1); color: #b5fff0; box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.12), 0 0 22px rgba(94, 234, 212, 0.08); }
+.vessel-retention-option input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.vessel-quote-panel { border: 1px solid rgba(255, 255, 255, 0.1); background: rgba(12, 14, 19, 0.66); transition: border-color 0.2s, box-shadow 0.2s; }
+.vessel-quote-panel[data-state="loading"], [data-state="loading"] > .vessel-quote-panel { border-color: rgba(94, 230, 255, 0.3); }
+.vessel-quote-panel[data-state="ready"], [data-state="ready"] > .vessel-quote-panel { border-color: rgba(94, 234, 212, 0.32); box-shadow: 0 0 30px rgba(94, 234, 212, 0.06); }
+.vessel-quote-panel[data-state="expired"], [data-state="expired"] > .vessel-quote-panel { border-color: rgba(255, 180, 171, 0.34); }
+.vessel-quote-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1.5rem; color: #9eaba8; }
+.vessel-quote-row dd { margin: 0; color: #e2e2e9; font-family: JetBrains Mono, monospace; text-align: right; }
+.vessel-quote-total { margin-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 0.85rem; color: #e2e2e9; font-weight: 700; }
+.vessel-quote-total dd { color: #b5fff0; font-size: 1.15rem; }
 :where(a, button, summary, label[for]) { touch-action: manipulation; }
 :where(button, summary, label[for]) { cursor: pointer; }
 :where(button, input, textarea):disabled { cursor: not-allowed; opacity: 0.55; }

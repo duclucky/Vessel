@@ -56,6 +56,48 @@
             <input id="file-input" class="sr-only" type="file" accept="image/*,video/*,application/json,text/plain">
             <p class="vessel-technical mt-6 text-[11px] text-outline">Up to 25 MB · testnet artifacts expire</p>
           </div>
+
+          <section id="upload-options" class="mt-6 hidden space-y-5" aria-label="Storage duration and price quote" data-state="unavailable">
+            <div class="rounded-control border border-white/10 bg-surface-lowest/40 p-5">
+              <p class="vessel-kicker text-primary">Selected artifact</p>
+              <p id="selected-file-name" class="vessel-technical mt-3 break-all text-sm text-on-surface">No file selected</p>
+              <p id="selected-file-details" class="mt-2 text-sm text-on-surface-variant">Choose a file to continue.</p>
+            </div>
+
+            <fieldset>
+              <legend id="retention-title" class="font-display text-xl font-semibold">Storage duration</legend>
+              <p class="mt-2 text-sm leading-6 text-on-surface-variant">Price scales with file size and the selected duration.</p>
+              <div id="retention-options" class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4" role="radiogroup" aria-labelledby="retention-title">
+                <label class="vessel-retention-option" for="retention-7"><input id="retention-7" type="radio" name="retention" value="7" checked><span>7 days</span></label>
+                <label class="vessel-retention-option" for="retention-30"><input id="retention-30" type="radio" name="retention" value="30"><span>30 days</span></label>
+                <label class="vessel-retention-option" for="retention-90"><input id="retention-90" type="radio" name="retention" value="90"><span>90 days</span></label>
+                <label class="vessel-retention-option" for="retention-custom"><input id="retention-custom" type="radio" name="retention" value="custom"><span>Custom</span></label>
+              </div>
+              <div id="custom-days-wrap" class="mt-4" hidden>
+                <label class="vessel-kicker text-outline" for="custom-days">Custom duration (1–365 days)</label>
+                <input id="custom-days" class="vessel-input mt-2" type="number" inputmode="numeric" min="1" max="365" step="1" value="7" aria-describedby="custom-days-error">
+                <p id="custom-days-error" class="mt-2 min-h-5 text-sm text-secondary" role="alert"></p>
+              </div>
+            </fieldset>
+
+            <section id="quote-panel" class="vessel-quote-panel rounded-control p-5" aria-labelledby="quote-title">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div><p class="vessel-kicker text-tertiary-container">Signed price quote</p><h2 id="quote-title" class="mt-2 font-display text-2xl font-semibold">Review costs</h2></div>
+                <p id="quote-token-network" class="vessel-technical text-xs text-outline">—</p>
+              </div>
+              <p id="quote-status" class="mt-3 text-sm leading-6 text-on-surface-variant" aria-live="polite">Select a file to calculate the exact price.</p>
+              <dl class="mt-5 space-y-3 text-sm">
+                <div class="vessel-quote-row"><dt>Storage</dt><dd id="quote-storage-cost">—</dd></div>
+                <div class="vessel-quote-row"><dt>Network + sponsored gas</dt><dd id="quote-gas-cost">—</dd></div>
+                <div class="vessel-quote-row"><dt>Vessel service fee (2%)</dt><dd id="quote-service-fee">—</dd></div>
+                <div class="vessel-quote-row vessel-quote-total"><dt>Total</dt><dd id="quote-total">—</dd></div>
+                <div class="vessel-quote-row"><dt>Stored until</dt><dd><time id="quote-expiration">—</time></dd></div>
+                <div class="vessel-quote-row"><dt>Quote expires in</dt><dd id="quote-countdown">—</dd></div>
+              </dl>
+              <p class="mt-5 rounded-2xl border border-primary-container/15 bg-primary-container/5 px-4 py-3 text-xs leading-5 text-on-surface-variant">Test tokens — no real monetary value</p>
+              <button id="quote-confirm" type="button" class="vessel-button vessel-button-primary mt-5 w-full px-6 py-4" disabled>Confirm &amp; continue</button>
+            </section>
+          </section>
         </div>
 
         <div id="upload-progress-view" class="relative hidden min-h-[30rem] flex flex-col items-center justify-center text-center" aria-live="polite">

@@ -5,6 +5,8 @@ import { createLedger } from './ledger.js';
 import { walletPresentation } from './wallet-ui.js';
 import { mountWalletUi } from './wallet-modal.js';
 import { confirmAction } from './confirm-dialog.js';
+import { createUploadIntent } from './retention.js';
+import { mountQuoteUi } from './quote-ui.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -48,6 +50,26 @@ function toast(msg, kind = 'info') {
 }
 
 function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Copied', 'ok')).catch(() => {}); }
+
+async function sha256Hex(file) {
+  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function contentAddressedBlobName(file, fileHash) {
+  const parts = String(file.name || '').split('.');
+  const rawExtension = parts.length > 1 ? parts.pop() : 'bin';
+  const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  return `media/${fileHash}.${extension}`;
+}
+
+function normalizedSourceNetwork(session) {
+  if (session.chain === 'aptos') return 'aptos-testnet';
+  if (session.chain === 'solana') return 'solana-devnet';
+  return String(session.sourceNetwork || 'unknown');
+}
 
 /* ------------------------------- wallet ------------------------------- */
 const walletController = () => window.VesselWallets;
@@ -161,9 +183,15 @@ function initUpload() {
   const dz = $('#drop-zone'); const input = $('#file-input');
   const vInit = $('#upload-initial-view'); const vProg = $('#upload-progress-view'); const vDone = $('#upload-success-view');
   const bar = $('#progress-bar'); const pct = $('#progress-percentage'); const fname = $('#upload-filename');
+  const quoteRoot = $('#upload-options');
+  const selectedName = $('#selected-file-name');
+  const selectedDetails = $('#selected-file-details');
+  const quoteConfirm = $('#quote-confirm');
   const show = (el) => { [vInit, vProg, vDone].forEach((v) => v && v.classList.add('hidden')); el && el.classList.remove('hidden'); };
 
   const SOL = () => window.VesselSolana;
+  let selectedFile = null;
+  let quoteUi = null;
 
   const stepPct = { encoding: 20, signing: 40, paying: 55, confirming: 72, sponsoring: 80, uploading: 92 };
   const stepMsg = {
@@ -176,8 +204,147 @@ function initUpload() {
   };
   function setStep(s) { if (bar) bar.style.width = (stepPct[s] || 20) + '%'; if (pct) pct.textContent = stepMsg[s] || s; }
 
-  async function doUpload(file) {
+  async function requestQuote(file) {
+    if (!file || !quoteUi) return;
+    const walletState = walletController().getState();
+    const session = walletState.session;
+    if (!session || walletState.status !== 'ready') {
+      activeUploadContext = null;
+      quoteUi.render({ kind: 'unavailable', message: 'Connect a supported testnet wallet to request a quote.' });
+      const opener = document.querySelector('[data-wallet-summary]');
+      if (walletState.status === 'network_required') {
+        void walletController().ensureNetwork().catch((error) => toast(error.message, 'error'));
+      } else {
+        void walletUi.open(opener);
+      }
+      return;
+    }
+
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    const signal = pendingWalletWork.signal;
+    activeUploadContext = null;
+    quoteRoot?.classList.remove('hidden');
+    quoteUi.render({ kind: 'loading' });
+    try {
+      const cfg = await api('/api/config', { signal });
+      const maxBytes = cfg.maxUploadBytes || 25 * 1024 * 1024;
+      if (file.size > maxBytes) throw new Error(`File exceeds ${(maxBytes / 1048576) | 0}MB demo limit`);
+      const fileHash = await sha256Hex(file);
+      if (signal.aborted) return;
+      const blobName = contentAddressedBlobName(file, fileHash);
+      const sourceNetwork = normalizedSourceNetwork(session);
+      const storageNetwork = 'shelby-testnet';
+      const quote = await api('/api/quotes/upload', {
+        method: 'POST',
+        signal,
+        body: {
+          operation: 'upload',
+          chain: session.chain,
+          sourceNetwork,
+          storageNetwork,
+          sourceAddress: session.sourceAddress,
+          storageAddress: session.storageAddress,
+          fileHash,
+          blobName,
+          sizeBytes: file.size,
+          contentType: file.type || 'application/octet-stream',
+          encoding: 0,
+          days: quoteUi.days(),
+        },
+      });
+      if (signal.aborted || walletIdentityKey(walletController().getState()) !== walletIdentityKey(walletState)) return;
+      const uploadIntent = createUploadIntent({
+        file,
+        fileHash,
+        blobName,
+        session,
+        days: quote.days,
+        serverTimeMs: quote.serverTimeMs,
+        encoding: quote.encoding,
+      });
+      const intent = Object.freeze({ ...uploadIntent, sourceNetwork, storageNetwork });
+      if (intent.expirationMicros !== quote.expirationMicros) {
+        throw new Error('Quote expiration did not match the selected retention');
+      }
+      activeUploadContext = Object.freeze({ file, intent, quote });
+      quoteUi.render({ kind: 'ready', quote });
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      quoteUi.render({ kind: 'unavailable', message: String(error?.message || error).slice(0, 180) });
+    }
+  }
+
+  async function selectFile(file) {
     if (!file) return;
+    selectedFile = file;
+    if (selectedName) selectedName.textContent = file.name;
+    if (selectedDetails) selectedDetails.textContent = `${(file.size / 1048576).toFixed(2)} MB · ${file.type || 'application/octet-stream'}`;
+    if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
+    quoteRoot?.classList.remove('hidden');
+    await requestQuote(file);
+  }
+
+  async function confirmQuotedUpload() {
+    const current = activeUploadContext;
+    if (!current) return;
+    const walletState = walletController().getState();
+    if (walletIdentityKey(walletState) !== `${current.intent.chain}:${current.intent.sourceAddress}:${current.intent.storageAddress}`) {
+      activeUploadContext = null;
+      quoteUi.render({ kind: 'unavailable', message: 'The connected wallet changed. Request a new quote.' });
+      return;
+    }
+    if (Date.now() >= current.quote.expiresAtMs) {
+      quoteUi.render({ kind: 'expired', message: 'Quote expired — refresh to continue' });
+      return;
+    }
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    const signal = pendingWalletWork.signal;
+    quoteUi.render({ kind: 'loading' });
+    try {
+      const validation = await api('/api/quotes/validate', {
+        method: 'POST',
+        signal,
+        body: { ...current.intent, quoteToken: current.quote.quoteToken },
+      });
+      const nextContext = Object.freeze({ ...current, quote: validation.quote });
+      activeUploadContext = nextContext;
+      if (validation.requiresConfirmation) {
+        quoteUi.render({
+          kind: 'ready',
+          quote: validation.quote,
+          message: 'The live price changed by more than 5%. Review the new total and confirm again.',
+          confirmLabel: 'CONFIRM UPDATED PRICE',
+        });
+        return;
+      }
+      await doUpload(current.file, nextContext);
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      const expired = error?.code === 'quote_expired' || error?.status === 410;
+      quoteUi.render({
+        kind: expired ? 'expired' : 'unavailable',
+        message: String(error?.message || error).slice(0, 180),
+      });
+    }
+  }
+
+  quoteUi = mountQuoteUi({
+    root: quoteRoot,
+    onRetentionChange: () => {
+      activeUploadContext = null;
+      if (selectedFile) void requestQuote(selectedFile);
+    },
+  });
+  quoteConfirm?.addEventListener('click', () => void confirmQuotedUpload());
+
+  async function doUpload(file, quotedContext = activeUploadContext) {
+    if (!file) return;
+    if (!quotedContext?.quote || !quotedContext?.intent) {
+      await requestQuote(file);
+      return;
+    }
     const walletState = walletController().getState();
     const session = walletState.session;
     if (!session || walletState.status !== 'ready') {
@@ -368,10 +535,19 @@ function initUpload() {
   if (dz) {
     ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('dragover'); }));
-    dz.addEventListener('drop', (e) => { e.preventDefault(); doUpload(e.dataTransfer.files[0]); });
+    dz.addEventListener('drop', (e) => { e.preventDefault(); void selectFile(e.dataTransfer.files[0]); });
   }
-  if (input) input.addEventListener('change', (e) => doUpload(e.target.files[0]));
-  window.resetUpload = () => { show(vInit); if (input) input.value = ''; };
+  if (input) input.addEventListener('change', (e) => void selectFile(e.target.files[0]));
+  window.resetUpload = () => {
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    selectedFile = null;
+    activeUploadContext = null;
+    quoteUi?.reset();
+    quoteRoot?.classList.add('hidden');
+    show(vInit);
+    if (input) input.value = '';
+  };
 }
 
 async function initGallery() {
