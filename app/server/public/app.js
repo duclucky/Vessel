@@ -14,8 +14,9 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const shortMid = (a, n = 6) => (a && a.length > 2 * n + 2 ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : a || '');
 
-async function api(path, { method = 'GET', body, form } = {}) {
+async function api(path, { method = 'GET', body, form, signal } = {}) {
   const opts = { method };
+  if (signal) opts.signal = signal;
   if (form) opts.body = form;
   else if (body) { opts.headers = { 'content-type': 'application/json' }; opts.body = JSON.stringify(body); }
   const res = await fetch(API + path, opts);
@@ -49,6 +50,8 @@ function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Cop
 
 /* ------------------------------- wallet ------------------------------- */
 const walletController = () => window.VesselWallets;
+let pendingWalletWork = new AbortController();
+let activeUploadContext = null;
 
 function renderWallet() {
   const controller = walletController();
@@ -206,8 +209,24 @@ function initUpload() {
           throw new Error('Reconnect your Solana wallet before uploading');
         }
 
-        // 1) quote (USDC)
-        const quote = await api('/api/pay/quote', { method: 'POST', body: { sizeBytes: file.size } });
+        pendingWalletWork.abort();
+        pendingWalletWork = new AbortController();
+        const signal = pendingWalletWork.signal;
+        const uploadContext = Object.freeze({
+          chain: 'solana',
+          sourceAddress: session.sourceAddress,
+          storageAddress: session.storageAddress,
+          sizeBytes: file.size,
+          expirationMicros: Date.now() * 1000 + 7 * 24 * 3600 * 1_000_000,
+        });
+        activeUploadContext = uploadContext;
+
+        // 1) identity-bound quote (USDC)
+        const quote = await api('/api/pay/quote', {
+          method: 'POST',
+          body: uploadContext,
+          signal,
+        });
 
         // 2) enough USDC? otherwise show the funding gate
         const bal = await SOL().usdcBalance();
@@ -216,14 +235,25 @@ function initUpload() {
         // 3) pay USDC on Solana (Phantom), 4) server verifies -> uploadToken
         setStep('paying');
         toast(`Paying ${quote.amountUsdc} USDC for storage…`, 'info');
-        const pay = await SOL().payUSDC({ treasuryAta: quote.treasuryAta, amountMicro: quote.amountMicro, memo: quote.memo, usdcMint: quote.usdcMint });
-        const v = await api('/api/pay/verify', { method: 'POST', body: { paymentId: quote.paymentId, signature: pay.signature } });
+        const pay = await SOL().payUSDC({
+          treasuryAta: quote.treasuryAta,
+          amountMicro: quote.amountMicro,
+          memo: quote.memo,
+          usdcMint: quote.usdcMint,
+          expectedSourceAddress: uploadContext.sourceAddress,
+        });
+        const v = await api('/api/pay/verify', {
+          method: 'POST',
+          body: { paymentId: quote.paymentId, signature: pay.signature },
+          signal,
+        });
         if (!v.ok) throw new Error('payment not verified: ' + (v.reason || ''));
 
         // 5) sponsored upload (Phantom signs; server co-signs via gas station)
         const r = await walletController().upload(file, {
           paymentId: quote.paymentId,
           uploadToken: v.uploadToken,
+          uploadContext,
           onStep: setStep,
         });
         if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';

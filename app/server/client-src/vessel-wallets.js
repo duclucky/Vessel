@@ -65,6 +65,7 @@ const uploadRouter = createUploadRouter({
     return window.VesselSolana.uploadSponsored(file, {
       paymentId: context.paymentId,
       uploadToken: context.uploadToken,
+      uploadContext: context.uploadContext,
       onStep: context.onStep,
     });
   },

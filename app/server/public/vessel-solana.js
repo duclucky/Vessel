@@ -48563,8 +48563,16 @@ Message: ${transactionMessage}.
     return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: provider.name || "Solana wallet" };
   }
   var b64 = (u86) => btoa(String.fromCharCode(...new Uint8Array(u86)));
-  async function uploadSponsored(file, { paymentId, uploadToken, expiresInSec = 7 * 24 * 3600, onStep } = {}) {
+  async function uploadSponsored(file, {
+    paymentId,
+    uploadToken,
+    uploadContext,
+    onStep
+  } = {}) {
     if (!client) await connect(provider);
+    if (uploadContext?.chain !== "solana" || uploadContext.sourceAddress !== pubkey || String(uploadContext.storageAddress).toLowerCase() !== storageAddr.toString().toLowerCase() || Number(uploadContext.sizeBytes) !== Number(file.size) || !Number.isSafeInteger(uploadContext.expirationMicros)) {
+      throw new Error("Paid upload context does not match the connected wallet and file");
+    }
     const cfg = await loadConfig();
     if (!cfg.gasStationAccount) throw new Error("server sponsor not configured");
     onStep?.("signing");
@@ -48574,7 +48582,13 @@ Message: ${transactionMessage}.
       const resp = await signAptosTransactionWithSolana({ solanaWallet: solWallet(), authenticationFunction: authFn, rawTransaction: transaction, domain: DOMAIN2 });
       if (resp.status !== "Approved" && resp.status !== "APPROVED") throw new Error("User rejected the signature");
       onStep?.("sponsoring");
-      const body = { transaction: b64(transaction.bcsToBytes()), senderAuthenticator: b64(resp.args.bcsToBytes()), paymentId, uploadToken };
+      const body = {
+        transaction: b64(transaction.bcsToBytes()),
+        senderAuthenticator: b64(resp.args.bcsToBytes()),
+        paymentId,
+        uploadToken,
+        ...uploadContext
+      };
       const r14 = await fetch("/api/sponsor/submit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((x9) => x9.json());
       if (!r14.hash) throw new Error(r14.error || "sponsor submit failed");
       return { hash: r14.hash };
@@ -48606,7 +48620,7 @@ Message: ${transactionMessage}.
       const sha = await sha256Hex(data);
       const ext = (file.name.split(".").pop() || "bin").toLowerCase();
       const blobName = `media/${sha}.${ext}`;
-      const expirationMicros = Date.now() * 1e3 + expiresInSec * 1e6;
+      const expirationMicros = uploadContext.expirationMicros;
       onStep?.("uploading");
       await client.upload({
         blobData: data,
@@ -48615,15 +48629,25 @@ Message: ${transactionMessage}.
         expirationMicros,
         options: { usdSponsor: { feePayerAddress: cfg.gasStationAccount }, build: { withFeePayer: true }, submit: { transactionSubmitter: dummySubmitter } }
       });
-      return { key: blobName, url: readUrl(blobName), account: storageAddr.toString(), size: data.length, ownedByYou: true };
+      return {
+        key: blobName,
+        url: readUrl(blobName),
+        account: storageAddr.toString(),
+        size: data.length,
+        ownedByYou: true,
+        paymentMode: "solana-usdc"
+      };
     } finally {
       for (const [a24, fn2] of originals) a24.signAndSubmitTransaction = fn2;
       client.rpc.getChallenge = realGetChallenge;
     }
   }
-  async function payUSDC({ treasuryAta, amountMicro, memo, usdcMint }) {
+  async function payUSDC({ treasuryAta, amountMicro, memo, usdcMint, expectedSourceAddress }) {
     if (!provider) throw new Error("Select a Solana wallet before paying");
     if (!pubkey) await connect(provider);
+    if (expectedSourceAddress && expectedSourceAddress !== pubkey) {
+      throw new Error("Payment wallet no longer matches the quoted source address");
+    }
     const cfg = await loadConfig();
     const conn = new Connection(cfg.solanaRpc || "https://api.devnet.solana.com", "confirmed");
     const owner = new PublicKey(pubkey);

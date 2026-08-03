@@ -6,17 +6,43 @@ import { MultiAgentTransaction, AccountAuthenticator, Deserializer, Network } fr
 // Aptos gas station, which co-signs as BOTH fee payer (APT) and the ShelbyUSD sponsor. The gas
 // station API key NEVER reaches the browser. See NOTES.md 5j for the proven recipe.
 export class SponsorManager {
-  constructor({ gasStationApiKey, network = 'testnet' }) {
-    if (!gasStationApiKey) throw new Error('SponsorManager requires GAS_STATION_API_KEY');
+  constructor({ gasStationApiKey, network = 'testnet', gasStationClient, deserialize } = {}) {
+    if (!gasStationApiKey && !gasStationClient) {
+      throw new Error('SponsorManager requires GAS_STATION_API_KEY');
+    }
     const net = network === 'testnet' ? Network.TESTNET : network === 'mainnet' ? Network.MAINNET : Network.TESTNET;
-    this.gs = new GasStationClient({ network: net, apiKey: gasStationApiKey });
+    this.gs = gasStationClient || new GasStationClient({ network: net, apiKey: gasStationApiKey });
+    this._deserialize = deserialize || ((txnB64, senderAuthB64) => ({
+      transaction: MultiAgentTransaction.deserialize(
+        new Deserializer(Buffer.from(txnB64, 'base64')),
+      ),
+      senderAuthenticator: AccountAuthenticator.deserialize(
+        new Deserializer(Buffer.from(senderAuthB64, 'base64')),
+      ),
+    }));
+  }
+
+  deserialize(txnB64, senderAuthB64) {
+    return this._deserialize(txnB64, senderAuthB64);
   }
 
   /** @param {string} txnB64 base64 of MultiAgentTransaction.bcsToBytes()
    *  @param {string} senderAuthB64 base64 of the sender AccountAuthenticator.bcsToBytes() */
-  async submit(txnB64, senderAuthB64) {
-    const transaction = MultiAgentTransaction.deserialize(new Deserializer(Buffer.from(txnB64, 'base64')));
-    const senderAuthenticator = AccountAuthenticator.deserialize(new Deserializer(Buffer.from(senderAuthB64, 'base64')));
+  async submit(txnB64, senderAuthB64, { expectedSender } = {}) {
+    if (!expectedSender) {
+      throw Object.assign(new Error('Expected sponsored transaction sender is required'), {
+        status: 400,
+        code: 'sender_required',
+      });
+    }
+    const { transaction, senderAuthenticator } = this.deserialize(txnB64, senderAuthB64);
+    const actualSender = transaction.rawTransaction.sender.toString();
+    if (actualSender.toLowerCase() !== String(expectedSender).toLowerCase()) {
+      throw Object.assign(
+        new Error('Sponsored transaction sender does not match paid storage identity'),
+        { status: 403, code: 'sender_mismatch' },
+      );
+    }
     const pending = await this.gs.signAndSubmitTransaction({ transaction, senderAuthenticator });
     return { hash: pending?.hash || pending?.transactionHash };
   }

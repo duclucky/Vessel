@@ -6,12 +6,37 @@ import crypto from 'node:crypto';
 // Aptos-side storage fees). Stablecoin avoids price volatility for fee quoting.
 //
 // STATELESS by design (Vercel serverless-friendly): the paymentId is an HMAC-signed token that
-// carries {amountMicro, sizeBytes, exp}. verify() re-derives the price from the token (no server
-// memory), checks the on-chain USDC transfer (amount + treasury + memo=paymentId), and returns an
-// uploadToken = HMAC(paymentId + ':paid'). /api/sponsor/submit re-checks that HMAC. No shared state.
+// carries the amount plus complete wallet/upload context. Verification checks treasury receipt,
+// source-wallet debit, and memo before returning a second HMAC used by sponsor submission.
 const USDC_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 const b64u = (buf) => Buffer.from(buf).toString('base64url');
 const unb64u = (s) => Buffer.from(s, 'base64url');
+const paymentError = (message) => Object.assign(new Error(message), {
+  code: 'invalid_payment_context',
+  status: 400,
+});
+
+export function normalizePaymentContext(input = {}) {
+  const context = {
+    sizeBytes: Number(input.sizeBytes),
+    chain: String(input.chain || ''),
+    sourceAddress: String(input.sourceAddress || ''),
+    storageAddress: String(input.storageAddress || ''),
+    expirationMicros: Number(input.expirationMicros),
+  };
+  if (
+    !Number.isSafeInteger(context.sizeBytes)
+    || context.sizeBytes <= 0
+    || context.chain !== 'solana'
+    || !context.sourceAddress
+    || !context.storageAddress
+    || !Number.isSafeInteger(context.expirationMicros)
+    || context.expirationMicros <= 0
+  ) {
+    throw paymentError('Invalid Solana payment context');
+  }
+  return context;
+}
 
 export class PaymentManager {
   constructor({ rpc, treasurySecretKey, usdcMint = USDC_DEVNET, priceBaseUsdc = 0.01, pricePerMbUsdc = 0.01, secret }) {
@@ -22,6 +47,26 @@ export class PaymentManager {
     this.secret = secret || 'vessel-dev-secret';
     if (!treasurySecretKey) throw new Error('PaymentManager requires SOLANA_TREASURY_SECRET_KEY');
     this.treasury = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(treasurySecretKey)));
+  }
+
+  static forTest({
+    secret,
+    priceBaseUsdc,
+    pricePerMbUsdc,
+    treasury,
+    treasuryAta,
+    mint = USDC_DEVNET,
+    tx = null,
+  }) {
+    const manager = Object.create(PaymentManager.prototype);
+    manager.conn = { getParsedTransaction: async () => tx };
+    manager.usdcMint = { toString: () => mint };
+    manager.priceBase = priceBaseUsdc;
+    manager.pricePerMb = pricePerMbUsdc;
+    manager.secret = secret;
+    manager.treasury = { publicKey: { toString: () => treasury } };
+    manager._ata = { toString: () => treasuryAta };
+    return manager;
   }
 
   async treasuryAta() {
@@ -37,22 +82,46 @@ export class PaymentManager {
   _hmac(s) { return crypto.createHmac('sha256', this.secret).update(s).digest('base64url'); }
 
   // paymentId = vpay.<payload>.<sig>  (self-verifying, no server state)
-  _mintPaymentId(amountMicro, sizeBytes) {
-    const payload = b64u(JSON.stringify({ a: amountMicro, s: sizeBytes, e: Date.now() + 15 * 60 * 1000 }));
+  _mintPaymentId(amountMicro, context) {
+    const payload = b64u(JSON.stringify({
+      a: amountMicro,
+      s: context.sizeBytes,
+      c: context.chain,
+      w: context.sourceAddress,
+      d: context.storageAddress,
+      x: context.expirationMicros,
+      e: Date.now() + 15 * 60 * 1000,
+    }));
     return `vpay.${payload}.${this._hmac(payload)}`;
   }
   _parsePaymentId(paymentId) {
     const parts = String(paymentId || '').split('.');
     if (parts.length !== 3 || parts[0] !== 'vpay') return null;
-    if (this._hmac(parts[1]) !== parts[2]) return null; // tampered
+    const expected = Buffer.from(this._hmac(parts[1]));
+    const actual = Buffer.from(parts[2]);
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return null;
     let p; try { p = JSON.parse(unb64u(parts[1]).toString()); } catch { return null; }
-    if (!p || Date.now() > p.e) return null; // expired
-    return { amountMicro: p.a, sizeBytes: p.s };
+    if (!p || Date.now() > p.e || !Number.isSafeInteger(p.a) || p.a <= 0) return null;
+    try {
+      return {
+        amountMicro: p.a,
+        ...normalizePaymentContext({
+          sizeBytes: p.s,
+          chain: p.c,
+          sourceAddress: p.w,
+          storageAddress: p.d,
+          expirationMicros: p.x,
+        }),
+      };
+    } catch {
+      return null;
+    }
   }
 
-  async createIntent(sizeBytes) {
-    const amountMicro = this.priceMicro(sizeBytes);
-    const paymentId = this._mintPaymentId(amountMicro, sizeBytes);
+  async createIntent(input) {
+    const context = normalizePaymentContext(input);
+    const amountMicro = this.priceMicro(context.sizeBytes);
+    const paymentId = this._mintPaymentId(amountMicro, context);
     return {
       paymentId,
       amountUsdc: amountMicro / 1_000_000,
@@ -68,7 +137,23 @@ export class PaymentManager {
 
   // uploadToken proves a valid USDC payment for this paymentId (checked again by /api/sponsor/submit).
   uploadToken(paymentId) { return 'vupl.' + this._hmac(paymentId + ':paid'); }
-  checkUploadToken(paymentId, token) { return !!paymentId && token === this.uploadToken(paymentId); }
+  checkUploadToken(paymentId, token, input) {
+    if (!paymentId || !token) return false;
+    const expected = Buffer.from(this.uploadToken(paymentId));
+    const actual = Buffer.from(String(token));
+    if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) return false;
+    const intent = this._parsePaymentId(paymentId);
+    let context;
+    try { context = normalizePaymentContext(input); } catch { return false; }
+    return Boolean(
+      intent
+      && intent.chain === context.chain
+      && intent.sourceAddress === context.sourceAddress
+      && intent.storageAddress.toLowerCase() === context.storageAddress.toLowerCase()
+      && intent.sizeBytes === context.sizeBytes
+      && intent.expirationMicros === context.expirationMicros
+    );
+  }
 
   /** Verify a Solana tx: USDC transfer of >= amount to the treasury ATA, memo = paymentId. */
   async verify(paymentId, signature) {
@@ -84,17 +169,50 @@ export class PaymentManager {
 
     const treasuryPk = this.treasury.publicKey.toString();
     const mint = this.usdcMint.toString();
-    const pre = (tx.meta?.preTokenBalances || []).find((b) => b.owner === treasuryPk && b.mint === mint);
-    const post = (tx.meta?.postTokenBalances || []).find((b) => b.owner === treasuryPk && b.mint === mint);
-    const preAmt = Number(pre?.uiTokenAmount?.amount || 0);
-    const postAmt = Number(post?.uiTokenAmount?.amount || 0);
-    const received = postAmt - preAmt;
-    if (received < intent.amountMicro) return { ok: false, reason: 'insufficient_amount', received, required: intent.amountMicro };
+    const preBalances = tx.meta?.preTokenBalances || [];
+    const postBalances = tx.meta?.postTokenBalances || [];
+    const rowsFor = (rows, owner) => rows.filter((row) => row.owner === owner && row.mint === mint);
+    const total = (rows) => rows.reduce(
+      (sum, row) => sum + BigInt(row.uiTokenAmount?.amount || 0),
+      0n,
+    );
+    const treasuryPre = rowsFor(preBalances, treasuryPk);
+    const treasuryPost = rowsFor(postBalances, treasuryPk);
+    const received = total(treasuryPost) - total(treasuryPre);
+    const required = BigInt(intent.amountMicro);
+    if (received < required) {
+      return {
+        ok: false,
+        reason: 'insufficient_amount',
+        received: Number(received),
+        required: intent.amountMicro,
+      };
+    }
+
+    const sourcePre = rowsFor(preBalances, intent.sourceAddress);
+    const sourcePost = rowsFor(postBalances, intent.sourceAddress);
+    if (!sourcePre.length || !sourcePost.length) {
+      return { ok: false, reason: 'source_mismatch' };
+    }
+    const sourceDebit = total(sourcePre) - total(sourcePost);
+    if (sourceDebit < required) {
+      return {
+        ok: false,
+        reason: 'insufficient_source_debit',
+        debited: Number(sourceDebit),
+        required: intent.amountMicro,
+      };
+    }
 
     // memo check (defense in depth so a payment can't be replayed for a different intent)
     const memoOk = JSON.stringify(tx.transaction?.message?.instructions || []).includes(paymentId);
     if (!memoOk) return { ok: false, reason: 'memo_mismatch' };
 
-    return { ok: true, paymentId, receivedUsdc: received / 1_000_000, uploadToken: this.uploadToken(paymentId) };
+    return {
+      ok: true,
+      paymentId,
+      receivedUsdc: Number(received) / 1_000_000,
+      uploadToken: this.uploadToken(paymentId),
+    };
   }
 }

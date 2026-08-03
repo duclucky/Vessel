@@ -7,7 +7,7 @@ import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
-import { PaymentManager } from './lib/payments.js';
+import { PaymentManager, normalizePaymentContext } from './lib/payments.js';
 import { SponsorManager } from './lib/sponsor.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -172,8 +172,16 @@ app.post('/api/sponsor/submit', async (req, res) => {
     if (!payments) return send(res, 501, { error: 'payments not configured' });
     const { transaction, senderAuthenticator, paymentId, uploadToken } = req.body || {};
     if (!transaction || !senderAuthenticator) return send(res, 400, { error: 'transaction and senderAuthenticator required' });
-    if (!payments.checkUploadToken(paymentId, uploadToken)) return send(res, 402, { error: 'payment required', code: 'unpaid' });
-    const r = await sponsor.submit(String(transaction), String(senderAuthenticator));
+    const context = normalizePaymentContext(req.body);
+    if (!payments.checkUploadToken(paymentId, uploadToken, context)) {
+      return send(res, 402, {
+        error: 'payment required for this wallet and file',
+        code: 'unpaid',
+      });
+    }
+    const r = await sponsor.submit(String(transaction), String(senderAuthenticator), {
+      expectedSender: context.storageAddress,
+    });
     if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
     send(res, 200, r);
   } catch (e) { fail(res, e); }
@@ -183,8 +191,11 @@ app.post('/api/sponsor/submit', async (req, res) => {
 app.post('/api/pay/quote', async (req, res) => {
   try {
     if (!payments) return send(res, 501, { error: 'payments not configured' });
-    const sizeBytes = Math.max(0, Number(req.body?.sizeBytes || 0));
-    send(res, 200, await payments.createIntent(sizeBytes));
+    const context = normalizePaymentContext(req.body);
+    if (context.sizeBytes > config.maxUploadBytes) {
+      return send(res, 413, { error: 'file exceeds upload limit', code: 'file_too_large' });
+    }
+    send(res, 200, await payments.createIntent(context));
   } catch (e) { fail(res, e); }
 });
 app.post('/api/pay/verify', async (req, res) => {
