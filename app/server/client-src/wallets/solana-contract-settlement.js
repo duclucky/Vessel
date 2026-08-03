@@ -11,6 +11,7 @@ import {
   SYSVAR_INSTRUCTIONS_PUBKEY,
   SystemProgram,
   Transaction,
+  TransactionInstruction,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
 
@@ -18,6 +19,10 @@ const DOMAIN = new TextEncoder().encode('VESSEL_SETTLEMENT_V1');
 const HEX_32 = /^[0-9a-f]{64}$/;
 const HEX_64 = /^[0-9a-f]{128}$/;
 const DEFAULT_PROGRAM = '11111111111111111111111111111111';
+const ED25519_HEADER_LENGTH = 16;
+const PUBLIC_KEY_OFFSET = ED25519_HEADER_LENGTH;
+const SIGNATURE_OFFSET = PUBLIC_KEY_OFFSET + 32;
+const MESSAGE_OFFSET = SIGNATURE_OFFSET + 64;
 const { BN, Program } = anchorNamespace.default || anchorNamespace;
 
 const SETTLE_IDL = Object.freeze({
@@ -119,6 +124,28 @@ function concatBytes(parts) {
   return output;
 }
 
+function createEd25519VerifyInstruction({ publicKey, signature, message }) {
+  const instructionData = new Uint8Array(MESSAGE_OFFSET + message.length);
+  const view = new DataView(instructionData.buffer);
+  instructionData[0] = 1;
+  instructionData[1] = 0;
+  view.setUint16(2, SIGNATURE_OFFSET, true);
+  view.setUint16(4, 0xffff, true);
+  view.setUint16(6, PUBLIC_KEY_OFFSET, true);
+  view.setUint16(8, 0xffff, true);
+  view.setUint16(10, MESSAGE_OFFSET, true);
+  view.setUint16(12, message.length, true);
+  view.setUint16(14, 0xffff, true);
+  instructionData.set(publicKey, PUBLIC_KEY_OFFSET);
+  instructionData.set(signature, SIGNATURE_OFFSET);
+  instructionData.set(message, MESSAGE_OFFSET);
+  return new TransactionInstruction({
+    keys: [],
+    programId: Ed25519Program.programId,
+    data: instructionData,
+  });
+}
+
 function sameInstruction(expected, signed) {
   return expected.programId.equals(signed.programId)
     && expected.keys.length === signed.keys.length
@@ -174,12 +201,10 @@ async function simulationFailure(error, connection, signedTransaction) {
     : '';
   const programDetail = failedProgram ? `Instruction ${instructionIndex} · ${failedProgram}. ` : '';
   const detail = relevant || transactionMessage || 'unknown RPC error';
-  const failure = settlementError(
+  return settlementError(
     `Solana simulation failed: ${programDetail}${detail}`,
     'settlement_submission_failed',
   );
-  failure.debugSignedTransaction = Buffer.from(signedTransaction.serialize()).toString('base64');
-  return failure;
 }
 
 async function quoteDigest(quote) {
@@ -277,7 +302,7 @@ export async function submitSolanaContractSettlement({
     throw settlementError('Configured Solana vault ATA is invalid', 'settlement_unavailable');
   }
 
-  const verifyInstruction = Ed25519Program.createInstructionWithPublicKey({
+  const verifyInstruction = createEd25519VerifyInstruction({
     publicKey: quotePublicKey,
     message: await quoteDigest(quote),
     signature,

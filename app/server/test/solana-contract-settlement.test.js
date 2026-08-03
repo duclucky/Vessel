@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import {
   ComputeBudgetProgram,
   Ed25519Program,
@@ -103,6 +104,17 @@ test('Solana wallet signs then broadcasts the verified transaction through Devne
   );
 });
 
+test('browser settlement builder copies Ed25519 bytes without Buffer.fill coercion', () => {
+  const source = fs.readFileSync(
+    new URL('../client-src/wallets/solana-contract-settlement.js', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(source, /Ed25519Program\.createInstructionWithPublicKey/);
+  assert.match(source, /instructionData\.set\(publicKey, PUBLIC_KEY_OFFSET\)/);
+  assert.match(source, /instructionData\.set\(signature, SIGNATURE_OFFSET\)/);
+  assert.match(source, /instructionData\.set\(message, MESSAGE_OFFSET\)/);
+});
+
 test('wallet may refresh the blockhash and add compute budget instructions', async () => {
   let broadcasts = 0;
   const refreshedBlockhash = Keypair.generate().publicKey.toBase58();
@@ -174,7 +186,7 @@ test('instruction mutations or unsigned wallet results fail before Devnet broadc
   }
 });
 
-test('simulation failures surface logs and preserve the signed bytes for opt-in diagnostics', async () => {
+test('simulation failures surface the final program logs instead of truncating the RPC preamble', async () => {
   const provider = {
     publicKey: owner,
     async signTransaction(transaction) {
@@ -203,15 +215,7 @@ test('simulation failures surface logs and preserve the signed bytes for opt-in 
       contractQuote: quote,
       contractSignature: '66'.repeat(64),
     }),
-    (error) => {
-      assert.match(error.message, new RegExp(`${programId.toBase58()}.*InvalidMint`));
-      assert.match(error.debugSignedTransaction, /^[A-Za-z0-9+/]+={0,2}$/);
-      const diagnosticTransaction = Transaction.from(
-        Buffer.from(error.debugSignedTransaction, 'base64'),
-      );
-      assert.equal(diagnosticTransaction.verifySignatures(), true);
-      return true;
-    },
+    new RegExp(`${programId.toBase58()}.*InvalidMint`),
   );
 });
 

@@ -658,18 +658,6 @@ function initUpload() {
           quote: quotedContext.quote,
           message,
         });
-        if (
-          new URL(location.href).searchParams.get('debug') === 'solana'
-          && error?.debugSignedTransaction
-        ) {
-          const diagnostic = document.createElement('textarea');
-          diagnostic.id = 'solana-debug-transaction';
-          diagnostic.setAttribute('aria-label', 'Solana signed transaction diagnostic');
-          diagnostic.className = 'mt-4 min-h-32 w-full break-all bg-surface-container-low p-3 text-xs text-on-surface';
-          diagnostic.readOnly = true;
-          diagnostic.value = error.debugSignedTransaction;
-          quoteRoot?.appendChild(diagnostic);
-        }
         toast(message, 'error');
         return;
       }

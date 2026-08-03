@@ -19629,7 +19629,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         return TransactionStatus2;
       })({});
       var DEFAULT_SIGNATURE = buffer.Buffer.alloc(SIGNATURE_LENGTH_IN_BYTES).fill(0);
-      var TransactionInstruction2 = class {
+      var TransactionInstruction3 = class {
         constructor(opts) {
           this.keys = void 0;
           this.programId = void 0;
@@ -19761,7 +19761,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
             } else if ("data" in item && "programId" in item && "keys" in item) {
               this.instructions.push(item);
             } else {
-              this.instructions.push(new TransactionInstruction2(item));
+              this.instructions.push(new TransactionInstruction3(item));
             }
           });
           return this;
@@ -20254,7 +20254,7 @@ Missing signature for public key${sigErrors.missing.length === 1 ? "" : "(s)"} [
                 isWritable: message.isAccountWritable(account)
               };
             });
-            transaction.instructions.push(new TransactionInstruction2({
+            transaction.instructions.push(new TransactionInstruction3({
               keys,
               programId: message.accountKeys[instruction.programIdIndex],
               data: bs58__default.default.decode(instruction.data)
@@ -20322,7 +20322,7 @@ Missing signature for public key${sigErrors.missing.length === 1 ? "" : "(s)"} [
             if (programId === void 0) {
               throw new Error(`Failed to find program id for program id index ${compiledIx.programIdIndex}`);
             }
-            instructions.push(new TransactionInstruction2({
+            instructions.push(new TransactionInstruction3({
               programId,
               data: toBuffer(compiledIx.data),
               keys
@@ -20949,7 +20949,7 @@ Message: ${transactionMessage}.
             space: params.space,
             programId: toBuffer(params.programId.toBuffer())
           });
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [{
               pubkey: params.fromPubkey,
               isSigner: true,
@@ -21004,7 +21004,7 @@ Message: ${transactionMessage}.
               isWritable: true
             }];
           }
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys,
             programId: this.programId,
             data
@@ -21043,7 +21043,7 @@ Message: ${transactionMessage}.
               isWritable: true
             }];
           }
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys,
             programId: this.programId,
             data
@@ -21078,7 +21078,7 @@ Message: ${transactionMessage}.
               isWritable: false
             });
           }
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys,
             programId: this.programId,
             data
@@ -21140,7 +21140,7 @@ Message: ${transactionMessage}.
             programId: this.programId,
             data
           };
-          return new TransactionInstruction2(instructionData);
+          return new TransactionInstruction3(instructionData);
         }
         /**
          * Generate an instruction to advance the nonce in a Nonce account
@@ -21165,7 +21165,7 @@ Message: ${transactionMessage}.
             programId: this.programId,
             data
           };
-          return new TransactionInstruction2(instructionData);
+          return new TransactionInstruction3(instructionData);
         }
         /**
          * Generate a transaction instruction that withdraws lamports from a Nonce account
@@ -21175,7 +21175,7 @@ Message: ${transactionMessage}.
           const data = encodeData2(type2, {
             lamports: params.lamports
           });
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [{
               pubkey: params.noncePubkey,
               isSigner: false,
@@ -21210,7 +21210,7 @@ Message: ${transactionMessage}.
           const data = encodeData2(type2, {
             authorized: toBuffer(params.newAuthorizedPubkey.toBuffer())
           });
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [{
               pubkey: params.noncePubkey,
               isSigner: false,
@@ -21258,7 +21258,7 @@ Message: ${transactionMessage}.
               isWritable: true
             }];
           }
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys,
             programId: this.programId,
             data
@@ -25379,7 +25379,7 @@ Message: ${transactionMessage}.
             isSigner: false,
             isWritable: false
           }];
-          return [new TransactionInstruction2({
+          return [new TransactionInstruction3({
             programId: this.programId,
             keys,
             data
@@ -25397,7 +25397,7 @@ Message: ${transactionMessage}.
             isSigner: true,
             isWritable: false
           }];
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             programId: this.programId,
             keys,
             data
@@ -25428,7 +25428,7 @@ Message: ${transactionMessage}.
               isWritable: false
             });
           }
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             programId: this.programId,
             keys,
             data
@@ -25446,7 +25446,7 @@ Message: ${transactionMessage}.
             isSigner: true,
             isWritable: false
           }];
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             programId: this.programId,
             keys,
             data
@@ -25468,7 +25468,7 @@ Message: ${transactionMessage}.
             isSigner: false,
             isWritable: true
           }];
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             programId: this.programId,
             keys,
             data
@@ -25593,7 +25593,7 @@ Message: ${transactionMessage}.
         static requestUnits(params) {
           const type2 = COMPUTE_BUDGET_INSTRUCTION_LAYOUTS.RequestUnits;
           const data = encodeData2(type2, params);
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: this.programId,
             data
@@ -25602,7 +25602,7 @@ Message: ${transactionMessage}.
         static requestHeapFrame(params) {
           const type2 = COMPUTE_BUDGET_INSTRUCTION_LAYOUTS.RequestHeapFrame;
           const data = encodeData2(type2, params);
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: this.programId,
             data
@@ -25611,7 +25611,7 @@ Message: ${transactionMessage}.
         static setComputeUnitLimit(params) {
           const type2 = COMPUTE_BUDGET_INSTRUCTION_LAYOUTS.SetComputeUnitLimit;
           const data = encodeData2(type2, params);
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: this.programId,
             data
@@ -25622,7 +25622,7 @@ Message: ${transactionMessage}.
           const data = encodeData2(type2, {
             microLamports: BigInt(params.microLamports)
           });
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: this.programId,
             data
@@ -25677,7 +25677,7 @@ Message: ${transactionMessage}.
           instructionData.fill(publicKey6, publicKeyOffset);
           instructionData.fill(signature2, signatureOffset);
           instructionData.fill(message, messageDataOffset);
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: _Ed25519Program.programId,
             data: instructionData
@@ -25805,7 +25805,7 @@ Message: ${transactionMessage}.
             recoveryId
           }, instructionData);
           instructionData.fill(toBuffer(message), SECP256K1_INSTRUCTION_LAYOUT.span);
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [],
             programId: _Secp256k1Program.programId,
             data: instructionData
@@ -26145,7 +26145,7 @@ Message: ${transactionMessage}.
             programId: this.programId,
             data
           };
-          return new TransactionInstruction2(instructionData);
+          return new TransactionInstruction3(instructionData);
         }
         /**
          * Generate a Transaction that creates a new Stake account at
@@ -26343,7 +26343,7 @@ Message: ${transactionMessage}.
           const data = encodeData2(type2, {
             lamports
           });
-          return new TransactionInstruction2({
+          return new TransactionInstruction3({
             keys: [{
               pubkey: stakePubkey,
               isSigner: false,
@@ -26735,7 +26735,7 @@ Message: ${transactionMessage}.
             programId: this.programId,
             data
           };
-          return new TransactionInstruction2(instructionData);
+          return new TransactionInstruction3(instructionData);
         }
         /**
          * Generate a transaction that creates a new Vote account.
@@ -27177,7 +27177,7 @@ Message: ${transactionMessage}.
       exports.TransactionExpiredBlockheightExceededError = TransactionExpiredBlockheightExceededError;
       exports.TransactionExpiredNonceInvalidError = TransactionExpiredNonceInvalidError;
       exports.TransactionExpiredTimeoutError = TransactionExpiredTimeoutError;
-      exports.TransactionInstruction = TransactionInstruction2;
+      exports.TransactionInstruction = TransactionInstruction3;
       exports.TransactionMessage = TransactionMessage;
       exports.TransactionStatus = TransactionStatus;
       exports.VALIDATOR_INFO_KEY = VALIDATOR_INFO_KEY;
@@ -68739,6 +68739,10 @@ ${fields.join("\n")}`;
   var HEX_32 = /^[0-9a-f]{64}$/;
   var HEX_64 = /^[0-9a-f]{128}$/;
   var DEFAULT_PROGRAM = "11111111111111111111111111111111";
+  var ED25519_HEADER_LENGTH = 16;
+  var PUBLIC_KEY_OFFSET = ED25519_HEADER_LENGTH;
+  var SIGNATURE_OFFSET = PUBLIC_KEY_OFFSET + 32;
+  var MESSAGE_OFFSET = SIGNATURE_OFFSET + 64;
   var { BN: BN2, Program: Program2 } = void 0 || browser_exports;
   var SETTLE_IDL = Object.freeze({
     address: DEFAULT_PROGRAM,
@@ -68830,6 +68834,27 @@ ${fields.join("\n")}`;
     }
     return output;
   }
+  function createEd25519VerifyInstruction({ publicKey: publicKey5, signature, message }) {
+    const instructionData = new Uint8Array(MESSAGE_OFFSET + message.length);
+    const view = new DataView(instructionData.buffer);
+    instructionData[0] = 1;
+    instructionData[1] = 0;
+    view.setUint16(2, SIGNATURE_OFFSET, true);
+    view.setUint16(4, 65535, true);
+    view.setUint16(6, PUBLIC_KEY_OFFSET, true);
+    view.setUint16(8, 65535, true);
+    view.setUint16(10, MESSAGE_OFFSET, true);
+    view.setUint16(12, message.length, true);
+    view.setUint16(14, 65535, true);
+    instructionData.set(publicKey5, PUBLIC_KEY_OFFSET);
+    instructionData.set(signature, SIGNATURE_OFFSET);
+    instructionData.set(message, MESSAGE_OFFSET);
+    return new import_web36.TransactionInstruction({
+      keys: [],
+      programId: import_web36.Ed25519Program.programId,
+      data: instructionData
+    });
+  }
   function sameInstruction(expected, signed) {
     return expected.programId.equals(signed.programId) && expected.keys.length === signed.keys.length && expected.keys.every((key, index2) => {
       const signedKey = signed.keys[index2];
@@ -68860,12 +68885,10 @@ ${fields.join("\n")}`;
     const failedProgram = Number.isInteger(instructionIndex) ? signedTransaction.instructions[instructionIndex]?.programId?.toBase58?.() : "";
     const programDetail = failedProgram ? `Instruction ${instructionIndex} \xB7 ${failedProgram}. ` : "";
     const detail = relevant || transactionMessage || "unknown RPC error";
-    const failure = settlementError(
+    return settlementError(
       `Solana simulation failed: ${programDetail}${detail}`,
       "settlement_submission_failed"
     );
-    failure.debugSignedTransaction = Buffer2.from(signedTransaction.serialize()).toString("base64");
-    return failure;
   }
   async function quoteDigest(quote) {
     const bytes = concatBytes2([
@@ -68953,7 +68976,7 @@ ${fields.join("\n")}`;
     if (deployment?.vaultAta && publicKey4(deployment.vaultAta, "Vault ATA").toBase58() !== vaultAta.toBase58()) {
       throw settlementError("Configured Solana vault ATA is invalid", "settlement_unavailable");
     }
-    const verifyInstruction = import_web36.Ed25519Program.createInstructionWithPublicKey({
+    const verifyInstruction = createEd25519VerifyInstruction({
       publicKey: quotePublicKey,
       message: await quoteDigest(quote),
       signature

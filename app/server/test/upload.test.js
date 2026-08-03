@@ -91,10 +91,3 @@ test('pre-submission wallet errors restore the signed quote for retry', () => {
     /activeUploadContext = quotedContext;\s*quoteUi\.render\(\{\s*kind: 'ready',\s*quote: quotedContext\.quote,\s*message,/s,
   );
 });
-
-test('Solana debug mode exposes failed signed bytes only on an explicit diagnostic URL', () => {
-  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
-  assert.match(source, /searchParams\.get\('debug'\) === 'solana'/);
-  assert.match(source, /error\?\.debugSignedTransaction/);
-  assert.match(source, /solana-debug-transaction/);
-});
