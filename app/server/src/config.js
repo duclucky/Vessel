@@ -1,4 +1,12 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+export function resolveProjectFile(value) {
+  return path.isAbsolute(value) ? value : path.resolve(projectRoot, value);
+}
 
 export const config = {
   port: Number(process.env.PORT || 8787),
@@ -23,7 +31,9 @@ export const config = {
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
   dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',
   settlementContractsEnabled: process.env.SETTLEMENT_CONTRACTS_ENABLED === 'true',
-  settlementDeploymentsFile: process.env.SETTLEMENT_DEPLOYMENTS_FILE || '../../deployments/vessel-settlement.testnet.json',
+  settlementDeploymentsFile: resolveProjectFile(
+    process.env.SETTLEMENT_DEPLOYMENTS_FILE || 'deployments/vessel-settlement.testnet.json',
+  ),
   quoteSignerPrivateKeyBase64: process.env.QUOTE_SIGNER_PRIVATE_KEY_B64 || '',
   quoteSignerPublicKeyHex: process.env.QUOTE_SIGNER_PUBLIC_KEY_HEX || '',
   paySecret: process.env.PAY_SECRET || '', // SERVER-ONLY: HMAC secret for quote/payment tokens

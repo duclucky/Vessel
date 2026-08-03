@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { resolveProjectFile } from '../src/config.js';
 
 const server = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
 const config = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'utf8');
@@ -9,6 +12,14 @@ const publicConfigRoute = server.slice(
   server.indexOf("app.get('/api/config'"),
   server.indexOf('// ---- Sponsored on-chain submit'),
 );
+
+test('deployment manifest paths resolve from the app root, not the serverless cwd', () => {
+  const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  assert.equal(
+    resolveProjectFile('deployments/vessel-settlement.testnet.json'),
+    path.join(appRoot, 'deployments', 'vessel-settlement.testnet.json'),
+  );
+});
 
 test('public config exposes server-gated wallet families without secrets', () => {
   assert.match(config, /walletAptosEnabled/);
