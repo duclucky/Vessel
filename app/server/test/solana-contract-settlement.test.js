@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  ComputeBudgetProgram,
   Ed25519Program,
   Keypair,
   PublicKey,
@@ -100,7 +101,7 @@ test('Solana wallet signs then broadcasts the verified transaction through Devne
   );
 });
 
-test('wallet may refresh the blockhash before signing without changing settlement intent', async () => {
+test('wallet may refresh the blockhash and add compute budget instructions', async () => {
   let broadcasts = 0;
   const refreshedBlockhash = Keypair.generate().publicKey.toBase58();
   const result = await submitSolanaContractSettlement({
@@ -108,6 +109,7 @@ test('wallet may refresh the blockhash before signing without changing settlemen
       publicKey: owner,
       async signTransaction(transaction) {
         transaction.recentBlockhash = refreshedBlockhash;
+        transaction.instructions.unshift(ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }));
         transaction.partialSign(ownerKeypair);
         return { signedTransaction: transaction.serialize() };
       },

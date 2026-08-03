@@ -25555,7 +25555,7 @@ Message: ${transactionMessage}.
          * @internal
          */
         static checkProgramId(programId) {
-          if (!programId.equals(ComputeBudgetProgram.programId)) {
+          if (!programId.equals(ComputeBudgetProgram2.programId)) {
             throw new Error("invalid instruction; programId is not ComputeBudgetProgram");
           }
         }
@@ -25578,7 +25578,7 @@ Message: ${transactionMessage}.
           layout: BufferLayout__namespace.struct([BufferLayout__namespace.u8("instruction"), u645("microLamports")])
         }
       });
-      var ComputeBudgetProgram = class {
+      var ComputeBudgetProgram2 = class {
         /**
          * @internal
          */
@@ -25629,7 +25629,7 @@ Message: ${transactionMessage}.
           });
         }
       };
-      ComputeBudgetProgram.programId = new PublicKey7("ComputeBudget111111111111111111111111111111");
+      ComputeBudgetProgram2.programId = new PublicKey7("ComputeBudget111111111111111111111111111111");
       var PRIVATE_KEY_BYTES$1 = 64;
       var PUBLIC_KEY_BYTES$1 = 32;
       var SIGNATURE_BYTES = 64;
@@ -27129,7 +27129,7 @@ Message: ${transactionMessage}.
       exports.BpfLoader = BpfLoader;
       exports.COMPUTE_BUDGET_INSTRUCTION_LAYOUTS = COMPUTE_BUDGET_INSTRUCTION_LAYOUTS;
       exports.ComputeBudgetInstruction = ComputeBudgetInstruction;
-      exports.ComputeBudgetProgram = ComputeBudgetProgram;
+      exports.ComputeBudgetProgram = ComputeBudgetProgram2;
       exports.Connection = Connection2;
       exports.Ed25519Program = Ed25519Program2;
       exports.Enum = Enum;
@@ -68837,7 +68837,8 @@ ${fields.join("\n")}`;
     }) && Buffer2.from(expected.data).equals(Buffer2.from(signed.data));
   }
   function preservesSettlementIntent(expected, signed) {
-    return expected.feePayer?.equals(signed.feePayer) && expected.instructions.length === signed.instructions.length && expected.instructions.every((instruction, index2) => sameInstruction(instruction, signed.instructions[index2]));
+    const signedIntentInstructions = signed.instructions.filter((instruction) => !instruction.programId.equals(import_web36.ComputeBudgetProgram.programId));
+    return expected.feePayer?.equals(signed.feePayer) && expected.instructions.length === signedIntentInstructions.length && expected.instructions.every((instruction, index2) => sameInstruction(instruction, signedIntentInstructions[index2]));
   }
   async function quoteDigest(quote) {
     const bytes = concatBytes2([

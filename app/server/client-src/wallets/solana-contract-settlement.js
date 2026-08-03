@@ -5,6 +5,7 @@ import {
   getAssociatedTokenAddressSync,
 } from '@solana/spl-token';
 import {
+  ComputeBudgetProgram,
   Ed25519Program,
   PublicKey,
   SYSVAR_INSTRUCTIONS_PUBKEY,
@@ -131,10 +132,13 @@ function sameInstruction(expected, signed) {
 }
 
 function preservesSettlementIntent(expected, signed) {
+  const signedIntentInstructions = signed.instructions.filter((instruction) => (
+    !instruction.programId.equals(ComputeBudgetProgram.programId)
+  ));
   return expected.feePayer?.equals(signed.feePayer)
-    && expected.instructions.length === signed.instructions.length
+    && expected.instructions.length === signedIntentInstructions.length
     && expected.instructions.every((instruction, index) => (
-      sameInstruction(instruction, signed.instructions[index])
+      sameInstruction(instruction, signedIntentInstructions[index])
     ));
 }
 
