@@ -55,6 +55,22 @@ test('server-managed result is selected but not represented as wallet-owned', ()
   assert.deepEqual(ledger.loadMine(), []);
 });
 
+test('Gallery can select an existing wallet-owned artifact for Metadata Atelier', () => {
+  const storage = memoryStorage();
+  const ledger = createLedger(storage);
+
+  ledger.selectArtifact({
+    key: 'media/collection-cover.png',
+    url: '/api/shelby/blobs/0xabc/media/collection-cover.png',
+  });
+
+  assert.deepEqual(ledger.selected(), {
+    key: 'media/collection-cover.png',
+    url: '/api/shelby/blobs/0xabc/media/collection-cover.png',
+  });
+  assert.deepEqual(ledger.loadMine(), []);
+});
+
 test('Gallery retains its grid hook and Vault composition', () => {
   const html = readPage('gallery.html');
   assert.equal(getIds(html).has('gallery-grid'), true);
@@ -68,6 +84,16 @@ test('Gallery removes local state only after awaited confirmation', () => {
   const guard = source.indexOf('if (!confirmed) return;', confirmation);
   const removal = source.indexOf('forgetMine(b.dataset.key)', guard);
   assert.equal(confirmation >= 0 && guard > confirmation && removal > guard, true);
+});
+
+test('Gallery exposes a Metadata action that selects the artifact before navigation', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const handler = source.indexOf("$$('.js-meta', grid)");
+  const selection = source.indexOf('ledger.selectArtifact({', handler);
+  const navigation = source.indexOf("location.href = '/metadata.html'", selection);
+
+  assert.equal(handler >= 0 && selection > handler && navigation > selection, true);
+  assert.match(source, /aria-label="Build artifact metadata"/);
 });
 
 test('Gallery infers image media types from Shelby blob names for remote previews', () => {

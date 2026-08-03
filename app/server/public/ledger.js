@@ -40,6 +40,12 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     };
   }
 
+  function selectArtifact({ key, url }) {
+    if (!key) throw new TypeError('Artifact key is required');
+    storage.setItem(LS.sel, String(key));
+    storage.setItem(`${LS.sel}_url`, String(url || ''));
+  }
+
   function commitUpload(result) {
     storage.setItem(LS.sel, result.key);
     storage.setItem(`${LS.sel}_url`, result.url);
@@ -68,5 +74,5 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     }
   }
 
-  return { loadMine, rememberMine, replaceMine, forgetMine, selected, commitUpload };
+  return { loadMine, rememberMine, replaceMine, forgetMine, selected, selectArtifact, commitUpload };
 }

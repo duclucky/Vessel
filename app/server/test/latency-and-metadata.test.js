@@ -29,3 +29,33 @@ test('Metadata keeps generator hooks and accurately describes testnet storage', 
   assert.match(html, /src="\/theme\.js"/);
   assert.equal(hasInlineTailwindConfig(html), false);
 });
+
+test('Metadata is discoverable from desktop and mobile navigation on every page', () => {
+  for (const page of [
+    'index.html',
+    'identity.html',
+    'upload.html',
+    'gallery.html',
+    'latency.html',
+    'metadata.html',
+  ]) {
+    const html = readPage(page);
+    const links = html.match(/href="\/metadata\.html"[^>]*>Metadata<\/a>/g) || [];
+    assert.equal(links.length >= 2, true, `${page} desktop and mobile Metadata links`);
+  }
+});
+
+test('the five-link navigation stays collapsed until the large breakpoint', () => {
+  for (const page of [
+    'index.html',
+    'identity.html',
+    'upload.html',
+    'gallery.html',
+    'latency.html',
+    'metadata.html',
+  ]) {
+    const html = readPage(page);
+    assert.match(html, /hidden items-center gap-7 lg:flex/, page);
+    assert.match(html, /relative lg:hidden/, page);
+  }
+});
