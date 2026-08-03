@@ -10867,6 +10867,17 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   init_buffer();
   var TESTNET = { name: "testnet", chainId: 2 };
   var walletError = (message, code) => Object.assign(new Error(message), { code });
+  function normalizeAptosError(error, walletName = "Aptos wallet") {
+    if (error?.code) return error;
+    const raw = String(error?.message || error || "");
+    if (/reject|declin|cancel/i.test(raw)) {
+      return walletError("Wallet request was rejected", "user_rejected");
+    }
+    if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
+      return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
+    }
+    return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
+  }
   var approvedArgs = (response, code = "user_rejected") => {
     if (response?.status !== "Approved") {
       throw walletError("Wallet request was rejected", code);
@@ -10907,7 +10918,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
       if (!changer) {
         throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
       }
-      const changed = approvedArgs(await changer.changeNetwork(TESTNET));
+      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
       if (!changed?.success) {
         throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
       }
@@ -10937,17 +10948,23 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     };
     return {
       async connect({ silent = false } = {}) {
-        const account = approvedArgs(
-          await feature("aptos:connect", "connect").connect(silent, TESTNET)
-        );
-        session = buildSession(account);
         try {
-          await ensureNetwork();
+          const account = approvedArgs(
+            await feature("aptos:connect", "connect").connect(silent)
+          );
+          session = buildSession(account);
+          try {
+            await ensureNetwork();
+          } catch (error) {
+            error.session = session;
+            throw error;
+          }
+          return session;
         } catch (error) {
-          error.session = session;
-          throw error;
+          const normalized = normalizeAptosError(error, descriptor.name);
+          if (error?.session) normalized.session = error.session;
+          throw normalized;
         }
-        return session;
       },
       ensureNetwork,
       async signAndSubmitTransaction({ data }) {
