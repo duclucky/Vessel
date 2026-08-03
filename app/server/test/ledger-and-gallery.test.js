@@ -30,6 +30,7 @@ test('successful owned upload records authoritative expiration, cost, and transa
     settlementHash: '0xpayment',
     actualStorageUnits: '4200',
     actualGasUsed: '718',
+    sourcePath: 'collection/images/1.png',
   });
   assert.deepEqual(ledger.selected(), {
     key: 'media/a.png',
@@ -41,6 +42,7 @@ test('successful owned upload records authoritative expiration, cost, and transa
   assert.equal(ledger.loadMine()[0].acknowledgementHash, '0xack');
   assert.equal(ledger.loadMine()[0].paymentSignature, '0xpayment');
   assert.equal(ledger.loadMine()[0].actualStorageUnits, '4200');
+  assert.equal(ledger.loadMine()[0].sourcePath, 'collection/images/1.png');
 });
 
 test('server-managed result is selected but not represented as wallet-owned', () => {
@@ -110,4 +112,23 @@ test('Gallery infers image media types from Shelby blob names for remote preview
   }], { storageAddress: account });
 
   assert.equal(artifact.contentType, 'image/png');
+});
+
+test('wallet upload history retains collection-scale batches instead of truncating at 60 files', () => {
+  const ledger = createLedger(memoryStorage());
+  for (let index = 0; index < 75; index += 1) {
+    ledger.commitUpload({
+      key: `media/${index}.png`,
+      url: `https://shelby.example/${index}.png`,
+      size: 42,
+      contentType: 'image/png',
+      sourcePath: `collection/${index}.png`,
+      ownedByYou: true,
+      account: '0xabc',
+      expirationMicros: 2_592_001_000_000,
+    });
+  }
+
+  assert.equal(ledger.loadMine().length, 75);
+  assert.equal(ledger.loadMine()[0].sourcePath, 'collection/74.png');
 });

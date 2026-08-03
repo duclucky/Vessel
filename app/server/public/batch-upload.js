@@ -48,9 +48,16 @@ function rejectionReason(file, maxFileBytes) {
 }
 
 function toErrorDetails(error) {
+  const code = String(error?.code || 'upload_failed');
+  const recoveryRequired = new Set([
+    'acknowledgement_timeout',
+    'receipt_pending',
+    'registration_evidence_missing',
+  ]);
   return {
     message: String(error?.message || error || 'Upload failed').slice(0, 180),
-    code: String(error?.code || 'upload_failed'),
+    code,
+    retryable: !recoveryRequired.has(code),
   };
 }
 
@@ -115,7 +122,7 @@ export function createBatchQueue(files, {
     retryFailed() {
       let count = 0;
       for (const item of items) {
-        if (item.status !== 'failed') continue;
+        if (item.status !== 'failed' || item.error?.retryable === false) continue;
         transition(item.id, 'queued', { error: null });
         count += 1;
       }
@@ -141,4 +148,27 @@ export function createBatchQueue(files, {
       };
     },
   };
+}
+
+export async function runBatchQueue(queue, uploadItem, { onUpdate } = {}) {
+  if (!queue?.next || typeof uploadItem !== 'function') {
+    throw new TypeError('A batch queue and upload function are required');
+  }
+
+  while (queue.next()) {
+    const item = queue.next();
+    queue.markUploading(item.id);
+    onUpdate?.({ phase: 'uploading', item, summary: queue.summary() });
+    try {
+      const result = await uploadItem(item);
+      queue.markSucceeded(item.id, result);
+      onUpdate?.({ phase: 'succeeded', item, result, summary: queue.summary() });
+    } catch (error) {
+      queue.markFailed(item.id, error);
+      onUpdate?.({ phase: 'failed', item, error, summary: queue.summary() });
+      return Object.freeze({ status: 'paused', item, error, summary: queue.summary() });
+    }
+  }
+
+  return Object.freeze({ status: 'complete', summary: queue.summary() });
 }

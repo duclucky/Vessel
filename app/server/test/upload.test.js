@@ -115,3 +115,22 @@ test('post-payment Solana upload errors remain visible instead of disappearing w
     /if \(session\.chain === 'solana'.*?catch \(e\) \{.*?await renderRecoveryPanel\(\);.*?upload-recovery-error/s,
   );
 });
+
+test('folder uploads run through the existing quote and settlement path sequentially', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);
+  assert.match(source, /folderInput\.addEventListener\('change'/);
+  assert.match(source, /createBatchQueue\(files, \{ maxFileBytes/);
+  assert.match(source, /await runBatchQueue\(batchQueue, uploadBatchItem/);
+  assert.match(source, /await requestQuote\(item\.file/);
+  assert.match(source, /await validateUploadQuote\(current/);
+  assert.match(source, /sourcePath: item\.relativePath/);
+  assert.match(source, /batchQueue\.retryFailed\(\)/);
+});
+
+test('batch progress uses the Vessel palette in Chromium and Firefox', () => {
+  const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
+  assert.match(css, /#batch-progress\s*\{/);
+  assert.match(css, /#batch-progress::-webkit-progress-value/);
+  assert.match(css, /#batch-progress::-moz-progress-bar/);
+});

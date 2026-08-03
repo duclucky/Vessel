@@ -30,6 +30,10 @@ details[open] > .vessel-nav { z-index: 2; background: #090d16; border-color: rgb
 .vessel-quote-row dd { margin: 0; color: #e2e2e9; font-family: JetBrains Mono, monospace; text-align: right; }
 .vessel-quote-total { margin-top: 0.85rem; border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 0.85rem; color: #e2e2e9; font-weight: 700; }
 .vessel-quote-total dd { color: #b5fff0; font-size: 1.15rem; }
+#batch-progress { appearance: none; border: 0; background: rgba(255, 255, 255, 0.08); }
+#batch-progress::-webkit-progress-bar { border-radius: 9999px; background: rgba(255, 255, 255, 0.08); }
+#batch-progress::-webkit-progress-value { border-radius: 9999px; background: linear-gradient(90deg, var(--vessel-mint), var(--vessel-cyan), var(--vessel-violet)); transition: width 0.25s ease-out; }
+#batch-progress::-moz-progress-bar { border-radius: 9999px; background: linear-gradient(90deg, var(--vessel-mint), var(--vessel-cyan), var(--vessel-violet)); }
 :where(a, button, summary, label[for]) { touch-action: manipulation; }
 :where(button, summary, label[for]) { cursor: pointer; }
 :where(button, input, textarea):disabled { cursor: not-allowed; opacity: 0.55; }

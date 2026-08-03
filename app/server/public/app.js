@@ -9,6 +9,7 @@ import { createUploadIntent } from './retention.js';
 import { mountQuoteUi } from './quote-ui.js';
 import { settleContractQuote } from './settlement-client.js';
 import { createRecoveryLedger } from './recovery-ledger.js';
+import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -208,18 +209,27 @@ async function initIdentity() {
 }
 
 function initUpload() {
-  const dz = $('#drop-zone'); const input = $('#file-input');
+  const dz = $('#drop-zone'); const input = $('#file-input'); const folderInput = $('#folder-input');
   const vInit = $('#upload-initial-view'); const vProg = $('#upload-progress-view'); const vDone = $('#upload-success-view');
   const bar = $('#progress-bar'); const pct = $('#progress-percentage'); const fname = $('#upload-filename');
   const quoteRoot = $('#upload-options');
   const selectedName = $('#selected-file-name');
   const selectedDetails = $('#selected-file-details');
   const quoteConfirm = $('#quote-confirm');
+  const batchSummary = $('#batch-summary');
+  const batchStatus = $('#batch-status');
+  const batchCurrentFile = $('#batch-current-file');
+  const batchProgress = $('#batch-progress');
+  const batchResults = $('#batch-results');
+  const batchRetry = $('#batch-retry');
+  const batchReset = $('#batch-reset');
   const show = (el) => { [vInit, vProg, vDone].forEach((v) => v && v.classList.add('hidden')); el && el.classList.remove('hidden'); };
 
   const SOL = () => window.VesselSolana;
   let selectedFile = null;
   let quoteUi = null;
+  let batchQueue = null;
+  let batchRunning = false;
 
   const stepPct = {
     encoding: 20,
@@ -322,20 +332,62 @@ function initUpload() {
         settlementDeployment: quote.settlementDeployment,
       });
       quoteUi.render({ kind: 'ready', quote });
+      return activeUploadContext;
     } catch (error) {
       if (error?.name === 'AbortError') return;
       quoteUi.render({ kind: 'unavailable', message: String(error?.message || error).slice(0, 180) });
+      return null;
     }
   }
 
   async function selectFile(file) {
     if (!file) return;
+    batchQueue = null;
+    batchRunning = false;
+    batchSummary?.classList.add('hidden');
+    dz?.classList.remove('hidden');
     selectedFile = file;
     if (selectedName) selectedName.textContent = file.name;
     if (selectedDetails) selectedDetails.textContent = `${(file.size / 1048576).toFixed(2)} MB · ${file.type || 'application/octet-stream'}`;
     if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
     quoteRoot?.classList.remove('hidden');
     await requestQuote(file);
+  }
+
+  async function validateUploadQuote(current, signal = pendingWalletWork.signal) {
+    const walletState = walletController().getState();
+    const validation = await api('/api/quotes/validate', {
+      method: 'POST',
+      signal,
+      body: { ...current.intent, quoteToken: current.quote.quoteToken },
+    });
+    const nextContext = Object.freeze({ ...current, quote: validation.quote });
+    activeUploadContext = nextContext;
+    recovery.complete(current.quote.quoteId);
+    recovery.save({
+      id: validation.quote.quoteId,
+      stage: 'quoted',
+      walletIdentity: walletState.session,
+      quoteId: validation.quote.quoteId,
+      quoteToken: validation.quote.quoteToken,
+      context: nextContext.intent,
+      paymentTier: validation.quote.tierId,
+      quotedAccountingMicro: validation.quote.totalAccountingMicro,
+      contractQuote: validation.quote.contractQuote,
+      contractSignature: validation.quote.contractSignature,
+      quotePublicKey: validation.quote.quotePublicKey,
+      settlementDeployment: validation.quote.settlementDeployment,
+    });
+    return Object.freeze({ context: nextContext, requiresConfirmation: validation.requiresConfirmation });
+  }
+
+  function renderChangedQuote(context) {
+    quoteUi.render({
+      kind: 'ready',
+      quote: context.quote,
+      message: 'The live price changed by more than 5%. Review the new total and confirm again.',
+      confirmLabel: 'CONFIRM UPDATED PRICE',
+    });
   }
 
   async function confirmQuotedUpload() {
@@ -353,41 +405,15 @@ function initUpload() {
     }
     pendingWalletWork.abort();
     pendingWalletWork = new AbortController();
-    const signal = pendingWalletWork.signal;
     quoteUi.render({ kind: 'loading' });
     try {
-      const validation = await api('/api/quotes/validate', {
-        method: 'POST',
-        signal,
-        body: { ...current.intent, quoteToken: current.quote.quoteToken },
-      });
-      const nextContext = Object.freeze({ ...current, quote: validation.quote });
-      activeUploadContext = nextContext;
-      recovery.complete(current.quote.quoteId);
-      recovery.save({
-        id: validation.quote.quoteId,
-        stage: 'quoted',
-        walletIdentity: walletState.session,
-        quoteId: validation.quote.quoteId,
-        quoteToken: validation.quote.quoteToken,
-        context: nextContext.intent,
-        paymentTier: validation.quote.tierId,
-        quotedAccountingMicro: validation.quote.totalAccountingMicro,
-        contractQuote: validation.quote.contractQuote,
-        contractSignature: validation.quote.contractSignature,
-        quotePublicKey: validation.quote.quotePublicKey,
-        settlementDeployment: validation.quote.settlementDeployment,
-      });
-      if (validation.requiresConfirmation) {
-        quoteUi.render({
-          kind: 'ready',
-          quote: validation.quote,
-          message: 'The live price changed by more than 5%. Review the new total and confirm again.',
-          confirmLabel: 'CONFIRM UPDATED PRICE',
-        });
+      const validated = await validateUploadQuote(current);
+      if (validated.requiresConfirmation) {
+        renderChangedQuote(validated.context);
         return;
       }
-      await doUpload(current.file, nextContext);
+      const outcome = await doUpload(current.file, validated.context);
+      if (outcome?.ok) renderSuccess(outcome.result);
     } catch (error) {
       if (error?.name === 'AbortError') return;
       const expired = error?.code === 'quote_expired' || error?.status === 410;
@@ -405,7 +431,160 @@ function initUpload() {
       if (selectedFile) void requestQuote(selectedFile);
     },
   });
-  quoteConfirm?.addEventListener('click', () => void confirmQuotedUpload());
+  quoteConfirm?.addEventListener('click', () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()));
+
+  const formatBytes = (bytes) => (
+    bytes >= 1073741824
+      ? `${(bytes / 1073741824).toFixed(2)} GB`
+      : `${(bytes / 1048576).toFixed(2)} MB`
+  );
+
+  function renderBatchState({ phase = 'ready', item = null, error = null } = {}) {
+    if (!batchQueue || !batchSummary) return;
+    const summary = batchQueue.summary();
+    batchSummary.classList.remove('hidden');
+    const set = (selector, value) => { const element = $(selector); if (element) element.textContent = value; };
+    set('#batch-file-count', `${summary.total}`);
+    set('#batch-total-size', formatBytes(summary.totalBytes));
+    set('#batch-success-count', `${summary.succeeded}`);
+    set('#batch-failure-count', `${summary.failed}`);
+    if (batchProgress) {
+      batchProgress.value = summary.progressPercent;
+      batchProgress.textContent = `${summary.progressPercent}%`;
+    }
+    if (batchCurrentFile) {
+      batchCurrentFile.textContent = item?.relativePath
+        ? `${summary.completed + 1} of ${summary.total}: ${item.relativePath}`
+        : 'No file is uploading.';
+    }
+    if (batchStatus) {
+      batchStatus.textContent = phase === 'uploading'
+        ? 'Keep this tab open. Complete each wallet approval as it appears.'
+        : phase === 'complete'
+          ? `Batch complete. ${summary.succeeded} files are active on Shelby.`
+          : phase === 'failed'
+            ? `Batch paused: ${String(error?.message || error || 'Upload failed').slice(0, 160)}`
+            : `${summary.total} supported files selected${batchQueue.rejected.length ? `; ${batchQueue.rejected.length} unsupported or empty files skipped` : ''}.`;
+    }
+    const retryableFailures = batchQueue.items.filter(
+      (entry) => entry.status === 'failed' && entry.error?.retryable !== false,
+    ).length;
+    if (batchRetry) batchRetry.classList.toggle('hidden', retryableFailures === 0);
+    if (batchReset) batchReset.disabled = batchRunning;
+
+    if (batchResults) {
+      const important = batchQueue.items.filter((entry) => entry.status === 'failed' || entry.status === 'uploading');
+      const recent = batchQueue.items.filter((entry) => entry.status === 'succeeded').slice(-20);
+      const upcoming = batchQueue.items.filter((entry) => entry.status === 'queued').slice(0, 5);
+      const visible = [...new Map([...important, ...recent, ...upcoming].map((entry) => [entry.id, entry])).values()];
+      batchResults.replaceChildren(...visible.map((entry) => {
+        const row = document.createElement('li');
+        row.className = 'flex min-h-11 items-center justify-between gap-3 rounded-2xl border border-white/10 px-4 py-3 text-left';
+        const path = document.createElement('span');
+        path.className = 'vessel-technical min-w-0 truncate text-xs text-on-surface-variant';
+        path.title = entry.relativePath;
+        path.textContent = entry.relativePath;
+        const state = document.createElement('span');
+        state.className = entry.status === 'succeeded'
+          ? 'vessel-kicker shrink-0 text-primary'
+          : entry.status === 'failed'
+            ? 'vessel-kicker shrink-0 text-secondary'
+            : 'vessel-kicker shrink-0 text-outline';
+        state.textContent = entry.status;
+        row.append(path, state);
+        return row;
+      }));
+    }
+  }
+
+  function showTransactionProgress() {
+    if (!batchQueue) {
+      show(vProg);
+      return;
+    }
+    show(vInit);
+    dz?.classList.add('hidden');
+    quoteRoot?.classList.add('hidden');
+    batchSummary?.classList.remove('hidden');
+  }
+
+  async function selectBatch(files) {
+    if (!files?.length || batchRunning) return;
+    try {
+      const cfg = await api('/api/config').catch(() => ({}));
+      const maxFileBytes = cfg.maxUploadBytes || 25 * 1024 * 1024;
+      batchQueue = createBatchQueue(files, { maxFileBytes });
+      const first = batchQueue.next();
+      selectedFile = first.file;
+      if (selectedName) selectedName.textContent = first.relativePath;
+      if (selectedDetails) selectedDetails.textContent = `${batchQueue.items.length} files · ${formatBytes(batchQueue.totalBytes)} · one retention period`;
+      if (fname) fname.textContent = first.relativePath;
+      show(vInit);
+      renderBatchState();
+      quoteRoot?.classList.remove('hidden');
+      await requestQuote(first.file);
+    } catch (error) {
+      batchQueue = null;
+      batchSummary?.classList.add('hidden');
+      toast(String(error?.message || error).slice(0, 160), 'error');
+    }
+  }
+
+  async function uploadBatchItem(item) {
+    selectedFile = item.file;
+    if (selectedName) selectedName.textContent = item.relativePath;
+    if (selectedDetails) selectedDetails.textContent = `${formatBytes(item.size)} · batch item`;
+    let current = activeUploadContext?.file === item.file ? activeUploadContext : null;
+    if (!current || Date.now() >= current.quote.expiresAtMs) current = await requestQuote(item.file);
+    if (!current) throw Object.assign(new Error('A signed quote could not be prepared'), { code: 'quote_unavailable' });
+
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    const validated = await validateUploadQuote(current);
+    if (validated.requiresConfirmation) {
+      batchRunning = false;
+      show(vInit);
+      dz?.classList.add('hidden');
+      quoteRoot?.classList.remove('hidden');
+      renderChangedQuote(validated.context);
+      throw Object.assign(new Error('Review the updated price, then continue the batch'), {
+        code: 'batch_price_confirmation_required',
+      });
+    }
+
+    const outcome = await doUpload(item.file, validated.context);
+    if (!outcome?.ok) throw outcome?.error || new Error('Upload did not complete');
+    const result = Object.freeze({ ...outcome.result, sourcePath: item.relativePath });
+    ledger.commitUpload(result);
+    return result;
+  }
+
+  async function startBatchUpload() {
+    if (!batchQueue || batchRunning) return;
+    if (batchQueue.summary().failed) batchQueue.retryFailed();
+    batchRunning = true;
+    dz?.classList.add('hidden');
+    quoteRoot?.classList.add('hidden');
+    renderBatchState({ phase: 'uploading', item: batchQueue.next() });
+    const outcome = await runBatchQueue(batchQueue, uploadBatchItem, { onUpdate: renderBatchState });
+    batchRunning = false;
+    show(vInit);
+    if (outcome.status === 'complete') {
+      renderBatchState({ phase: 'complete' });
+      toast(`${outcome.summary.succeeded} files stored on Shelby`, 'ok');
+      return;
+    }
+    renderBatchState({ phase: 'failed', item: outcome.item, error: outcome.error });
+    if (outcome.error?.code === 'batch_price_confirmation_required') {
+      quoteRoot?.classList.remove('hidden');
+    }
+  }
+
+  batchRetry?.addEventListener('click', () => {
+    batchQueue?.retryFailed();
+    void startBatchUpload();
+  });
+  batchReset?.addEventListener('click', () => window.resetUpload?.());
 
   async function renderRecoveryPanel() {
     $('#upload-recovery')?.remove();
@@ -536,7 +715,8 @@ function initUpload() {
         });
         selectedFile = file;
         activeUploadContext = recoveredContext;
-        await doUpload(file, recoveredContext);
+        const outcome = await doUpload(file, recoveredContext);
+        if (outcome?.ok) renderSuccess(outcome.result);
         return;
       }
       try {
@@ -562,10 +742,11 @@ function initUpload() {
   void renderRecoveryPanel();
 
   async function doUpload(file, quotedContext = activeUploadContext) {
-    if (!file) return;
+    const failed = (error) => Object.freeze({ ok: false, error });
+    if (!file) return failed(new Error('Choose a file before uploading'));
     if (!quotedContext?.quote || !quotedContext?.intent) {
       await requestQuote(file);
-      return;
+      return failed(new Error('Review the signed quote before uploading'));
     }
     const walletState = walletController().getState();
     const session = walletState.session;
@@ -577,11 +758,15 @@ function initUpload() {
       } else {
         void walletUi.open(opener);
       }
-      return;
+      return failed(Object.assign(new Error('Connect a wallet before uploading'), { code: 'wallet_required' }));
     }
     const cfg = await api('/api/config').catch(() => ({}));
     const maxB = cfg.maxUploadBytes || 25 * 1024 * 1024;
-    if (file.size > maxB) { toast(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`, 'error'); return; }
+    if (file.size > maxB) {
+      const error = Object.assign(new Error(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`), { code: 'file_too_large' });
+      toast(error.message, 'error');
+      return failed(error);
+    }
     if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
 
     let settlement = quotedContext.settlement;
@@ -592,10 +777,10 @@ function initUpload() {
         if (balance < requiredUsdc) {
           show(vInit);
           showPayGate(quotedContext.quote, balance, () => void confirmQuotedUpload());
-          return;
+          return failed(Object.assign(new Error('Add testnet USDC to continue'), { code: 'insufficient_usdc' }));
         }
       }
-      show(vProg);
+      showTransactionProgress();
       setStep(quotedContext.settlementTransactionId ? 'settlementPending' : 'settlementApproval');
       try {
         const deployment = settlementDeploymentFor(session.chain, quotedContext.quote, cfg);
@@ -650,7 +835,7 @@ function initUpload() {
         if (error?.code === 'receipt_pending') {
           toast('Contract submitted. Receipt is pending; no new payment is required.', 'warn');
           await renderRecoveryPanel();
-          return;
+          return failed(error);
         }
         const message = error?.code === 'user_rejected'
           ? 'Payment approval was rejected'
@@ -662,7 +847,7 @@ function initUpload() {
           message,
         });
         toast(message, 'error');
-        return;
+        return failed(error);
       }
     }
     const onCheckpoint = (stage, evidence = {}) => {
@@ -671,7 +856,7 @@ function initUpload() {
 
     if (session.chain === 'aptos' && session.mode === 'native') {
       $('#aptos-funding-gate')?.remove();
-      show(vProg);
+      showTransactionProgress();
       setStep('encoding');
       try {
         const result = await walletController().upload(file, {
@@ -694,19 +879,19 @@ function initUpload() {
         recovery.complete(quotedContext.quote.quoteId);
         if (bar) bar.style.width = '100%';
         if (pct) pct.textContent = '100%';
-        setTimeout(() => renderSuccess({
+        return Object.freeze({ ok: true, result: Object.freeze({
           ...result,
           settlementHash: settlement.settlementHash,
           quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
           lastReconciledAt: Date.now(),
-        }), 350);
+        }) });
       } catch (error) {
         show(vInit);
         if (['insufficient_apt', 'insufficient_shelby_usd'].includes(error?.code)) {
           showAptosFundingGate({
             code: error.code,
             session,
-            retry: () => void doUpload(file, activeUploadContext),
+            retry: () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()),
           });
         } else {
           if (error?.code === 'registration_evidence_missing') {
@@ -715,14 +900,14 @@ function initUpload() {
           const message = String(error?.message || error);
           toast(message.toLowerCase().includes('reject') ? 'Signature rejected' : message.slice(0, 160), 'error');
         }
+        return failed(error);
       }
-      return;
     }
 
     // Sponsored + USDC: the Solana wallet pays a stablecoin fee and signs; the server sponsors the
     // Aptos-side storage. The blob is owned by the visitor's own DAA account. No APT/ShelbyUSD needed.
     if (session.chain === 'solana' && SOL()?.available() && cfg.sponsored) {
-      show(vProg); setStep('signing');
+      showTransactionProgress(); setStep('signing');
       try {
         if (!SOL().state.solana) {
           throw new Error('Reconnect your Solana wallet before uploading');
@@ -747,18 +932,17 @@ function initUpload() {
         });
         recovery.complete(quotedContext.quote.quoteId);
         if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
-        setTimeout(() => renderSuccess({
+        return Object.freeze({ ok: true, result: Object.freeze({
           ...r,
           contentType: file.type,
           paidUsdc: Number(quotedContext.quote.solanaAmountMicro) / 1_000_000,
           settlementHash: settlement.settlementHash,
           quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
           lastReconciledAt: Date.now(),
-        }), 350);
-        return;
+        }) });
       } catch (e) {
         show(vInit);
-        if (e?.name === 'AbortError') return;
+        if (e?.name === 'AbortError') return failed(e);
         if (e?.code === 'registration_evidence_missing') {
           onCheckpoint('recovery_required', { errorCode: e.code });
         }
@@ -775,11 +959,16 @@ function initUpload() {
           errorStatus.textContent = message;
           recoveryPanel.appendChild(errorStatus);
         }
-        return;
+        return failed(e);
       }
     }
 
-    toast(`Uploads are unavailable for ${session.walletName || session.chain}`, 'error');
+    const unavailable = Object.assign(
+      new Error(`Uploads are unavailable for ${session.walletName || session.chain}`),
+      { code: 'upload_unavailable' },
+    );
+    toast(unavailable.message, 'error');
+    return failed(unavailable);
   }
 
   function showAptosFundingGate({ code, session, retry }) {
@@ -864,18 +1053,29 @@ function initUpload() {
   if (dz) {
     ['dragenter', 'dragover'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.add('dragover'); }));
     ['dragleave', 'drop'].forEach((ev) => dz.addEventListener(ev, (e) => { e.preventDefault(); dz.classList.remove('dragover'); }));
-    dz.addEventListener('drop', (e) => { e.preventDefault(); void selectFile(e.dataTransfer.files[0]); });
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const files = [...(e.dataTransfer?.files || [])];
+      if (files.length > 1) void selectBatch(files);
+      else void selectFile(files[0]);
+    });
   }
   if (input) input.addEventListener('change', (e) => void selectFile(e.target.files[0]));
+  if (folderInput) folderInput.addEventListener('change', (event) => void selectBatch([...event.target.files]));
   window.resetUpload = () => {
     pendingWalletWork.abort();
     pendingWalletWork = new AbortController();
     selectedFile = null;
     activeUploadContext = null;
+    batchQueue = null;
+    batchRunning = false;
     quoteUi?.reset();
     quoteRoot?.classList.add('hidden');
+    batchSummary?.classList.add('hidden');
+    dz?.classList.remove('hidden');
     show(vInit);
     if (input) input.value = '';
+    if (folderInput) folderInput.value = '';
   };
 }
 

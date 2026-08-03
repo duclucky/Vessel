@@ -6,6 +6,8 @@ export const LS = {
   mine: 'vessel_mine',
 };
 
+export const UPLOAD_HISTORY_LIMIT = 3000;
+
 export function createLedger(storage = globalThis.localStorage, now = Date.now) {
   function loadMine() {
     try {
@@ -19,7 +21,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   function rememberMine(item) {
     const list = loadMine().filter((entry) => entry.key !== item.key);
     list.unshift(item);
-    storage.setItem(LS.mine, JSON.stringify(list.slice(0, 60)));
+    storage.setItem(LS.mine, JSON.stringify(list.slice(0, UPLOAD_HISTORY_LIMIT)));
   }
 
   function forgetMine(key) {
@@ -30,7 +32,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   }
 
   function replaceMine(items) {
-    storage.setItem(LS.mine, JSON.stringify((Array.isArray(items) ? items : []).slice(0, 60)));
+    storage.setItem(LS.mine, JSON.stringify((Array.isArray(items) ? items : []).slice(0, UPLOAD_HISTORY_LIMIT)));
   }
 
   function selected() {
@@ -58,6 +60,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
         url: result.url,
         size: result.size,
         contentType: result.contentType || '',
+        sourcePath: result.sourcePath || '',
         expiresAt: result.expirationMicros / 1_000,
         expirationMicros: result.expirationMicros,
         account: result.account,

@@ -4,6 +4,7 @@ import {
   BATCH_MAX_BYTES,
   batchRelativePath,
   createBatchQueue,
+  runBatchQueue,
 } from '../public/batch-upload.js';
 
 function asset(name, size, type, relativePath = '') {
@@ -88,4 +89,63 @@ test('batch queue rejects files above the active per-file limit before payment',
 
   assert.equal(queue.items.length, 1);
   assert.equal(queue.rejected[0].reason, 'File exceeds the 25 MB per-file limit');
+});
+
+test('batch runner awaits each wallet-owned upload before starting the next file', async () => {
+  const queue = createBatchQueue([
+    asset('1.png', 25, 'image/png', 'collection/1.png'),
+    asset('2.png', 75, 'image/png', 'collection/2.png'),
+  ]);
+  const events = [];
+  let active = 0;
+  let maxActive = 0;
+
+  const outcome = await runBatchQueue(queue, async (item) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    events.push(`start:${item.relativePath}`);
+    await Promise.resolve();
+    events.push(`finish:${item.relativePath}`);
+    active -= 1;
+    return { key: item.relativePath };
+  });
+
+  assert.equal(maxActive, 1);
+  assert.deepEqual(events, [
+    'start:collection/1.png',
+    'finish:collection/1.png',
+    'start:collection/2.png',
+    'finish:collection/2.png',
+  ]);
+  assert.equal(outcome.status, 'complete');
+  assert.equal(queue.summary().succeeded, 2);
+});
+
+test('batch runner pauses after a failure and leaves later files queued', async () => {
+  const queue = createBatchQueue([
+    asset('1.png', 25, 'image/png', 'collection/1.png'),
+    asset('2.png', 75, 'image/png', 'collection/2.png'),
+  ]);
+
+  const outcome = await runBatchQueue(queue, async () => {
+    throw Object.assign(new Error('Wallet approval rejected'), { code: 'user_rejected' });
+  });
+
+  assert.equal(outcome.status, 'paused');
+  assert.equal(queue.items[0].status, 'failed');
+  assert.equal(queue.items[1].status, 'queued');
+  assert.equal(queue.items[0].error.code, 'user_rejected');
+});
+
+test('batch queue never retries a file whose contract receipt is already pending', () => {
+  const queue = createBatchQueue([
+    asset('1.png', 25, 'image/png', 'collection/1.png'),
+  ]);
+  const item = queue.next();
+  queue.markUploading(item.id);
+  queue.markFailed(item.id, Object.assign(new Error('Receipt pending'), { code: 'receipt_pending' }));
+
+  assert.equal(queue.items[0].error.retryable, false);
+  assert.equal(queue.retryFailed(), 0);
+  assert.equal(queue.items[0].status, 'failed');
 });
