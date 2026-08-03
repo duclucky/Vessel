@@ -39847,6 +39847,20 @@ Message: ${transactionMessage}.
     return `0x${text.slice(2).replace(/^0+/, "") || "0"}`;
   };
   var remoteKey = (item) => String(item.blobNameSuffix || item.name || "");
+  var CONTENT_TYPE_BY_EXTENSION = Object.freeze({
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    webp: "image/webp",
+    gif: "image/gif",
+    svg: "image/svg+xml",
+    mp4: "video/mp4",
+    json: "application/json"
+  });
+  var inferContentType = (key) => {
+    const extension = String(key).split(".").pop()?.toLowerCase();
+    return CONTENT_TYPE_BY_EXTENSION[extension] || "application/octet-stream";
+  };
   function reconcileArtifacts(local = [], remote = [], walletIdentity = {}) {
     const storageAddress = canonicalAddress(walletIdentity.storageAddress);
     const scopedLocal = local.filter((item) => canonicalAddress(item.storageAddress || item.account) === storageAddress);
@@ -39862,6 +39876,7 @@ Message: ${transactionMessage}.
         storageAddress: String(item.owner?.toString?.() ?? item.owner),
         account: String(item.owner?.toString?.() ?? item.owner),
         size: Number(item.size || 0),
+        contentType: item.contentType || cached.contentType || inferContentType(key),
         encoding: item.encoding,
         createdAt: Number(item.creationMicros) / 1e3,
         expiresAt: Number(item.expirationMicros) / 1e3,

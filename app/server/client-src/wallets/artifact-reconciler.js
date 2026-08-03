@@ -6,6 +6,22 @@ const canonicalAddress = (value) => {
 
 const remoteKey = (item) => String(item.blobNameSuffix || item.name || '');
 
+const CONTENT_TYPE_BY_EXTENSION = Object.freeze({
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+  mp4: 'video/mp4',
+  json: 'application/json',
+});
+
+const inferContentType = (key) => {
+  const extension = String(key).split('.').pop()?.toLowerCase();
+  return CONTENT_TYPE_BY_EXTENSION[extension] || 'application/octet-stream';
+};
+
 export function reconcileArtifacts(local = [], remote = [], walletIdentity = {}) {
   const storageAddress = canonicalAddress(walletIdentity.storageAddress);
   const scopedLocal = local.filter((item) => (
@@ -25,6 +41,7 @@ export function reconcileArtifacts(local = [], remote = [], walletIdentity = {})
         storageAddress: String(item.owner?.toString?.() ?? item.owner),
         account: String(item.owner?.toString?.() ?? item.owner),
         size: Number(item.size || 0),
+        contentType: item.contentType || cached.contentType || inferContentType(key),
         encoding: item.encoding,
         createdAt: Number(item.creationMicros) / 1_000,
         expiresAt: Number(item.expirationMicros) / 1_000,

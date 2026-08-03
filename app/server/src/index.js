@@ -265,6 +265,7 @@ app.get('/api/shelby/artifacts', async (req, res) => {
         name: row.name,
         blobNameSuffix: row.blobNameSuffix,
         size: row.size,
+        contentType: mimeForKey(row.blobNameSuffix),
         creationMicros: row.creationMicros,
         expirationMicros: row.expirationMicros,
         isWritten: !!row.isWritten,

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createLedger } from '../public/ledger.js';
+import { reconcileArtifacts } from '../client-src/wallets/artifact-reconciler.js';
 import { readPage, getIds, publicDir } from './html-test-utils.js';
 
 function memoryStorage() {
@@ -67,4 +68,20 @@ test('Gallery removes local state only after awaited confirmation', () => {
   const guard = source.indexOf('if (!confirmed) return;', confirmation);
   const removal = source.indexOf('forgetMine(b.dataset.key)', guard);
   assert.equal(confirmation >= 0 && guard > confirmation && removal > guard, true);
+});
+
+test('Gallery infers image media types from Shelby blob names for remote previews', () => {
+  const account = `0x${'a'.repeat(64)}`;
+  const [artifact] = reconcileArtifacts([], [{
+    owner: account,
+    blobNameSuffix: 'media/photo.png',
+    size: 42,
+    creationMicros: 1_000_000,
+    expirationMicros: 2_000_000,
+    isWritten: true,
+    isDeleted: false,
+    url: `/api/shelby/blobs/${account}/media/photo.png`,
+  }], { storageAddress: account });
+
+  assert.equal(artifact.contentType, 'image/png');
 });
