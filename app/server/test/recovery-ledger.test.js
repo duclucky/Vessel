@@ -36,6 +36,10 @@ test('recovery ledger advances allowlisted upload stages without storing file or
     file: new Uint8Array([1, 2, 3]),
     seedPhrase: 'never store this',
     privateKey: 'never store this either',
+    contractQuote: { quoteId: '11'.repeat(32), amount: '84100' },
+    contractSignature: '66'.repeat(64),
+    quotePublicKey: '77'.repeat(32),
+    settlementDeployment: { moduleAddress: `0x${'88'.repeat(32)}` },
   });
 
   for (const stage of ['settlement_submitted', 'paid', 'registered', 'uploading', 'finalizing', 'active', 'recovery_required']) {
@@ -58,7 +62,28 @@ test('recovery ledger advances allowlisted upload stages without storing file or
   assert.equal(ledger.loadForWallet(identity)[0].paidAuthorization, 'vpaid.signed');
   assert.equal(ledger.loadForWallet(identity)[0].registerTransactionHash, '0xregistered');
   assert.equal(ledger.loadForWallet(identity)[0].settlementTransactionId, '0xcontract-transaction');
+  assert.equal(ledger.loadForWallet(identity)[0].contractQuote.amount, '84100');
+  assert.equal(ledger.loadForWallet(identity)[0].contractSignature, '66'.repeat(64));
+  assert.equal(ledger.loadForWallet(identity)[0].quotePublicKey, '77'.repeat(32));
   assert.equal(normalizeWalletIdentity(identity), 'aptos:0xabc:0xabc');
+});
+
+test('a submitted contract transaction remains recoverable for 24 hours', () => {
+  const storage = memoryStorage();
+  let current = 1_000;
+  const ledger = createRecoveryLedger(storage, () => current);
+  ledger.save({
+    id: 'quote-submitted',
+    stage: 'settlement_submitted',
+    walletIdentity: identity,
+    context: { operation: 'upload', chain: 'aptos' },
+    settlementTransactionId: '0xcontract-transaction',
+  });
+
+  current += 23 * 60 * 60 * 1_000;
+  assert.equal(ledger.loadForWallet(identity).length, 1);
+  current += 2 * 60 * 60 * 1_000;
+  assert.equal(ledger.loadForWallet(identity).length, 0);
 });
 
 test('recovery ledger is capped, wallet scoped, and complete removes a record', () => {

@@ -7,7 +7,7 @@ import { mountWalletUi } from './wallet-modal.js';
 import { confirmAction } from './confirm-dialog.js';
 import { createUploadIntent } from './retention.js';
 import { mountQuoteUi } from './quote-ui.js';
-import { settleQuote } from './settlement-client.js';
+import { settleContractQuote } from './settlement-client.js';
 import { createRecoveryLedger } from './recovery-ledger.js';
 
 const API = location.origin;
@@ -72,6 +72,31 @@ function normalizedSourceNetwork(session) {
   if (session.chain === 'aptos') return 'aptos-testnet';
   if (session.chain === 'solana') return 'solana-devnet';
   return String(session.sourceNetwork || 'unknown');
+}
+
+function settlementDeploymentFor(chain, quote, config) {
+  const quoted = quote?.settlementDeployment;
+  if (quoted?.chain) {
+    return Object.freeze({
+      ...quoted.chain,
+      quotePublicKey: quoted.quotePublicKey,
+      configVersion: quoted.configVersion,
+    });
+  }
+  const contracts = config?.settlementContracts;
+  if (!contracts?.enabled || !contracts?.[chain]) return null;
+  return Object.freeze({
+    ...contracts[chain],
+    quotePublicKey: contracts.quotePublicKey,
+    configVersion: contracts.configVersion,
+  });
+}
+
+function settlementExplorerUrl(chain, transactionId) {
+  const id = encodeURIComponent(String(transactionId || ''));
+  return chain === 'aptos'
+    ? `https://explorer.aptoslabs.com/txn/${id}?network=testnet`
+    : `https://explorer.solana.com/tx/${id}?cluster=devnet`;
 }
 
 /* ------------------------------- wallet ------------------------------- */
@@ -196,12 +221,23 @@ function initUpload() {
   let selectedFile = null;
   let quoteUi = null;
 
-  const stepPct = { encoding: 20, signing: 40, paying: 55, confirming: 72, sponsoring: 80, uploading: 92 };
+  const stepPct = {
+    encoding: 20,
+    signing: 40,
+    settlementApproval: 55,
+    settlementPending: 65,
+    receiptVerified: 72,
+    confirming: 80,
+    sponsoring: 84,
+    uploading: 92,
+  };
   const stepMsg = {
     encoding: 'ENCODING COMMITMENTS',
     signing: 'SIGNING OWNERSHIP',
-    paying: 'VERIFYING USDC',
-    confirming: 'CONFIRMING ON APTOS',
+    settlementApproval: 'APPROVE VESSEL CONTRACT FEE',
+    settlementPending: 'CONFIRMING CONTRACT RECEIPT',
+    receiptVerified: 'VESSEL RECEIPT VERIFIED',
+    confirming: 'REGISTERING ON APTOS',
     sponsoring: 'SPONSORING APTOS',
     uploading: 'WRITING TO SHELBY',
   };
@@ -280,6 +316,10 @@ function initUpload() {
         context: intent,
         paymentTier: quote.tierId,
         quotedAccountingMicro: quote.totalAccountingMicro,
+        contractQuote: quote.contractQuote,
+        contractSignature: quote.contractSignature,
+        quotePublicKey: quote.quotePublicKey,
+        settlementDeployment: quote.settlementDeployment,
       });
       quoteUi.render({ kind: 'ready', quote });
     } catch (error) {
@@ -323,6 +363,21 @@ function initUpload() {
       });
       const nextContext = Object.freeze({ ...current, quote: validation.quote });
       activeUploadContext = nextContext;
+      recovery.complete(current.quote.quoteId);
+      recovery.save({
+        id: validation.quote.quoteId,
+        stage: 'quoted',
+        walletIdentity: walletState.session,
+        quoteId: validation.quote.quoteId,
+        quoteToken: validation.quote.quoteToken,
+        context: nextContext.intent,
+        paymentTier: validation.quote.tierId,
+        quotedAccountingMicro: validation.quote.totalAccountingMicro,
+        contractQuote: validation.quote.contractQuote,
+        contractSignature: validation.quote.contractSignature,
+        quotePublicKey: validation.quote.quotePublicKey,
+        settlementDeployment: validation.quote.settlementDeployment,
+      });
       if (validation.requiresConfirmation) {
         quoteUi.render({
           kind: 'ready',
@@ -369,12 +424,76 @@ function initUpload() {
     const title = document.createElement('h2');
     title.id = 'upload-recovery-title';
     title.className = 'mt-2 font-display text-xl font-semibold';
-    title.textContent = record.stage === 'paid'
-      ? 'Payment verified — finish this upload'
-      : 'Finish writing the registered artifact';
+    title.textContent = record.stage === 'settlement_submitted'
+      ? 'Contract submitted — receipt pending'
+      : record.stage === 'paid'
+        ? 'Payment verified — finish this upload'
+        : 'Finish writing the registered artifact';
     const copyText = document.createElement('p');
     copyText.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
-    copyText.textContent = `Reselect ${record.context.blobName}. Vessel will verify its SHA-256 before any irreversible action.`;
+    copyText.textContent = record.stage === 'settlement_submitted'
+      ? 'Your wallet transaction is saved. Vessel will only check its existing receipt; it will not request another payment.'
+      : `Reselect ${record.context.blobName}. Vessel will verify its SHA-256 before any irreversible action.`;
+    panel.append(kicker, title, copyText);
+
+    if (record.stage === 'settlement_submitted') {
+      const explorer = document.createElement('a');
+      explorer.className = 'vessel-technical mt-4 block break-all text-xs text-primary hover:text-primary-container';
+      explorer.href = settlementExplorerUrl(record.context.chain, record.settlementTransactionId);
+      explorer.target = '_blank';
+      explorer.rel = 'noreferrer';
+      explorer.textContent = `VIEW TRANSACTION ${shortMid(record.settlementTransactionId, 8)} ↗`;
+      const status = document.createElement('p');
+      status.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
+      status.setAttribute('role', 'status');
+      status.setAttribute('aria-live', 'polite');
+      status.textContent = 'Checking the finalized Vessel receipt…';
+      const check = document.createElement('button');
+      check.type = 'button';
+      check.className = 'vessel-button vessel-button-secondary mt-4 min-h-11 px-5 py-3';
+      check.textContent = 'CHECK PAYMENT STATUS';
+      panel.append(explorer, status, check);
+      quoteRoot?.parentElement?.appendChild(panel);
+
+      const verifyRecordedSettlement = async () => {
+        check.disabled = true;
+        status.textContent = 'Checking the finalized Vessel receipt…';
+        try {
+          const verified = await settleContractQuote({
+            quote: {
+              quoteToken: record.quoteToken,
+              uploadContext: record.context,
+              contractQuote: record.contractQuote,
+              contractSignature: record.contractSignature,
+              quotePublicKey: record.quotePublicKey,
+            },
+            transactionId: record.settlementTransactionId,
+            request: api,
+          });
+          const settlementHash = verified.receipt?.transactionId
+            || record.settlementTransactionId;
+          recovery.advance(record.id, 'paid', {
+            paidAuthorization: verified.paidAuthorization,
+            settlementHash,
+            paymentSignature: settlementHash,
+          });
+          status.textContent = 'Vessel receipt verified. Reselect the file to finish writing it.';
+          toast('Vessel contract receipt verified', 'ok');
+          await renderRecoveryPanel();
+        } catch (error) {
+          if (error?.code === 'receipt_pending') {
+            status.textContent = 'Receipt is still pending finality. No new payment is required.';
+          } else {
+            status.textContent = String(error?.message || error).slice(0, 180);
+          }
+          check.disabled = false;
+        }
+      };
+      check.addEventListener('click', () => void verifyRecordedSettlement());
+      void verifyRecordedSettlement();
+      return;
+    }
+
     const label = document.createElement('label');
     label.className = 'vessel-button vessel-button-secondary mt-4 px-5 py-3';
     label.textContent = 'RESELECT FILE TO RESUME';
@@ -382,7 +501,7 @@ function initUpload() {
     recoveryInput.type = 'file';
     recoveryInput.className = 'sr-only';
     label.appendChild(recoveryInput);
-    panel.append(kicker, title, copyText, label);
+    panel.append(label);
     quoteRoot?.parentElement?.appendChild(panel);
 
     recoveryInput.addEventListener('change', async () => {
@@ -464,7 +583,7 @@ function initUpload() {
 
     let settlement = quotedContext.settlement;
     if (!settlement) {
-      if (session.chain === 'solana') {
+      if (session.chain === 'solana' && !quotedContext.settlementTransactionId) {
         const requiredUsdc = Number(quotedContext.quote.solanaAmountMicro) / 1_000_000;
         const balance = await SOL().usdcBalance();
         if (balance < requiredUsdc) {
@@ -474,23 +593,62 @@ function initUpload() {
         }
       }
       show(vProg);
-      setStep('paying');
+      setStep(quotedContext.settlementTransactionId ? 'settlementPending' : 'settlementApproval');
       try {
-        settlement = await settleQuote({
-          quote: quotedContext.quote,
-          session,
-          aptosAdapter: walletController().getActiveAptosAdapter?.(),
-          solanaClient: SOL(),
+        const deployment = settlementDeploymentFor(session.chain, quotedContext.quote, cfg);
+        if (!deployment) throw Object.assign(
+          new Error('Vessel settlement contract is not configured'),
+          { code: 'settlement_unavailable' },
+        );
+        const chainClient = session.chain === 'aptos'
+          ? walletController().getAptosSettlementClient(deployment)
+          : walletController().getSolanaSettlementClient(deployment);
+        const verified = await settleContractQuote({
+          quote: {
+            ...quotedContext.quote,
+            uploadContext: quotedContext.quote.uploadContext || quotedContext.intent,
+          },
+          chainClient,
+          request: api,
+          transactionId: quotedContext.settlementTransactionId,
+          onSubmitted: ({ transactionId }) => {
+            quotedContext = Object.freeze({
+              ...quotedContext,
+              settlementTransactionId: transactionId,
+            });
+            activeUploadContext = quotedContext;
+            recovery.advance(quotedContext.quote.quoteId, 'settlement_submitted', {
+              settlementTransactionId: transactionId,
+              quoteToken: quotedContext.quote.quoteToken,
+              contractQuote: quotedContext.quote.contractQuote,
+              contractSignature: quotedContext.quote.contractSignature,
+              quotePublicKey: quotedContext.quote.quotePublicKey,
+              settlementDeployment: deployment,
+            });
+            setStep('settlementPending');
+          },
+        });
+        const settlementHash = verified.receipt?.transactionId
+          || quotedContext.settlementTransactionId;
+        settlement = Object.freeze({
+          ...verified,
+          settlementHash,
         });
         quotedContext = Object.freeze({ ...quotedContext, settlement });
         activeUploadContext = quotedContext;
         recovery.advance(quotedContext.quote.quoteId, 'paid', {
           paidAuthorization: settlement.paidAuthorization,
-          settlementHash: settlement.settlementHash,
-          paymentSignature: settlement.settlementHash,
+          settlementHash,
+          paymentSignature: settlementHash,
         });
+        setStep('receiptVerified');
       } catch (error) {
         show(vInit);
+        if (error?.code === 'receipt_pending') {
+          toast('Contract submitted. Receipt is pending; no new payment is required.', 'warn');
+          await renderRecoveryPanel();
+          return;
+        }
         const message = error?.code === 'user_rejected'
           ? 'Payment approval was rejected'
           : String(error?.message || error).slice(0, 160);

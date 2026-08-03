@@ -18,6 +18,7 @@ const CONTEXT_FIELDS = [
 const EVIDENCE_FIELDS = [
   'quoteToken', 'paidAuthorization', 'settlementHash', 'paymentSignature',
   'settlementTransactionId',
+  'contractQuote', 'contractSignature', 'quotePublicKey', 'settlementDeployment',
   'registerTransactionHash', 'acknowledgementHash', 'actualStorageUnits',
   'actualGasUsed', 'quotedAccountingMicro', 'errorCode',
   'paymentTier',
@@ -46,7 +47,9 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
   const write = (records) => storage.setItem(RECOVERY_KEY, JSON.stringify(records.slice(0, 30)));
   const fresh = (record) => {
     const age = now() - Number(record.updatedAtMs || record.createdAtMs || 0);
-    return age <= (record.paidAuthorization ? 86_400_000 : 300_000);
+    return age <= (
+      record.paidAuthorization || record.settlementTransactionId ? 86_400_000 : 300_000
+    );
   };
 
   function save(checkpoint) {

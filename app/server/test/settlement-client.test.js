@@ -1,82 +1,58 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { settleQuote } from '../public/settlement-client.js';
+import fs from 'node:fs';
+import { settleContractQuote } from '../public/settlement-client.js';
 
-test('Solana settlement pays the exact quote amount and verifies its signed token', async () => {
-  const calls = [];
-  const result = await settleQuote({
-    quote: {
-      chain: 'solana',
-      quoteId: 'quote-1',
-      quoteToken: 'vquote.signed',
-      solanaAmountMicro: '35714',
-      treasuryAta: 'treasury-ata',
-      usdcMint: 'devnet-usdc',
-      sourceAddress: 'solana-owner',
-    },
-    session: { chain: 'solana', sourceAddress: 'solana-owner' },
-    solanaClient: {
-      payUSDC: async (input) => { calls.push(['pay', input]); return { signature: 'solana-tx' }; },
-    },
-    request: async (path, options) => {
-      calls.push(['request', path, options]);
-      return { ok: true, paidAuthorization: 'vpaid.solana', settlementHash: 'solana-tx' };
-    },
-  });
-
-  assert.equal(calls[0][1].amountMicro, '35714');
-  assert.equal(calls[0][1].memo, 'quote-1');
-  assert.deepEqual(calls[1].slice(1), [
-    '/api/pay/solana/verify',
-    { method: 'POST', body: { quoteToken: 'vquote.signed', signature: 'solana-tx' } },
-  ]);
-  assert.deepEqual(result, { paidAuthorization: 'vpaid.solana', settlementHash: 'solana-tx' });
+const quote = Object.freeze({
+  quoteToken: 'vquote.context',
+  uploadContext: Object.freeze({ chain: 'solana', fileHash: '55'.repeat(32) }),
+  contractQuote: Object.freeze({ quoteId: '11'.repeat(32), amount: '35714' }),
+  contractSignature: '66'.repeat(64),
 });
 
-test('native Aptos settlement transfers the exact ShelbyUSD service fee before verification', async () => {
-  let signedPayload;
-  let verification;
-  const result = await settleQuote({
-    quote: {
-      chain: 'aptos',
-      quoteToken: 'vquote.aptos',
-      nativeServiceFeeShelbyUsdUnits: '999900',
-      aptosTreasuryAddress: '0xtreasury',
-      shelbyUsdAssetAddress: '0xshelby',
-      sourceAddress: '0xowner',
-    },
-    session: { chain: 'aptos', sourceAddress: '0xowner' },
-    aptosAdapter: {
-      signAndSubmitTransaction: async ({ data }) => {
-        signedPayload = data;
-        return { hash: '0xservicefee' };
+test('public settlement entrypoint submits to a chain contract and verifies its receipt', async () => {
+  const calls = [];
+  const result = await settleContractQuote({
+    quote,
+    chainClient: {
+      submit: async (input) => {
+        calls.push(['submit', input]);
+        return { transactionId: 'solana-contract-tx' };
       },
     },
+    onSubmitted: async (input) => calls.push(['persist', input]),
     request: async (path, options) => {
-      verification = { path, options };
-      return { ok: true, paidAuthorization: 'vpaid.aptos', settlementHash: '0xservicefee' };
+      calls.push(['verify', path, options]);
+      return {
+        paidAuthorization: 'vpaid.receipt',
+        receipt: { transactionId: 'solana-contract-tx' },
+      };
     },
   });
 
-  assert.deepEqual(signedPayload, {
-    function: '0x1::primary_fungible_store::transfer',
-    functionArguments: ['0xshelby', '0xtreasury', '999900'],
-  });
-  assert.deepEqual(verification, {
-    path: '/api/pay/aptos/verify',
-    options: { method: 'POST', body: { quoteToken: 'vquote.aptos', transactionHash: '0xservicefee' } },
-  });
-  assert.deepEqual(result, { paidAuthorization: 'vpaid.aptos', settlementHash: '0xservicefee' });
+  assert.deepEqual(calls.map(([kind]) => kind), ['submit', 'persist', 'verify']);
+  assert.equal(calls[2][1], '/api/settlements/verify');
+  assert.equal(result.receipt.transactionId, 'solana-contract-tx');
 });
 
-test('settlement rejects a mismatched session before opening an approval', async () => {
-  await assert.rejects(
-    () => settleQuote({
-      quote: { chain: 'aptos', sourceAddress: '0xquoted' },
-      session: { chain: 'aptos', sourceAddress: '0xchanged' },
-      aptosAdapter: {},
-      request: async () => ({}),
-    }),
-    (error) => error.code === 'settlement_context_mismatch',
-  );
+test('recorded transaction recovery verifies without another wallet approval', async () => {
+  let submits = 0;
+  let verifiedTransaction = '';
+  await settleContractQuote({
+    quote,
+    transactionId: 'recorded-contract-tx',
+    chainClient: { submit: async () => { submits += 1; } },
+    request: async (_path, options) => {
+      verifiedTransaction = options.body.transactionId;
+      return { paidAuthorization: 'vpaid.recovered', receipt: { transactionId: verifiedTransaction } };
+    },
+  });
+
+  assert.equal(submits, 0);
+  assert.equal(verifiedTransaction, 'recorded-contract-tx');
+});
+
+test('legacy direct-transfer settlement code is absent from the browser entrypoint', () => {
+  const source = fs.readFileSync(new URL('../public/settlement-client.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /payUSDC|primary_fungible_store::transfer|treasuryAta|\/api\/pay\//);
 });

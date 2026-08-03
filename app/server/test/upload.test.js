@@ -44,9 +44,11 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   }
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Wallet-owned upload/i);
-  assert.match(html, /Aptos wallets sign directly and pay APT \+ ShelbyUSD/i);
+  assert.match(html, /Vessel contract fee/i);
+  assert.match(html, /APT \+ ShelbyUSD protocol costs/i);
   assert.match(html, /Solana wallets use sponsored DAA/i);
   assert.match(html, /testnet USDC/i);
+  assert.match(html, /Vessel Program vault/i);
   assert.match(html, /Test tokens — no real monetary value/);
   assert.match(html, /role="radiogroup"[^>]*aria-labelledby="retention-title"/);
   assert.match(html, /id="custom-days"[^>]*min="1"[^>]*max="365"[^>]*step="1"/);
@@ -60,6 +62,13 @@ test('Upload routes through wallet sessions without funding links or server-mana
   assert.match(source, /walletController\(\)\.upload\(file/);
   assert.match(source, /insufficient_apt/);
   assert.match(source, /insufficient_shelby_usd/);
+  assert.match(source, /settleContractQuote\(\{/);
+  assert.match(source, /getAptosSettlementClient/);
+  assert.match(source, /getSolanaSettlementClient/);
+  assert.match(source, /settlementTransactionId/);
+  assert.match(source, /CHECK PAYMENT STATUS/);
+  assert.doesNotMatch(source, /settleQuote\(\{/);
+  assert.doesNotMatch(source, /VERIFYING USDC|treasury wallet|direct transfer/i);
   assert.doesNotMatch(source, /\/api\/upload/);
   assert.doesNotMatch(source, /faucet/i);
 });
