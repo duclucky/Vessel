@@ -29,3 +29,9 @@ test('Shelby read proxy forwards a bounded byte range and preserves partial resp
   assert.match(server, /'content-range'/);
   assert.match(server, /'accept-ranges'/);
 });
+
+test('Shelby read proxy restores the image MIME when upstream returns generic bytes', () => {
+  assert.match(server, /upstreamContentType === 'application\/octet-stream'/);
+  assert.match(server, /mimeForKey\(blobName\)/);
+  assert.match(server, /res\.setHeader\('content-type', responseContentType\)/);
+});

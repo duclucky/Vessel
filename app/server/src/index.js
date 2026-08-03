@@ -335,8 +335,15 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
       return send(res, upstream.status || 502, { error: 'Shelby blob is unavailable' });
     }
     res.status(upstream.status);
+    const upstreamContentType = String(upstream.headers.get('content-type') || '')
+      .split(';')[0]
+      .toLowerCase();
+    const responseContentType = upstreamContentType === 'application/octet-stream'
+      ? mimeForKey(blobName)
+      : (upstreamContentType || mimeForKey(blobName));
+    res.setHeader('content-type', responseContentType);
     for (const header of [
-      'content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified',
+      'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified',
     ]) {
       const value = upstream.headers.get(header);
       if (value) res.setHeader(header, value);
