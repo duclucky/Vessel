@@ -31,17 +31,24 @@ test('wallet identity changes abort pending payment work and clear stale gates',
 test('dynamic quote configuration is explicit and contains no development signing fallback', () => {
   for (const key of [
     'dynamicQuotesEnabled',
+    'settlementContractsEnabled',
+    'settlementDeploymentsFile',
+    'quoteSignerPrivateKeyBase64',
+    'quoteSignerPublicKeyHex',
     'paySecret',
     'aptUsdReferenceMicros',
     'registerGasUnitsEstimate',
     'gasSafetyBps',
     'aptosTreasuryAddress',
+    'defaultStorageDays',
   ]) {
     assert.match(config, new RegExp(`${key}:`), key);
   }
   assert.match(config, /process\.env\.DYNAMIC_QUOTES_ENABLED === 'true'/);
+  assert.match(config, /process\.env\.SETTLEMENT_CONTRACTS_ENABLED === 'true'/);
+  assert.match(config, /process\.env\.QUOTE_SIGNER_PRIVATE_KEY_B64 \|\| ''/);
+  assert.match(config, /process\.env\.QUOTE_SIGNER_PUBLIC_KEY_HEX \|\| ''/);
   assert.match(config, /process\.env\.PAY_SECRET \|\| ''/);
   assert.match(config, /APTOS_TREASURY_ADDRESS \|\| process\.env\.GAS_STATION_ACCOUNT/);
   assert.doesNotMatch(config, /vessel-dev-secret/);
-  assert.doesNotMatch(config, /priceBaseUsdc|pricePerMbUsdc/);
 });

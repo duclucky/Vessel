@@ -10,6 +10,7 @@ export const config = {
   shelbySolanaSecretKey: process.env.SHELBY_SOLANA_SECRET_KEY || '',
   daaDomain: process.env.DAPP_DOMAIN || 'vessel.demo',
   maxUploadBytes: Number(process.env.MAX_UPLOAD_BYTES || 25 * 1024 * 1024), // 25 MB
+  defaultStorageDays: Number(process.env.DEFAULT_STORAGE_DAYS || 30),
   ipfsGateway: process.env.IPFS_GATEWAY || 'https://ipfs.io/ipfs/',
   // Optional: same asset pinned to IPFS for a fair latency comparison. If unset → ipfs = null.
   ipfsCompareCid: process.env.IPFS_COMPARE_CID || '',
@@ -22,6 +23,10 @@ export const config = {
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
   dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',
+  settlementContractsEnabled: process.env.SETTLEMENT_CONTRACTS_ENABLED === 'true',
+  settlementDeploymentsFile: process.env.SETTLEMENT_DEPLOYMENTS_FILE || '../../deployments/vessel-settlement.testnet.json',
+  quoteSignerPrivateKeyBase64: process.env.QUOTE_SIGNER_PRIVATE_KEY_B64 || '',
+  quoteSignerPublicKeyHex: process.env.QUOTE_SIGNER_PUBLIC_KEY_HEX || '',
   paySecret: process.env.PAY_SECRET || '', // SERVER-ONLY: HMAC secret for quote/payment tokens
   aptUsdReferenceMicros: BigInt(process.env.APT_USD_REFERENCE_MICROS || '5000000'),
   registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
