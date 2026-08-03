@@ -48,3 +48,15 @@ test('browser modules parse after the shell consolidation', async () => {
     assert.equal(result.status, 0, `${file}: ${result.stderr}`);
   }
 });
+
+test('wallet bundle source is present and every dApp page loads it before app.js', () => {
+  assert.equal(fs.existsSync(path.join(publicDir, 'vessel-wallets.js')), true);
+  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html']) {
+    const html = readPage(page);
+    assert.match(html, /<script src="\/vessel-wallets\.js"><\/script>/, page);
+    assert.ok(
+      html.indexOf('/vessel-wallets.js') < html.indexOf('/app.js'),
+      `${page}: wallet bundle must load before app.js`,
+    );
+  }
+});
