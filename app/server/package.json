@@ -9,7 +9,7 @@
     "dev": "node --watch src/index.js",
     "build:client": "node build-client.mjs",
     "test": "node --test test/*.test.js",
-    "test:settlement": "node --test test/quote-v1.test.js test/contract-quotes.test.js test/settlement-deployments.test.js test/settlement-adapters.test.js test/contract-settlement-client.test.js",
+    "test:settlement": "node --test test/quote-v1.test.js test/contract-quotes.test.js test/settlement-deployments.test.js test/settlement-adapters.test.js test/contract-settlement-client.test.js test/solana-contract-settlement.test.js test/solana-contract-receipt.test.js",
     "test:ui": "node --test test/*.test.js",
     "check": "npm test && npm run build:client"
   },

@@ -24,7 +24,9 @@ import { createTelemetry } from './lib/telemetry.js';
 import { loadSettlementDeployments } from './lib/settlement/deployments.js';
 import { SettlementAdapterRegistry } from './lib/settlement/adapters.js';
 import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
+import { SolanaSettlementAdapter } from './lib/settlement/solana-adapter.js';
 import { verifyContractQuoteSignature } from './lib/settlement/contract-quotes.js';
+import { Connection } from '@solana/web3.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -60,6 +62,13 @@ try {
         moduleAddress: settlementDeployments.aptos.moduleAddress,
         vaultAddress: settlementDeployments.aptos.vaultAddress,
         chainId: settlementDeployments.aptos.chainId,
+      }),
+      solana: new SolanaSettlementAdapter({
+        connection: new Connection(config.solanaRpc, 'confirmed'),
+        programId: settlementDeployments.solana.programId,
+        vaultAta: settlementDeployments.solana.vaultAta,
+        acceptedMint: settlementDeployments.solana.acceptedMint,
+        network: 1,
       }),
     });
   }
