@@ -68830,6 +68830,15 @@ ${fields.join("\n")}`;
     }
     return output;
   }
+  function sameInstruction(expected, signed) {
+    return expected.programId.equals(signed.programId) && expected.keys.length === signed.keys.length && expected.keys.every((key, index2) => {
+      const signedKey = signed.keys[index2];
+      return key.pubkey.equals(signedKey.pubkey) && key.isSigner === signedKey.isSigner && key.isWritable === signedKey.isWritable;
+    }) && Buffer2.from(expected.data).equals(Buffer2.from(signed.data));
+  }
+  function preservesSettlementIntent(expected, signed) {
+    return expected.feePayer?.equals(signed.feePayer) && expected.instructions.length === signed.instructions.length && expected.instructions.every((instruction, index2) => sameInstruction(instruction, signed.instructions[index2]));
+  }
   async function quoteDigest(quote) {
     const bytes = concatBytes2([
       Uint8Array.from([quote.version, quote.chain]),
@@ -68941,7 +68950,10 @@ ${fields.join("\n")}`;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     let rawSignature;
     if (canSign) {
-      const expectedMessage = transaction.serializeMessage();
+      const expectedTransaction = import_web36.Transaction.from(transaction.serialize({
+        requireAllSignatures: false,
+        verifySignatures: false
+      }));
       const signedResult = await provider2.signTransaction(transaction);
       const signedBytes = signedResult?.signedTransaction || signedResult;
       if (!(signedBytes instanceof Uint8Array)) {
@@ -68951,7 +68963,7 @@ ${fields.join("\n")}`;
         );
       }
       const signedTransaction = import_web36.Transaction.from(signedBytes);
-      if (!Buffer2.from(signedTransaction.serializeMessage()).equals(Buffer2.from(expectedMessage))) {
+      if (!preservesSettlementIntent(expectedTransaction, signedTransaction)) {
         throw settlementError(
           "Solana wallet changed the settlement transaction",
           "settlement_context_mismatch"

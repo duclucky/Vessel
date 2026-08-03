@@ -118,6 +118,26 @@ function concatBytes(parts) {
   return output;
 }
 
+function sameInstruction(expected, signed) {
+  return expected.programId.equals(signed.programId)
+    && expected.keys.length === signed.keys.length
+    && expected.keys.every((key, index) => {
+      const signedKey = signed.keys[index];
+      return key.pubkey.equals(signedKey.pubkey)
+        && key.isSigner === signedKey.isSigner
+        && key.isWritable === signedKey.isWritable;
+    })
+    && Buffer.from(expected.data).equals(Buffer.from(signed.data));
+}
+
+function preservesSettlementIntent(expected, signed) {
+  return expected.feePayer?.equals(signed.feePayer)
+    && expected.instructions.length === signed.instructions.length
+    && expected.instructions.every((instruction, index) => (
+      sameInstruction(instruction, signed.instructions[index])
+    ));
+}
+
 async function quoteDigest(quote) {
   const bytes = concatBytes([
     Uint8Array.from([quote.version, quote.chain]),
@@ -241,7 +261,10 @@ export async function submitSolanaContractSettlement({
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   let rawSignature;
   if (canSign) {
-    const expectedMessage = transaction.serializeMessage();
+    const expectedTransaction = Transaction.from(transaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false,
+    }));
     const signedResult = await provider.signTransaction(transaction);
     const signedBytes = signedResult?.signedTransaction || signedResult;
     if (!(signedBytes instanceof Uint8Array)) {
@@ -251,7 +274,7 @@ export async function submitSolanaContractSettlement({
       );
     }
     const signedTransaction = Transaction.from(signedBytes);
-    if (!Buffer.from(signedTransaction.serializeMessage()).equals(Buffer.from(expectedMessage))) {
+    if (!preservesSettlementIntent(expectedTransaction, signedTransaction)) {
       throw settlementError(
         'Solana wallet changed the settlement transaction',
         'settlement_context_mismatch',

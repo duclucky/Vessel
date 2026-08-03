@@ -100,14 +100,43 @@ test('Solana wallet signs then broadcasts the verified transaction through Devne
   );
 });
 
-test('mutated or unsigned wallet results fail before Devnet broadcast', async () => {
+test('wallet may refresh the blockhash before signing without changing settlement intent', async () => {
+  let broadcasts = 0;
+  const refreshedBlockhash = Keypair.generate().publicKey.toBase58();
+  const result = await submitSolanaContractSettlement({
+    provider: {
+      publicKey: owner,
+      async signTransaction(transaction) {
+        transaction.recentBlockhash = refreshedBlockhash;
+        transaction.partialSign(ownerKeypair);
+        return { signedTransaction: transaction.serialize() };
+      },
+    },
+    connection: {
+      getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58() }),
+      sendRawTransaction: async (bytes) => {
+        broadcasts += 1;
+        assert.equal(Transaction.from(bytes).recentBlockhash, refreshedBlockhash);
+        return 'refreshed-blockhash-tx';
+      },
+    },
+    deployment,
+    contractQuote: quote,
+    contractSignature: '66'.repeat(64),
+  });
+
+  assert.deepEqual(result, { transactionId: 'refreshed-blockhash-tx' });
+  assert.equal(broadcasts, 1);
+});
+
+test('instruction mutations or unsigned wallet results fail before Devnet broadcast', async () => {
   for (const kind of ['mutated', 'unsigned']) {
     let broadcasts = 0;
     const provider = {
       publicKey: owner,
       async signTransaction(transaction) {
         if (kind === 'mutated') {
-          transaction.recentBlockhash = Keypair.generate().publicKey.toBase58();
+          transaction.instructions[1].data = Buffer.from([0xde, 0xad]);
           transaction.partialSign(ownerKeypair);
           return { signedTransaction: transaction.serialize() };
         }
