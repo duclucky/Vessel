@@ -7,6 +7,7 @@ import bs58 from 'bs58';
 import { loadSettlementDeployments } from '../src/lib/settlement/deployments.js';
 
 const key = (byte) => bs58.encode(Buffer.alloc(32, byte));
+const signature = (byte) => bs58.encode(Buffer.alloc(64, byte));
 const quotePublicKey = '77'.repeat(32);
 const validManifest = () => ({
   schemaVersion: 1,
@@ -29,7 +30,7 @@ const validManifest = () => ({
     vaultAta: key(3),
     squadsMultisig: key(4),
     acceptedMint: key(5),
-    deploymentSignature: key(6),
+    deploymentSignature: signature(6),
     timelockSeconds: 86400,
   },
 });
@@ -62,6 +63,7 @@ test('enabled settlement registry rejects undeployed or inconsistent records', (
   const invalid = [
     (value) => { value.aptos.moduleAddress = '0x0'; },
     (value) => { value.solana.programId = '11111111111111111111111111111111'; },
+    (value) => { value.solana.deploymentSignature = key(6); },
     (value) => { value.quotePublicKey = '88'.repeat(32); },
     (value) => { value.aptos.timelockSeconds = 86400; },
     (value) => { value.solana.timelockSeconds = 60; },

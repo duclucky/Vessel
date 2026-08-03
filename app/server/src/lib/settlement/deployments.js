@@ -33,6 +33,20 @@ function requiredSolanaKey(value, field) {
   return text;
 }
 
+function requiredSolanaSignature(value, field) {
+  const text = String(value || '');
+  let bytes;
+  try {
+    bytes = Buffer.from(bs58.decode(text));
+  } catch {
+    throw deploymentError(`${field} must be a Solana transaction signature`);
+  }
+  if (bytes.length !== 64 || bytes.every((byte) => byte === 0)) {
+    throw deploymentError(`${field} must be a 64-byte Solana transaction signature`);
+  }
+  return text;
+}
+
 function requiredHex32(value, field) {
   const text = String(value || '').replace(/^0x/, '').toLowerCase();
   if (!HEX_32.test(text) || /^0+$/.test(text)) throw deploymentError(`${field} must be 32 bytes`);
@@ -106,7 +120,7 @@ export function loadSettlementDeployments({
     vaultAta: requiredSolanaKey(manifest.solana.vaultAta, 'Solana vault ATA'),
     squadsMultisig: requiredSolanaKey(manifest.solana.squadsMultisig, 'Squads multisig'),
     acceptedMint: requiredSolanaKey(manifest.solana.acceptedMint, 'Solana accepted mint'),
-    deploymentSignature: requiredSolanaKey(
+    deploymentSignature: requiredSolanaSignature(
       manifest.solana.deploymentSignature,
       'Solana deployment signature',
     ),
