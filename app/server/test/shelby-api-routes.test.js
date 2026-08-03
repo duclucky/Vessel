@@ -21,3 +21,11 @@ test('Shelby API key stays server-side across register, multipart write, list, a
   assert.match(server, /contentType: mimeForKey\(row\.blobNameSuffix\)/);
   assert.doesNotMatch(wallets, /coordination\.getAccountBlobs/);
 });
+
+test('Shelby read proxy forwards a bounded byte range and preserves partial response metadata', () => {
+  assert.match(server, /\^bytes=\\d\+-\\d\*\$/);
+  assert.match(server, /upstreamHeaders\.Range = requestedRange/);
+  assert.match(server, /res\.status\(upstream\.status\)/);
+  assert.match(server, /'content-range'/);
+  assert.match(server, /'accept-ranges'/);
+});

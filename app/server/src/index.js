@@ -13,6 +13,7 @@ import {
 import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
+import { assertMetadataImageAvailable, resolveMetadataImageUrl } from './lib/metadata-source.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
 import { SponsorManager } from './lib/sponsor.js';
 import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
@@ -323,14 +324,20 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
     if (!/^0x[0-9a-f]{64}$/.test(account) || !blobName || blobName.includes('..')) {
       return send(res, 400, { error: 'invalid Shelby blob path', code: 'invalid_blob_name' });
     }
+    const upstreamHeaders = { Authorization: `Bearer ${config.shelbyApiKey}` };
+    const requestedRange = String(req.headers.range || '');
+    if (/^bytes=\d+-\d*$/.test(requestedRange)) upstreamHeaders.Range = requestedRange;
     const upstream = await fetch(
       `${shelbyClient.baseUrl}/v1/blobs/${account}/${encodeBlobPath(blobName)}`,
-      { headers: { Authorization: `Bearer ${config.shelbyApiKey}` } },
+      { headers: upstreamHeaders },
     );
     if (!upstream.ok || !upstream.body) {
       return send(res, upstream.status || 502, { error: 'Shelby blob is unavailable' });
     }
-    for (const header of ['content-type', 'content-length', 'etag', 'last-modified']) {
+    res.status(upstream.status);
+    for (const header of [
+      'content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified',
+    ]) {
       const value = upstream.headers.get(header);
       if (value) res.setHeader(header, value);
     }
@@ -432,8 +439,12 @@ app.post('/api/metadata', async (req, res) => {
   try {
     const { name, description, imageKey, imageUrl: imageUrlIn, external_url, attributes } = req.body || {};
     if (!imageKey && !imageUrlIn) return send(res, 400, { error: 'imageKey or imageUrl required' });
-    // Prefer the visitor's real Shelby URL (their DAA account owns the blob); fall back to the proxy.
-    const imageUrl = imageUrlIn || `${config.publicBase}/api/media/${imageKey}`;
+    const imageUrl = resolveMetadataImageUrl({
+      imageUrl: imageUrlIn,
+      imageKey,
+      publicBase: config.publicBase,
+    });
+    await assertMetadataImageAvailable({ imageUrl });
     const json = { name: name || '', description: description || '', image: imageUrl };
     if (external_url) json.external_url = external_url;
     if (Array.isArray(attributes) && attributes.length) json.attributes = attributes;

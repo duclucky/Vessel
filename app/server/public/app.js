@@ -1001,8 +1001,29 @@ async function initMetadata() {
   const name = $('#nft-name'), desc = $('#nft-desc'), link = $('#nft-link'), preview = $('#json-preview');
   const gen = $('#generate-btn'), result = $('#result-area');
   const { key, url } = ledger.selected();
-  const imageUrl = url || (key ? `${API}/api/media/${key}` : '');
+  const rawImageUrl = url || (key ? `${API}/api/media/${key}` : '');
+  const imageUrl = url ? new URL(url, window.location.origin).href : rawImageUrl;
+  const previewImage = $('#meta-image-preview');
+  const previewFallback = $('#meta-image-fallback');
+  const sourceStatus = $('#meta-image-status');
+  let sourceReady = false;
   const imgPrev = $('#meta-image-key'); if (imgPrev) imgPrev.textContent = key ? shortMid(key, 10) : '(pick from gallery)';
+  function setSourceState(state) {
+    sourceReady = state === 'ready';
+    if (gen) gen.disabled = !sourceReady;
+    previewImage?.classList.toggle('hidden', state !== 'ready');
+    previewFallback?.classList.toggle('hidden', state === 'ready');
+    if (!sourceStatus) return;
+    sourceStatus.classList.toggle('text-error', state === 'error');
+    sourceStatus.classList.toggle('text-primary', state === 'ready');
+    sourceStatus.classList.toggle('text-outline', state !== 'error' && state !== 'ready');
+    sourceStatus.textContent = ({
+      empty: 'Choose an artifact from your Vault to continue.',
+      loading: 'Checking source artifact availability…',
+      ready: 'Source artifact is available and ready for metadata.',
+      error: 'Source artifact is unavailable. Choose another artifact from your Vault.',
+    })[state];
+  }
   function build() {
     const o = { name: name?.value || '', description: desc?.value || '', image: imageUrl || '(upload an image first)' };
     if (link?.value) o.external_url = link.value;
@@ -1011,17 +1032,28 @@ async function initMetadata() {
   }
   [name, desc, link].forEach((el) => el && el.addEventListener('input', build));
   build();
+  if (previewImage && imageUrl) {
+    setSourceState('loading');
+    previewImage.addEventListener('load', () => setSourceState('ready'), { once: true });
+    previewImage.addEventListener('error', () => setSourceState('error'), { once: true });
+    previewImage.src = imageUrl;
+  } else {
+    setSourceState('empty');
+  }
   if (gen) gen.onclick = async () => {
-    if (!key) { toast('Upload an image first (Gallery → pick one)', 'warn'); return; }
+    if (!key || !sourceReady) { toast('Choose an available image from your Vault first', 'warn'); return; }
     gen.disabled = true; const orig = gen.innerHTML; gen.innerHTML = 'Processing…';
     try {
       const r = await api('/api/metadata', { method: 'POST', body: { name: name?.value, description: desc?.value, imageKey: key, imageUrl, external_url: link?.value } });
       if (result) { result.classList.remove('hidden'); result.classList.add('flex'); }
       const out = $('#result-uri'); if (out) out.value = r.tokenUri;
-      $('#copy-uri')?.addEventListener('click', () => copy(r.tokenUri));
+      const copyUri = $('#copy-uri'); if (copyUri) copyUri.onclick = () => copy(r.tokenUri);
       toast('TokenURI hosted on Shelby', 'ok');
-    } catch (e) { toast(e.message, 'error'); }
-    gen.disabled = false; gen.innerHTML = orig;
+    } catch (e) {
+      if (e.code === 'metadata_source_unavailable') setSourceState('error');
+      toast(e.message, 'error');
+    }
+    gen.disabled = !sourceReady; gen.innerHTML = orig;
   };
 }
 
