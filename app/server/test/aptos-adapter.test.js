@@ -4,17 +4,33 @@ import { createAptosAdapter } from '../client-src/wallets/aptos-adapter.js';
 
 const approved = (args) => ({ status: 'Approved', args });
 
-function wallet({ network = { name: 'testnet', chainId: 2 }, changeNetwork } = {}) {
+function wallet({
+  network = { name: 'testnet', chainId: 2 },
+  changeNetwork,
+  calls,
+  connectError,
+} = {}) {
   const account = { address: { toString: () => '0xabc' } };
   let accountListener;
   let networkListener;
   const provider = {
     name: 'Petra',
     features: {
-      'aptos:connect': { connect: async () => approved(account) },
+      'aptos:connect': {
+        connect: async (...args) => {
+          calls?.push(['connect', ...args]);
+          if (connectError) throw connectError;
+          return approved(account);
+        },
+      },
       'aptos:disconnect': { disconnect: async () => {} },
       'aptos:account': { account: async () => account },
-      'aptos:network': { network: async () => network },
+      'aptos:network': {
+        network: async () => {
+          calls?.push(['network']);
+          return network;
+        },
+      },
       'aptos:changeNetwork': changeNetwork ? { changeNetwork } : undefined,
       'aptos:onAccountChange': {
         onAccountChange: async (listener) => { accountListener = listener; },
@@ -44,6 +60,30 @@ test('native Aptos session uses the wallet address as storage address', async ()
   assert.equal(session.mode, 'native');
 });
 
+test('Petra connect passes only the silent flag and checks network afterward', async () => {
+  const calls = [];
+  const provider = wallet({ calls });
+  const adapter = createAptosAdapter({ id: 'aptos:petra:1', name: 'Petra', provider });
+
+  await adapter.connect({ silent: false });
+
+  assert.deepEqual(calls, [['connect', false], ['network']]);
+});
+
+test('opaque Petra API failures become actionable without extension internals', async () => {
+  const provider = wallet({
+    connectError: Object.assign(new Error('PetraApiError'), { stack: 'secret extension stack' }),
+  });
+  const adapter = createAptosAdapter({ id: 'aptos:petra:1', name: 'Petra', provider });
+
+  await assert.rejects(
+    () => adapter.connect(),
+    (error) => error.code === 'provider_unavailable'
+      && error.message === 'Petra could not connect. Unlock Petra and try again.'
+      && !error.message.includes('stack'),
+  );
+});
+
 test('wrong network requests Aptos Testnet when changeNetwork exists', async () => {
   let requested;
   const provider = wallet({
@@ -70,6 +110,22 @@ test('wrong network without changeNetwork exposes manual switch state', async ()
   await assert.rejects(
     () => adapter.connect({ silent: false }),
     (error) => error.code === 'switch_unsupported',
+  );
+});
+
+test('rejected network switch retains the connected session for manual retry', async () => {
+  const adapter = createAptosAdapter({
+    id: 'aptos:petra:1',
+    name: 'Petra',
+    provider: wallet({
+      network: { name: 'mainnet', chainId: 1 },
+      changeNetwork: async () => ({ status: 'Rejected' }),
+    }),
+  });
+
+  await assert.rejects(
+    () => adapter.connect({ silent: false }),
+    (error) => error.code === 'wrong_network' && error.session?.sourceAddress === '0xabc',
   );
 });
 
