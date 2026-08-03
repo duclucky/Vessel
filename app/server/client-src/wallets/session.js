@@ -41,6 +41,27 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
     }
   };
 
+  const attachAdapter = (descriptor, session) => {
+    storage.setItem(KEYS.id, descriptor.id);
+    storage.setItem(KEYS.chain, descriptor.chain);
+    offAdapter?.();
+    offAdapter = activeAdapter.subscribe((event) => {
+      if (event?.status === 'network_required') {
+        publish({
+          status: 'network_required',
+          session: event.session || state.session,
+          error: event.error || '',
+        });
+        return;
+      }
+      if (event?.session) {
+        publish({ session: event.session, status: 'ready', error: '' });
+        return;
+      }
+      void disconnect();
+    });
+  };
+
   const connect = async (walletId, { silent = false } = {}) => {
     const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
     if (!descriptor?.enabled) throw new Error('Wallet is not available for connection');
@@ -54,31 +75,35 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
         return null;
       }
 
-      storage.setItem(KEYS.id, descriptor.id);
-      storage.setItem(KEYS.chain, descriptor.chain);
-      offAdapter?.();
-      offAdapter = activeAdapter.subscribe((event) => {
-        if (event?.status === 'network_required') {
-          publish({
-            status: 'network_required',
-            session: event.session || state.session,
-            error: event.error || '',
-          });
-          return;
-        }
-        if (event?.session) {
-          publish({ session: event.session, status: 'ready', error: '' });
-          return;
-        }
-        void disconnect();
-      });
+      attachAdapter(descriptor, session);
       publish({ session, status: 'ready', error: '' });
       return session;
     } catch (error) {
       const networkRequired = ['wrong_network', 'switch_unsupported'].includes(error?.code);
+      if (networkRequired && error.session) attachAdapter(descriptor, error.session);
       publish({
         status: networkRequired ? 'network_required' : 'error',
-        session: null,
+        session: networkRequired ? error.session || null : null,
+        error: error?.message || String(error),
+      });
+      throw error;
+    }
+  };
+
+  const ensureNetwork = async () => {
+    if (!activeAdapter?.ensureNetwork || !state.session) {
+      throw new Error('Connect an Aptos wallet before switching network');
+    }
+    publish({ status: 'connecting', error: '' });
+    try {
+      await activeAdapter.ensureNetwork();
+      publish({ status: 'ready', error: '' });
+      return state.session;
+    } catch (error) {
+      publish({
+        status: ['wrong_network', 'switch_unsupported'].includes(error?.code)
+          ? 'network_required'
+          : 'error',
         error: error?.message || String(error),
       });
       throw error;
@@ -104,7 +129,9 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
     connect,
     restore,
     disconnect,
+    ensureNetwork,
     getState: () => state,
+    getActiveAdapter: () => activeAdapter,
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

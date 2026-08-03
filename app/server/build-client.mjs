@@ -42,6 +42,13 @@ await Promise.all([
   }),
 ]);
 
+// Some upstream SDK error strings contain spaces before physical newlines. They are
+// harmless at runtime but make committed browser artifacts fail `git diff --check`.
+for (const file of ['public/vessel-solana.js', 'public/vessel-wallets.js']) {
+  const generated = fs.readFileSync(file, 'utf8');
+  fs.writeFileSync(file, generated.replace(/[ \t]+$/gm, ''));
+}
+
 const bundleSizes = ['vessel-solana.js', 'vessel-wallets.js']
   .map((file) => `${file} ${(fs.statSync(`public/${file}`).size / 1024).toFixed(0)} KB`)
   .join('; ');

@@ -3,6 +3,8 @@ import { createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createPhantomCompatibilityAdapter } from './wallets/phantom-compat.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
+import { uploadNativeAptos } from './wallets/aptos-upload.js';
+import { createUploadRouter } from './wallets/upload-router.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -55,8 +57,32 @@ const controller = createWalletController({
   },
 });
 
+const uploadRouter = createUploadRouter({
+  aptosUpload: (file, context) => uploadNativeAptos(file, {
+    ...context,
+    adapter: controller.getActiveAdapter(),
+  }),
+  solanaUpload: (file, context) => {
+    if (!window.VesselSolana?.uploadSponsored) {
+      throw new Error('Reconnect a supported Solana wallet before uploading');
+    }
+    return window.VesselSolana.uploadSponsored(file, {
+      paymentId: context.paymentId,
+      uploadToken: context.uploadToken,
+      onStep: context.onStep,
+    });
+  },
+});
+const { getActiveAdapter: _getActiveAdapter, ...publicController } = controller;
+
 window.VesselWallets = {
-  ...controller,
+  ...publicController,
+  upload(file, context = {}) {
+    return uploadRouter.upload(file, {
+      ...context,
+      session: controller.getState().session,
+    });
+  },
   open: (opener) => window.dispatchEvent(new CustomEvent('vessel:wallet-open', {
     detail: { opener },
   })),

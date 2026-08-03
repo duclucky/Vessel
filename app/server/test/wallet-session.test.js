@@ -105,6 +105,42 @@ test('adapter network events preserve the session and expose network-required st
   assert.equal(controller.getState().status, 'network_required');
 });
 
+test('wrong-network connection keeps the Aptos account and can retry the active adapter', async () => {
+  const store = storage();
+  const descriptor = { id: 'aptos:petra:1', chain: 'aptos', enabled: true };
+  const session = {
+    chain: 'aptos', walletId: descriptor.id, walletName: 'Petra', sourceAddress: '0x1',
+    sourceNetwork: 'testnet', storageAddress: '0x1', mode: 'native',
+  };
+  let networkReady = false;
+  const controller = createWalletController({
+    registry: { scan: async () => [descriptor], subscribe: () => () => {} },
+    storage: store,
+    resolveAdapter: () => ({
+      connect: async () => {
+        if (networkReady) return session;
+        throw Object.assign(new Error('Switch to Aptos Testnet'), {
+          code: 'switch_unsupported',
+          session,
+        });
+      },
+      ensureNetwork: async () => { networkReady = true; },
+      disconnect: async () => {},
+      subscribe: () => () => {},
+    }),
+  });
+  await controller.scan();
+
+  await assert.rejects(() => controller.connect(descriptor.id), /Switch to Aptos Testnet/);
+  assert.equal(controller.getState().status, 'network_required');
+  assert.equal(controller.getState().session, session);
+  assert.equal(store.getItem('vessel.wallet.id'), descriptor.id);
+
+  await controller.ensureNetwork();
+  assert.equal(controller.getState().status, 'ready');
+  assert.equal(controller.getState().session, session);
+});
+
 test('disconnect clears app state even when the provider disconnect fails', async () => {
   const store = storage();
   const descriptor = { id: 'solana:phantom:1', chain: 'solana', enabled: true };

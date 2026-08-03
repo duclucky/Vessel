@@ -60,7 +60,9 @@ function renderWallet() {
     el.dataset.connected = presentation.connected ? 'true' : 'false';
     el.onclick = (event) => {
       event.preventDefault();
-      if (next.session) walletUi?.openAccountMenu(el);
+      if (next.status === 'network_required') {
+        void controller.ensureNetwork().catch((error) => toast(error.message, 'error'));
+      } else if (next.session) walletUi?.openAccountMenu(el);
       else void walletUi?.open(el);
     };
   });
@@ -79,14 +81,29 @@ function page() {
 function initLanding() {}
 
 async function initIdentity() {
-  const renderIdentitySession = (session) => {
+  const renderIdentitySession = (next) => {
+    const { session, status: walletStatus } = next;
     const origin = $('#origin-wallet');
     const storage = $('#derived-account');
+    const originLabel = $('#origin-wallet-label');
+    const storageLabel = $('#storage-account-label');
     if (origin) origin.textContent = session ? shortMid(session.sourceAddress) : '—';
     if (storage) storage.textContent = session ? shortMid(session.storageAddress) : '(connect wallet)';
+    if (originLabel) {
+      originLabel.textContent = session?.chain === 'aptos'
+        ? 'Controlling wallet (Aptos)'
+        : session?.chain === 'solana' ? 'Controlling wallet (Solana)' : 'Connected wallet';
+    }
+    if (storageLabel) {
+      storageLabel.textContent = session?.mode === 'native'
+        ? 'Native Aptos storage account'
+        : session?.mode === 'daa' ? 'Derived Aptos storage account' : 'Shelby storage account';
+    }
     const status = $('#auth-status');
     if (status) {
-      status.textContent = session
+      status.textContent = walletStatus === 'network_required'
+        ? 'Switch your wallet to Aptos Testnet'
+        : session
         ? 'Wallet connected · storage identity ready'
         : 'Choose an Aptos or Solana wallet';
     }
@@ -94,12 +111,15 @@ async function initIdentity() {
     window.__storageAcct = session?.storageAddress || '';
   };
 
-  renderIdentitySession(walletController().getState().session);
-  walletController().subscribe((next) => renderIdentitySession(next.session));
+  renderIdentitySession(walletController().getState());
+  walletController().subscribe(renderIdentitySession);
   const signBtn = $('#sign-btn');
   if (signBtn) signBtn.onclick = (event) => {
     event.preventDefault();
-    if (!walletController().getState().session) void walletUi.open(signBtn);
+    const next = walletController().getState();
+    if (next.status === 'network_required') {
+      void walletController().ensureNetwork().catch((error) => toast(error.message, 'error'));
+    } else if (!next.session) void walletUi.open(signBtn);
   };
   $$('.js-copy-origin').forEach((button) => {
     button.onclick = () => copy(walletController().getState().session?.sourceAddress || '');
@@ -117,10 +137,12 @@ function initUpload() {
 
   const SOL = () => window.VesselSolana;
 
-  const stepPct = { signing: 35, paying: 55, sponsoring: 80, uploading: 92 };
+  const stepPct = { encoding: 20, signing: 40, paying: 55, confirming: 72, sponsoring: 80, uploading: 92 };
   const stepMsg = {
+    encoding: 'ENCODING COMMITMENTS',
     signing: 'SIGNING OWNERSHIP',
     paying: 'VERIFYING USDC',
+    confirming: 'CONFIRMING ON APTOS',
     sponsoring: 'SPONSORING APTOS',
     uploading: 'WRITING TO SHELBY',
   };
@@ -128,11 +150,16 @@ function initUpload() {
 
   async function doUpload(file) {
     if (!file) return;
-    const session = walletController().getState().session;
-    if (!session) {
+    const walletState = walletController().getState();
+    const session = walletState.session;
+    if (!session || walletState.status !== 'ready') {
       toast('Connect a wallet before uploading', 'warn');
       const opener = document.querySelector('[data-wallet-summary]');
-      void walletUi.open(opener);
+      if (walletState.status === 'network_required') {
+        void walletController().ensureNetwork().catch((error) => toast(error.message, 'error'));
+      } else {
+        void walletUi.open(opener);
+      }
       return;
     }
     const cfg = await api('/api/config').catch(() => ({}));
@@ -140,7 +167,32 @@ function initUpload() {
     if (file.size > maxB) { toast(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`, 'error'); return; }
     if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
 
-    // Cách B (sponsored + USDC): Phantom pays a stablecoin fee & signs; the server sponsors the
+    if (session.chain === 'aptos' && session.mode === 'native') {
+      $('#aptos-funding-gate')?.remove();
+      show(vProg);
+      setStep('encoding');
+      try {
+        const result = await walletController().upload(file, { onStep: setStep });
+        if (bar) bar.style.width = '100%';
+        if (pct) pct.textContent = '100%';
+        setTimeout(() => renderSuccess(result), 350);
+      } catch (error) {
+        show(vInit);
+        if (['insufficient_apt', 'insufficient_shelby_usd'].includes(error?.code)) {
+          showAptosFundingGate({
+            code: error.code,
+            session,
+            retry: () => void doUpload(file),
+          });
+        } else {
+          const message = String(error?.message || error);
+          toast(message.toLowerCase().includes('reject') ? 'Signature rejected' : message.slice(0, 160), 'error');
+        }
+      }
+      return;
+    }
+
+    // Sponsored + USDC: the Solana wallet pays a stablecoin fee and signs; the server sponsors the
     // Aptos-side storage. The blob is owned by the visitor's own DAA account. No APT/ShelbyUSD needed.
     if (session.chain === 'solana' && SOL()?.available() && cfg.sponsored) {
       show(vProg); setStep('signing');
@@ -152,9 +204,9 @@ function initUpload() {
         // 1) quote (USDC)
         const quote = await api('/api/pay/quote', { method: 'POST', body: { sizeBytes: file.size } });
 
-        // 2) enough USDC? otherwise show the faucet gate
+        // 2) enough USDC? otherwise show the funding gate
         const bal = await SOL().usdcBalance();
-        if (bal < quote.amountUsdc) { show(vInit); showPayGate(quote, bal, SOL().faucets); return; }
+        if (bal < quote.amountUsdc) { show(vInit); showPayGate(quote, bal); return; }
 
         // 3) pay USDC on Solana (Phantom), 4) server verifies -> uploadToken
         setStep('paying');
@@ -164,7 +216,11 @@ function initUpload() {
         if (!v.ok) throw new Error('payment not verified: ' + (v.reason || ''));
 
         // 5) sponsored upload (Phantom signs; server co-signs via gas station)
-        const r = await SOL().uploadSponsored(file, { paymentId: quote.paymentId, uploadToken: v.uploadToken, onStep: setStep });
+        const r = await walletController().upload(file, {
+          paymentId: quote.paymentId,
+          uploadToken: v.uploadToken,
+          onStep: setStep,
+        });
         if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
         setTimeout(() => renderSuccess({ ...r, contentType: file.type, paidUsdc: v.receivedUsdc }), 350);
         return;
@@ -176,22 +232,39 @@ function initUpload() {
       }
     }
 
-    // Fallback: Phantom missing or sponsor disabled -> server-managed storage.
-    show(vProg); if (bar) bar.style.width = '15%'; if (pct) pct.textContent = '…';
-    const form = new FormData();
-    form.append('file', file);
-    form.append('owner', session.sourceAddress);
-    try {
-      const r = await api('/api/upload', { method: 'POST', form });
-      if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
-      setTimeout(() => renderSuccess(r), 350);
-    } catch (e) {
-      show(vInit);
-      toast(e.status === 409 ? 'That file already exists' : (e.retriable ? 'Shelby warming up — retry' : e.message), 'error');
-    }
+    toast(`Uploads are unavailable for ${session.walletName || session.chain}`, 'error');
   }
 
-  function showPayGate(quote, have, faucets) {
+  function showAptosFundingGate({ code, session, retry }) {
+    $('#aptos-funding-gate')?.remove();
+    const panel = document.createElement('section');
+    panel.id = 'aptos-funding-gate';
+    panel.className = 'vessel-glass rounded-vessel p-6 mt-6 w-full';
+    panel.setAttribute('role', 'alert');
+
+    const title = document.createElement('p');
+    title.className = 'vessel-kicker text-secondary';
+    title.textContent = code === 'insufficient_apt'
+      ? 'APT REQUIRED FOR GAS'
+      : 'SHELBYUSD REQUIRED FOR STORAGE';
+    const detail = document.createElement('p');
+    detail.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
+    detail.textContent = `Fund ${shortMid(session.sourceAddress)} on Aptos Testnet, then retry.`;
+
+    const actions = document.createElement('div');
+    actions.className = 'mt-5 flex flex-wrap gap-3';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = "I'VE FUNDED — RETRY";
+    button.className = 'vessel-button vessel-button-primary px-4 py-3';
+    button.addEventListener('click', retry, { once: true });
+    actions.appendChild(button);
+    panel.append(title, detail, actions);
+    ($('#drop-zone')?.parentElement || document.body).appendChild(panel);
+    toast('Fund your Aptos Testnet wallet, then retry', 'warn');
+  }
+
+  function showPayGate(quote, have) {
     const host = $('#drop-zone')?.parentElement || document.body;
     let g = $('#pay-gate');
     if (!g) {
@@ -201,18 +274,24 @@ function initUpload() {
       g.className = 'vessel-glass rounded-vessel p-6 mt-6 w-full';
       host.appendChild(g);
     }
-    g.innerHTML = `<div class="vessel-kicker text-secondary mb-3">NEED TESTNET USDC TO PAY STORAGE</div>
-      <p class="text-sm leading-6 text-on-surface-variant mb-4">This upload costs <span class="vessel-technical text-primary">${quote.amountUsdc} USDC</span> (you have ${have.toFixed(4)}). The app sponsors the Aptos gas + ShelbyUSD — you only pay stablecoin. Grab devnet USDC once:</p>
-      <div class="flex flex-wrap gap-3">
-        <a href="${faucets.usdc}" target="_blank" rel="noreferrer" class="vessel-button vessel-button-secondary px-4 py-3">GET DEVNET USDC →</a>
-        <a href="${faucets.sol}" target="_blank" rel="noreferrer" class="vessel-button vessel-button-secondary px-4 py-3">GET DEVNET SOL →</a>
-        <button id="pay-retry" class="vessel-button vessel-button-primary px-4 py-3">I HAVE USDC — RETRY</button>
-      </div>`;
-    $('#pay-retry')?.addEventListener('click', async () => {
+    g.replaceChildren();
+    const title = document.createElement('p');
+    title.className = 'vessel-kicker text-secondary mb-3';
+    title.textContent = 'NEED TESTNET USDC TO PAY STORAGE';
+    const detail = document.createElement('p');
+    detail.className = 'text-sm leading-6 text-on-surface-variant mb-4';
+    detail.textContent = `This upload costs ${quote.amountUsdc} USDC; your wallet has ${have.toFixed(4)}. Vessel sponsors Aptos gas and ShelbyUSD for the Solana DAA path.`;
+    const retry = document.createElement('button');
+    retry.id = 'pay-retry';
+    retry.type = 'button';
+    retry.className = 'vessel-button vessel-button-primary px-4 py-3';
+    retry.textContent = 'I HAVE USDC — RETRY';
+    g.append(title, detail, retry);
+    retry.addEventListener('click', async () => {
       const b = await SOL().usdcBalance();
-      if (b >= quote.amountUsdc) { g.remove(); toast('USDC ready ✓ — drop your file again', 'ok'); } else toast(`Still ${b.toFixed(4)} USDC — give the faucet a moment`, 'warn');
+      if (b >= quote.amountUsdc) { g.remove(); toast('USDC ready ✓ — drop your file again', 'ok'); } else toast(`Still ${b.toFixed(4)} USDC — add funds and retry`, 'warn');
     });
-    toast('Get a little devnet USDC to pay for storage (see panel)', 'warn');
+    toast('Add testnet USDC to continue (see panel)', 'warn');
   }
   function renderSuccess(r) {
     show(vDone);

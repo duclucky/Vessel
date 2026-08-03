@@ -8,7 +8,9 @@ test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   for (const id of [
     'main-content',
     'origin-wallet',
+    'origin-wallet-label',
     'derived-account',
+    'storage-account-label',
     'sign-btn',
     'sign-btn-label',
     'auth-status',
@@ -19,5 +21,8 @@ test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Connected wallet/i);
   assert.match(html, /Shelby storage account/i);
+  assert.match(html, /Aptos wallets use their own address/i);
+  assert.match(html, /Solana wallets control a derived Aptos storage account/i);
+  assert.match(html, /APT gas and ShelbyUSD storage fees directly/i);
   assert.doesNotMatch(html, /Ethereum Wallet|encrypted|weekly/i);
 });

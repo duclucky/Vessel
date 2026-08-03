@@ -13365,8 +13365,8 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         throw new s(`Hex characters are invalid: ${h9?.message}`, "invalid_hex_chars");
       }
       let d11 = new e4(o13);
-      if (n88.length < 64 - r14 && !d11.isSpecial()) throw new s(`Hex string is too short, must be ${64 - r14} to 64 chars long, excluding the leading 0x. You may need to fix 
-the addresss by padding it with 0s before passing it to \`fromString\` (e.g. <addressString>.padStart(64, '0')). 
+      if (n88.length < 64 - r14 && !d11.isSpecial()) throw new s(`Hex string is too short, must be ${64 - r14} to 64 chars long, excluding the leading 0x. You may need to fix
+the addresss by padding it with 0s before passing it to \`fromString\` (e.g. <addressString>.padStart(64, '0')).
 Received ${t11}`, "too_short");
       return d11;
     }
@@ -21410,8 +21410,8 @@ KeylessErrorResolutionTip: ${r14}`, R7;
       let { publicKeys: t11, signaturesRequired: r14 } = e12;
       if (super({ publicKeys: t11 }), r14 < 1) throw new Error("The number of required signatures needs to be greater than 0");
       if (t11.length < r14) throw new Error(`Provided ${t11.length} public keys is smaller than the ${r14} required signatures`);
-      if (this.publicKeys = t11.map((i24) => i24 instanceof I5 ? i24 : new I5(i24)), r14 > or && this.publicKeys.filter((o13) => o13.variant === 3 || o13.variant === 4).length > or) throw new Error(`Construction of MultiKey with more than ${or} keyless public keys is not allowed when signaturesRequired 
-          is greater than ${or}. This is because a maximum of 3 keyless signatures are supported for a 
+      if (this.publicKeys = t11.map((i24) => i24 instanceof I5 ? i24 : new I5(i24)), r14 > or && this.publicKeys.filter((o13) => o13.variant === 3 || o13.variant === 4).length > or) throw new Error(`Construction of MultiKey with more than ${or} keyless public keys is not allowed when signaturesRequired
+          is greater than ${or}. This is because a maximum of 3 keyless signatures are supported for a
           K-of-N MultiKey transaction.`);
       this.signaturesRequired = r14;
     }
@@ -34040,7 +34040,7 @@ spurious results.`);
           executionResult: parseExecutionResult(result)
         };
       } else {
-        throw new Error(`Invalid execution result: result is not object or array. 
+        throw new Error(`Invalid execution result: result is not object or array.
 Got:
 ${String(result)}`);
       }
@@ -41016,18 +41016,18 @@ Missing signature for public key${sigErrors.missing.length === 1 ? "" : "(s)"} [
       transactionMessage,
       logs
     }) {
-      const maybeLogsOutput = logs ? `Logs: 
+      const maybeLogsOutput = logs ? `Logs:
 ${JSON.stringify(logs.slice(-10), null, 2)}. ` : "";
       const guideText = "\nCatch the `SendTransactionError` and call `getLogs()` on it for full details.";
       let message;
       switch (action) {
         case "send":
-          message = `Transaction ${signature} resulted in an error. 
+          message = `Transaction ${signature} resulted in an error.
 ${transactionMessage}. ` + maybeLogsOutput + guideText;
           break;
         case "simulate":
-          message = `Simulation failed. 
-Message: ${transactionMessage}. 
+          message = `Simulation failed.
+Message: ${transactionMessage}.
 ` + maybeLogsOutput + guideText;
           break;
         default: {

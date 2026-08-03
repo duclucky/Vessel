@@ -17,7 +17,7 @@ test('all six journeys share the accessible Ethereal shell', () => {
     assert.equal(getIds(html).has('main-content'), true, `${page}: main landmark target`);
     assert.match(html, /<h1\b/, `${page}: h1`);
     assert.match(html, /<footer\b/, `${page}: footer`);
-    assert.match(html, /Shelby Testnet · Sponsored DAA · Data is Ephemeral/, `${page}: honest environment status`);
+    assert.match(html, /Shelby Testnet · [^<]+ · Data is Ephemeral/, `${page}: honest environment status`);
     assert.match(html, /src="\/theme\.js"/, `${page}: shared theme`);
     assert.match(html, /href="\/vessel\.css"/, `${page}: shared CSS`);
     assert.equal(hasInlineTailwindConfig(html), false, `${page}: no divergent Tailwind config`);

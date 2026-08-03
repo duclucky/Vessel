@@ -38,6 +38,18 @@ test('wallet presentation describes disconnected, Aptos, and Solana DAA sessions
   assert.equal(solana.identityDisabled, true);
   assert.equal(solana.chainLabel, 'SOLANA DAA');
 
+  assert.deepEqual(walletPresentation({
+    status: 'network_required',
+    session: { sourceAddress: '0x1234', mode: 'native' },
+  }), {
+    connected: false,
+    headerLabel: 'Switch network',
+    headerAria: 'Switch wallet to Aptos Testnet',
+    identityLabel: 'SWITCH TO APTOS TESTNET',
+    identityDisabled: false,
+    chainLabel: 'APTOS',
+  });
+
   const identityHtml = readPage('identity.html');
   assert.match(identityHtml, /data-wallet-summary/);
   assert.match(identityHtml, /data-wallet-label/);

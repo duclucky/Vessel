@@ -88,8 +88,13 @@ export function createAptosAdapter(descriptor) {
       const account = approvedArgs(
         await feature('aptos:connect', 'connect').connect(silent, TESTNET),
       );
-      await ensureNetwork();
       session = buildSession(account);
+      try {
+        await ensureNetwork();
+      } catch (error) {
+        error.session = session;
+        throw error;
+      }
       return session;
     },
     ensureNetwork,
