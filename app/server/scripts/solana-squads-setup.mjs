@@ -3,8 +3,14 @@ import path from 'node:path';
 import {
   Connection,
   PublicKey,
+  SystemProgram,
   TransactionInstruction,
 } from '@solana/web3.js';
+import {
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  getAssociatedTokenAddressSync,
+  TOKEN_PROGRAM_ID,
+} from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 
 const THRESHOLD = 2;
@@ -12,6 +18,7 @@ const TIMELOCK_SECONDS = 86_400;
 const VAULT_INDEX = 0;
 const UPGRADEABLE_LOADER = new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111');
 export const SQUADS_PROGRAM_TREASURY = 'HM5y4mz3Bt9JY9mr1hkyhnvqxSH4H2u2451j7Hc2dtvK';
+const VESSEL_INITIALIZE_DISCRIMINATOR = Buffer.from([175, 175, 109, 31, 13, 152, 155, 237]);
 
 const scriptError = (message) => Object.assign(new Error(message), {
   code: 'invalid_squads_setup',
@@ -144,6 +151,64 @@ export function buildProgramAuthorityInstruction({ programId, currentAuthority, 
   const data = Buffer.alloc(4);
   data.writeUInt32LE(4);
   return new TransactionInstruction({ programId: UPGRADEABLE_LOADER, keys, data });
+}
+
+export function buildVesselInitializePlan({
+  programId,
+  squadsVault,
+  mint,
+  quotePublicKey,
+  network,
+  configVersion,
+}) {
+  const program = key(programId, 'Vessel Program');
+  const authority = key(squadsVault, 'Squads vault');
+  const acceptedMint = key(mint, 'Accepted mint');
+  const publicKeyHex = String(quotePublicKey || '').trim().toLowerCase().replace(/^0x/, '');
+  if (!/^[0-9a-f]{64}$/.test(publicKeyHex) || /^0+$/.test(publicKeyHex)) {
+    throw scriptError('Quote public key must be a non-zero 32-byte hex value');
+  }
+  if (Number(network) !== 1) throw scriptError('Vessel Solana network must be Devnet domain 1');
+  const version = BigInt(configVersion);
+  if (version !== 1n) throw scriptError('Initial Vessel config version must be 1');
+  const [configPda] = PublicKey.findProgramAddressSync([Buffer.from('config')], program);
+  const [vaultAuthority] = PublicKey.findProgramAddressSync([Buffer.from('vault-authority')], program);
+  const vaultAta = getAssociatedTokenAddressSync(acceptedMint, vaultAuthority, true);
+  return Object.freeze({
+    programId: program.toBase58(),
+    payer: authority.toBase58(),
+    authority: authority.toBase58(),
+    configPda: configPda.toBase58(),
+    vaultAuthority: vaultAuthority.toBase58(),
+    vaultAta: vaultAta.toBase58(),
+    mint: acceptedMint.toBase58(),
+    quotePublicKey: publicKeyHex,
+    network: 1,
+    configVersion: version.toString(),
+  });
+}
+
+export function buildVesselInitializeInstruction(plan) {
+  const data = Buffer.alloc(84);
+  VESSEL_INITIALIZE_DISCRIMINATOR.copy(data, 0);
+  Buffer.from(plan.quotePublicKey, 'hex').copy(data, 8);
+  key(plan.authority, 'Vessel authority').toBuffer().copy(data, 40);
+  data.writeUInt32LE(plan.network, 72);
+  data.writeBigUInt64LE(BigInt(plan.configVersion), 76);
+  return new TransactionInstruction({
+    programId: key(plan.programId, 'Vessel Program'),
+    keys: [
+      { pubkey: key(plan.payer, 'Initialize payer'), isSigner: true, isWritable: true },
+      { pubkey: key(plan.configPda, 'Config PDA'), isSigner: false, isWritable: true },
+      { pubkey: key(plan.vaultAuthority, 'Vault authority PDA'), isSigner: false, isWritable: false },
+      { pubkey: key(plan.mint, 'Accepted mint'), isSigner: false, isWritable: false },
+      { pubkey: key(plan.vaultAta, 'Vault ATA'), isSigner: false, isWritable: true },
+      { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    ],
+    data,
+  });
 }
 
 async function verifyProgramAuthority(connection, programId, expectedAuthority) {

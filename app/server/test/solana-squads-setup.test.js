@@ -5,6 +5,8 @@ import {
   buildCreateInstruction,
   buildProgramAuthorityInstruction,
   buildSquadsCreatePlan,
+  buildVesselInitializeInstruction,
+  buildVesselInitializePlan,
   normalizeSquadsMembers,
 } from '../scripts/solana-squads-setup.mjs';
 
@@ -71,4 +73,43 @@ test('upgrade authority payload requires only the current authority signature', 
     newAuthority: null,
   });
   assert.equal(permanentLock.keys.length, 2);
+});
+
+test('Vessel initialize instruction binds config, vault, quote key, and Devnet USDC to the Squads vault', () => {
+  const programId = keys[0];
+  const squadsVault = keys[1];
+  const mint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+  const quotePublicKey = '59'.repeat(32);
+  const plan = buildVesselInitializePlan({
+    programId,
+    squadsVault,
+    mint,
+    quotePublicKey,
+    network: 1,
+    configVersion: 1n,
+  });
+  const instruction = buildVesselInitializeInstruction(plan);
+
+  assert.equal(plan.programId, programId);
+  assert.equal(plan.authority, squadsVault);
+  assert.equal(plan.payer, squadsVault);
+  assert.equal(plan.mint, mint);
+  assert.equal(plan.quotePublicKey, quotePublicKey);
+  assert.equal(plan.network, 1);
+  assert.equal(plan.configVersion, '1');
+  assert.equal(instruction.programId.toBase58(), programId);
+  assert.equal(instruction.keys[0].pubkey.toBase58(), squadsVault);
+  assert.equal(instruction.keys[0].isSigner, true);
+  assert.equal(instruction.data.length, 84);
+  assert.deepEqual([...instruction.data.subarray(8, 40)], [...Buffer.from(quotePublicKey, 'hex')]);
+  assert.equal(instruction.data.readUInt32LE(72), 1);
+  assert.equal(instruction.data.readBigUInt64LE(76), 1n);
+  assert.throws(() => buildVesselInitializePlan({
+    programId,
+    squadsVault,
+    mint,
+    quotePublicKey: '00'.repeat(32),
+    network: 1,
+    configVersion: 1n,
+  }), /quote public key/i);
 });
