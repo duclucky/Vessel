@@ -43,6 +43,7 @@ pub fn handle(
 ) -> Result<()> {
     require!(
         quote_public_key != [0; 32]
+            && quote_public_key != authority.to_bytes()
             && authority != Pubkey::default()
             && network == 1
             && config_version > 0,

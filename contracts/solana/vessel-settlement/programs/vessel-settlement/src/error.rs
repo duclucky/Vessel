@@ -26,4 +26,14 @@ pub enum VesselError {
     QuoteExpired,
     #[msg("The quote uses a stale settlement configuration")]
     StaleConfiguration,
+    #[msg("Only the configured multisig authority may perform this action")]
+    Unauthorized,
+    #[msg("The requested configuration change is invalid")]
+    InvalidConfigChange,
+    #[msg("The configuration change timelock has not elapsed")]
+    ConfigChangeNotReady,
+    #[msg("The requested vault withdrawal is invalid")]
+    InvalidWithdrawal,
+    #[msg("Upgrade lock intent has already been recorded")]
+    UpgradeLockAlreadySet,
 }

@@ -28,6 +28,14 @@ pub struct SettlementReceiptV1 {
     pub settled_at_secs: i64,
 }
 
+#[account]
+#[derive(InitSpace)]
+pub struct PendingChange {
+    pub kind: u8,
+    pub value: [u8; 32],
+    pub execute_after_secs: u64,
+}
+
 #[event]
 pub struct SettlementReceiptCreatedV1 {
     pub quote_id: [u8; 32],
@@ -40,4 +48,36 @@ pub struct SettlementReceiptCreatedV1 {
     pub config_version: u64,
     pub settled_slot: u64,
     pub settled_at_secs: i64,
+}
+
+#[event]
+pub struct ConfigChangeScheduled {
+    pub kind: u8,
+    pub value: [u8; 32],
+    pub execute_after_secs: u64,
+}
+
+#[event]
+pub struct ConfigChangeExecuted {
+    pub kind: u8,
+    pub value: [u8; 32],
+    pub config_version: u64,
+}
+
+#[event]
+pub struct SettlementPauseChanged {
+    pub paused: bool,
+}
+
+#[event]
+pub struct VaultWithdrawal {
+    pub asset: Pubkey,
+    pub destination: Pubkey,
+    pub amount: u64,
+    pub slot: u64,
+}
+
+#[event]
+pub struct UpgradeLockIntentRecorded {
+    pub locked: bool,
 }
