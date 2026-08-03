@@ -10868,13 +10868,16 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   var TESTNET = { name: "testnet", chainId: 2 };
   var walletError = (message, code) => Object.assign(new Error(message), { code });
   function normalizeAptosError(error, walletName = "Aptos wallet") {
-    if (error?.code) return error;
     const raw = String(error?.message || error || "");
-    if (/reject|declin|cancel/i.test(raw)) {
-      return walletError("Wallet request was rejected", "user_rejected");
+    if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
+    if (error?.session) {
+      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
     }
     if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
       return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
+    }
+    if (/reject|declin|cancel/i.test(raw)) {
+      return walletError("Wallet request was rejected", "user_rejected");
     }
     return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
   }
@@ -10949,8 +10952,9 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     return {
       async connect({ silent = false } = {}) {
         try {
+          const connector = feature("aptos:connect", "connect");
           const account = approvedArgs(
-            await feature("aptos:connect", "connect").connect(silent)
+            await (silent ? connector.connect(true) : connector.connect())
           );
           session = buildSession(account);
           try {

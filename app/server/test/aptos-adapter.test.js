@@ -60,19 +60,32 @@ test('native Aptos session uses the wallet address as storage address', async ()
   assert.equal(session.mode, 'native');
 });
 
-test('Petra connect passes only the silent flag and checks network afterward', async () => {
+test('Petra explicit connect passes no arguments and checks network afterward', async () => {
   const calls = [];
   const provider = wallet({ calls });
   const adapter = createAptosAdapter({ id: 'aptos:petra:1', name: 'Petra', provider });
 
   await adapter.connect({ silent: false });
 
-  assert.deepEqual(calls, [['connect', false], ['network']]);
+  assert.deepEqual(calls, [['connect'], ['network']]);
+});
+
+test('Petra silent restore passes the wallet-standard silent flag', async () => {
+  const calls = [];
+  const provider = wallet({ calls });
+  const adapter = createAptosAdapter({ id: 'aptos:petra:1', name: 'Petra', provider });
+
+  await adapter.connect({ silent: true });
+
+  assert.deepEqual(calls, [['connect', true], ['network']]);
 });
 
 test('opaque Petra API failures become actionable without extension internals', async () => {
   const provider = wallet({
-    connectError: Object.assign(new Error('PetraApiError'), { stack: 'secret extension stack' }),
+    connectError: Object.assign(new Error('PetraApiError'), {
+      code: -30_001,
+      stack: 'secret extension stack',
+    }),
   });
   const adapter = createAptosAdapter({ id: 'aptos:petra:1', name: 'Petra', provider });
 
@@ -126,6 +139,26 @@ test('rejected network switch retains the connected session for manual retry', a
   await assert.rejects(
     () => adapter.connect({ silent: false }),
     (error) => error.code === 'wrong_network' && error.session?.sourceAddress === '0xabc',
+  );
+});
+
+test('Petra API failure while switching networks becomes a manual Testnet request', async () => {
+  const adapter = createAptosAdapter({
+    id: 'aptos:petra:1',
+    name: 'Petra',
+    provider: wallet({
+      network: { name: 'custom', chainId: 118 },
+      changeNetwork: async () => {
+        throw Object.assign(new Error('PetraApiError'), { code: -30_001 });
+      },
+    }),
+  });
+
+  await assert.rejects(
+    () => adapter.connect({ silent: false }),
+    (error) => error.code === 'wrong_network'
+      && error.message === 'Switch your wallet to Aptos Testnet'
+      && error.session?.sourceAddress === '0xabc',
   );
 });
 
