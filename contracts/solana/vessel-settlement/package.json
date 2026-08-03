@@ -1,0 +1,13 @@
+{
+  "name": "vessel-settlement-program",
+  "private": true,
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test"
+  },
+  "devDependencies": {
+    "@anchor-lang/core": "1.1.2",
+    "@solana/web3.js": "1.98.4",
+    "typescript": "5.9.2"
+  }
+}
