@@ -87,16 +87,18 @@ test('Solana wallet signs then broadcasts the verified transaction through Devne
   assert.equal(legacySubmissions, 0);
   assert.equal(Transaction.from(broadcasted.bytes).verifySignatures(), true);
   assert.equal(broadcasted.options.preflightCommitment, 'confirmed');
-  assert.equal(submitted.instructions.length, 2);
-  assert.equal(submitted.instructions[0].programId.toBase58(), Ed25519Program.programId.toBase58());
-  assert.equal(submitted.instructions[1].programId.toBase58(), programId.toBase58());
+  assert.equal(submitted.instructions.length, 4);
+  assert.equal(submitted.instructions[0].programId.toBase58(), ComputeBudgetProgram.programId.toBase58());
+  assert.equal(submitted.instructions[1].programId.toBase58(), ComputeBudgetProgram.programId.toBase58());
+  assert.equal(submitted.instructions[2].programId.toBase58(), Ed25519Program.programId.toBase58());
+  assert.equal(submitted.instructions[3].programId.toBase58(), programId.toBase58());
   assert.equal(submitted.feePayer.toBase58(), owner.toBase58());
-  const settlementKeys = submitted.instructions[1].keys.map(({ pubkey }) => pubkey.toBase58());
+  const settlementKeys = submitted.instructions[3].keys.map(({ pubkey }) => pubkey.toBase58());
   for (const expected of [configPda, receiptPda, vaultAuthority, vaultAta]) {
     assert.ok(settlementKeys.includes(expected.toBase58()));
   }
   assert.equal(
-    submitted.instructions[1].keys.find(({ pubkey }) => pubkey.equals(owner)).isSigner,
+    submitted.instructions[3].keys.find(({ pubkey }) => pubkey.equals(owner)).isSigner,
     true,
   );
 });
@@ -138,7 +140,7 @@ test('instruction mutations or unsigned wallet results fail before Devnet broadc
       publicKey: owner,
       async signTransaction(transaction) {
         if (kind === 'mutated') {
-          transaction.instructions[1].data = Buffer.from([0xde, 0xad]);
+          transaction.instructions.at(-1).data = Buffer.from([0xde, 0xad]);
           transaction.partialSign(ownerKeypair);
           return { signedTransaction: transaction.serialize() };
         }
@@ -181,9 +183,9 @@ test('simulation failures surface the final program logs instead of truncating t
     },
   };
   const simulationError = Object.assign(new Error(
-    'Transaction simulation failed: Error processing Instruction 1: custom program error: 0x2',
+    'Transaction simulation failed: Error processing Instruction 3: custom program error: 0x2',
   ), {
-    transactionMessage: 'Transaction simulation failed: Error processing Instruction 1: custom program error: 0x2',
+    transactionMessage: 'Transaction simulation failed: Error processing Instruction 3: custom program error: 0x2',
     transactionLogs: [
       'Program ComputeBudget111111111111111111111111111111 success',
       'Program log: TransferChecked failed: TokenError::InvalidMint',

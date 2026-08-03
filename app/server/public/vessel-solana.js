@@ -68837,8 +68837,13 @@ ${fields.join("\n")}`;
     }) && Buffer2.from(expected.data).equals(Buffer2.from(signed.data));
   }
   function preservesSettlementIntent(expected, signed) {
-    const signedIntentInstructions = signed.instructions.filter((instruction) => !instruction.programId.equals(import_web36.ComputeBudgetProgram.programId));
-    return expected.feePayer?.equals(signed.feePayer) && expected.instructions.length === signedIntentInstructions.length && expected.instructions.every((instruction, index2) => sameInstruction(instruction, signedIntentInstructions[index2]));
+    const isComputeBudget = (instruction) => instruction.programId.equals(import_web36.ComputeBudgetProgram.programId);
+    const expectedIntentInstructions = expected.instructions.filter((instruction) => !isComputeBudget(instruction));
+    const firstIntentIndex = signed.instructions.findIndex((instruction) => !isComputeBudget(instruction));
+    if (firstIntentIndex < 0) return false;
+    const signedIntentInstructions = signed.instructions.slice(firstIntentIndex);
+    if (signedIntentInstructions.some(isComputeBudget)) return false;
+    return expected.feePayer?.equals(signed.feePayer) && expectedIntentInstructions.length === signedIntentInstructions.length && expectedIntentInstructions.every((instruction, index2) => sameInstruction(instruction, signedIntentInstructions[index2]));
   }
   async function simulationFailure(error, connection, signedTransaction) {
     const logs = Array.isArray(error?.transactionLogs) ? error.transactionLogs : Array.isArray(error?.logs) ? error.logs : Array.isArray(error?.data?.logs) ? error.data.logs : [];
@@ -68966,7 +68971,12 @@ ${fields.join("\n")}`;
       associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       systemProgram: import_web36.SystemProgram.programId
     }).instruction();
-    const transaction = new import_web36.Transaction().add(verifyInstruction, settleInstruction);
+    const transaction = new import_web36.Transaction().add(
+      import_web36.ComputeBudgetProgram.setComputeUnitLimit({ units: 3e5 }),
+      import_web36.ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      verifyInstruction,
+      settleInstruction
+    );
     transaction.feePayer = owner;
     transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
     let rawSignature;
@@ -68998,7 +69008,8 @@ ${fields.join("\n")}`;
         );
       }
       try {
-        rawSignature = await connection.sendRawTransaction(signedBytes, {
+        const verifiedSignedBytes = signedTransaction.serialize();
+        rawSignature = await connection.sendRawTransaction(verifiedSignedBytes, {
           skipPreflight: false,
           preflightCommitment: "confirmed"
         });

@@ -132,12 +132,21 @@ function sameInstruction(expected, signed) {
 }
 
 function preservesSettlementIntent(expected, signed) {
-  const signedIntentInstructions = signed.instructions.filter((instruction) => (
-    !instruction.programId.equals(ComputeBudgetProgram.programId)
+  const isComputeBudget = (instruction) => (
+    instruction.programId.equals(ComputeBudgetProgram.programId)
+  );
+  const expectedIntentInstructions = expected.instructions.filter((instruction) => (
+    !isComputeBudget(instruction)
   ));
+  const firstIntentIndex = signed.instructions.findIndex((instruction) => (
+    !isComputeBudget(instruction)
+  ));
+  if (firstIntentIndex < 0) return false;
+  const signedIntentInstructions = signed.instructions.slice(firstIntentIndex);
+  if (signedIntentInstructions.some(isComputeBudget)) return false;
   return expected.feePayer?.equals(signed.feePayer)
-    && expected.instructions.length === signedIntentInstructions.length
-    && expected.instructions.every((instruction, index) => (
+    && expectedIntentInstructions.length === signedIntentInstructions.length
+    && expectedIntentInstructions.every((instruction, index) => (
       sameInstruction(instruction, signedIntentInstructions[index])
     ));
 }
@@ -289,7 +298,12 @@ export async function submitSolanaContractSettlement({
       systemProgram: SystemProgram.programId,
     })
     .instruction();
-  const transaction = new Transaction().add(verifyInstruction, settleInstruction);
+  const transaction = new Transaction().add(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 300_000 }),
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+    verifyInstruction,
+    settleInstruction,
+  );
   transaction.feePayer = owner;
   transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
   let rawSignature;
@@ -322,7 +336,8 @@ export async function submitSolanaContractSettlement({
       );
     }
     try {
-      rawSignature = await connection.sendRawTransaction(signedBytes, {
+      const verifiedSignedBytes = signedTransaction.serialize();
+      rawSignature = await connection.sendRawTransaction(verifiedSignedBytes, {
         skipPreflight: false,
         preflightCommitment: 'confirmed',
       });
