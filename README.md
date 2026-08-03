@@ -1,13 +1,11 @@
 # Vessel
 
-> **Contract-settlement migration (2026-08-03): NO-GO for public release.**
-> The web app now uses receipt-bound Aptos Move and Solana Program settlement
-> paths in code, and every local application/Move/Rust/Anchor gate passes. The
-> public deployment manifest is still placeholder-only, however, and no real
-> 2-of-3 Aptos Multisig or autonomous Squads deployment has been verified.
-> `SETTLEMENT_CONTRACTS_ENABLED` must remain disabled in production. See
-> `docs/verification/contract-settlement-release-checklist.md` for exact evidence
-> and blockers.
+> **Contract-settlement beta (2026-08-03): deployed on public testnets.**
+> Aptos Move and the Solana Program are initialized under separate 2-of-3
+> multisigs, and the public deployment manifest contains no placeholders. Both
+> native multisigs use the approved no-native-timelock beta profile; each
+> contract retains its own 24-hour schedule/execute delay for sensitive config
+> changes. Real-wallet upload evidence remains a separate release checklist.
 
 ## Current contract-only payment model
 

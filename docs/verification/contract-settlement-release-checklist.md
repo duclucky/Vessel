@@ -2,13 +2,12 @@
 
 Date: 2026-08-03
 
-Decision: **NO-GO for public deployment**
+Decision: **GO for public testnet beta deployment; real-wallet acceptance remains pending**
 
-The contract-only application code is locally verified and the Aptos deployment
-is complete, but the Solana Program is not initialized and neither chain has a
-recorded real upload. Vessel must
-remain fail-closed (`SETTLEMENT_CONTRACTS_ENABLED` must not be enabled in
-production) until every blocking item below is complete.
+The contract-only application code and both public-testnet deployments are
+verified. The beta may be deployed with fail-closed contract settlement enabled.
+It must not be represented as fully accepted with real wallets until both
+receipt-bound upload evidence files are complete.
 
 ## Architecture under review
 
@@ -22,15 +21,15 @@ production) until every blocking item below is complete.
 - Direct wallet-to-treasury transfers, ATA-only transfers, and memo-only
   payments cannot authorize an upload.
 - Governance is a 2-of-3 Aptos Multisig Account without a native Testnet
-  timelock and an autonomous 2-of-3 Squads with an 86,400-second timelock.
-  The Move module retains its own 86,400-second delay for scheduled
-  configuration changes.
+  timelock and an autonomous 2-of-3 Squads with `timeLock = 0` under the
+  approved Devnet beta exception. Both programs retain their own 86,400-second
+  delay for scheduled configuration changes.
 
 ## Local verification evidence
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Node and browser application | PASS | `npm run check`: 152 tests passed; both wallet bundles and `clay.wasm` built |
+| Node and browser application | PASS | `npm run check`: 156 tests passed; both wallet bundles and `clay.wasm` built |
 | Aptos Move | PASS | 25/25 tests; 63.12% package coverage |
 | Solana Rust | PASS | 6/6 tests across program, admin, and quote suites |
 | Solana Anchor integration | PASS | 9/9 tests on `solana-test-validator`; exact debit, receipt, replay, mutation, authority, timelock, withdrawal, and upgrade-lock paths |
@@ -47,13 +46,12 @@ TypeScript suite then passed 9/9. The validator was stopped after the run.
 
 ### Public deployment manifest
 
-`deployments/vessel-settlement.testnet.json` is partially finalized:
+`deployments/vessel-settlement.testnet.json` is finalized:
 
 - Aptos module, vault, multisig, accepted asset, deployment transaction, shared
   quote public key, and config version are finalized and verified on Testnet.
-- Solana Program ID, deployment signature, and Squads multisig are finalized.
-- Solana config PDA, vault ATA, and accepted mint remain the System Program
-  placeholder until the Squads initialization proposal executes.
+- Solana Program ID, deployment signature, Squads multisig, config PDA, vault
+  ATA, accepted mint, and shared quote public key are finalized and verified.
 
 ### Governance verification
 
@@ -77,26 +75,18 @@ TypeScript suite then passed 9/9. The validator was stopped after the run.
   The verifier confirms module/vault/admin/asset/quote key/config version and
   reports `paused=false` and `upgradeLocked=false`.
 - Solana Squads creation transaction
-  `3uugP9Vmp88BaJJkqdPQvdyX1xKddF3rAyHxZnajLbt8CARTU65opCoLg5rxk7KSMi7i7TbHDNm6QhGhA4Uy7u6A`
-  is finalized on Devnet. The autonomous Squads multisig is
-  `2VQfFVSjR8tSCFwvPmz974XGaJQEY8CKa8krF2AM1qeH`; vault index 0 is
-  `2yHruBbf2b5P5SdHCXWBypSc1EoQe4Cxm9UbNHKmJSeE`. On-chain verification
-  confirms three members, threshold 2, null config authority, and an
-  86,400-second timelock.
-- The Solana Vessel Program
-  `6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b` is finalized on Devnet and
-  its upgrade authority is the Squads vault
-  `2yHruBbf2b5P5SdHCXWBypSc1EoQe4Cxm9UbNHKmJSeE`. Its config/vault have not
-  been initialized through Squads yet, so the cross-chain deployment is not
-  verified end to end.
-- Solana initialize vault transaction, proposal, and two approvals are finalized
-  as `2JQcnuYSTuAT465nQjeVUpHRGY8znSNRgH62z72Y2hfWSAn6FzbpwVV3ecBnRTHpMCrXVV7qvYVdENDv64zY5FjW`,
-  `5zbFyTPY2d8eFwxCu2g7sVwFro19N1qCSvJY624JTJHbMxU6eceF5UuKwK985xXpECYPEKxMYPEQN1zVgxiRFo5V`,
-  `2hiNHJnvrHc6BhrXecnHbMJz81GVFKno94fDhvdG4fKChtSyuYHT3vNJ2htV2rEJys5pS6zRcbZgjLWkXDf6pBPw`,
-  and `41wNBS4RwYDWvqy9YYeoSkrhBQVWUQ4r6EuH4Hf6aZ2iu5TRUs2MwKPfuruhTVXtXNkSnVeDaBVaftC3JncTFCh1`.
-  Proposal PDA `9hCkD92WLaoLxbckPVyqHy6VatbD7XFUCuQutiJcRGUV` is Approved by members 1
-  and 2. Its on-chain execute-after timestamp is `1785851172`; attempting to
-  initialize before then would violate the approved Squads policy.
+  `3Rm6mmHY19JyiD4LvgXUzm62TkdBr5CWhmgAvjEXrzybJe2RByeZTxwLYMYaoRgSmgfnxixNMgAvzP2ktYvBBxts`
+  is finalized. Multisig `GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh`
+  and vault `5dtfsZNnhctzxFq5f2g3PqYj5eSz9Ab6Tk38Wxgp72g` verify as autonomous,
+  three-member, threshold 2, null config authority, and `timeLock = 0`.
+- Program `G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx` was deployed in
+  `49KFbqx2eEUTMLfG7CGPvSvgswtu4ye2mJ1vxDmxPJwCSrKpGMK9ngdZqMChGzvhmKPYcen4pY1WFQZ3mE2SXAja`.
+  Its ProgramData upgrade authority is the Squads vault.
+- Initialization executed in
+  `gtTKZoCmt9bnt3euZBo3UaDXyptYLiSFHa1U6wbYyZvVB8UXjVwCnEt7LTWcxY4jpdoe8hvoKzF7gMJSvRYcbEi`.
+  Live verification confirms Config PDA `cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA`,
+  vault ATA `Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7`, Devnet USDC mint,
+  shared quote key, config version 1, `paused=false`, and lock intent false.
 
 ### Required real-flow evidence
 
@@ -112,10 +102,7 @@ reload/interruption recovery. The Aptos run uses 7 days; the Solana DAA run uses
 
 ## Conditions to change the decision to GO
 
-- Initialize the Solana config and vault through the existing autonomous
-  2-of-3 Squads proposal after its 86,400-second timelock.
-- Complete the remaining manifest fields only from finalized public-chain
-  results and run both setup verifiers successfully.
+- Keep the finalized manifest and both setup verifiers green.
 - Configure one shared Ed25519 quote public key without recording the private key
   in Git, logs, shell history, or this checklist.
 - Run both setup scripts in `verify` mode successfully.

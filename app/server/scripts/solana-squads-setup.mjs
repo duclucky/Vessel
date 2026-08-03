@@ -10,15 +10,19 @@ import {
   ASSOCIATED_TOKEN_PROGRAM_ID,
   getAssociatedTokenAddressSync,
   TOKEN_PROGRAM_ID,
+  unpackAccount,
 } from '@solana/spl-token';
 import * as multisig from '@sqds/multisig';
 
 const THRESHOLD = 2;
-const TIMELOCK_SECONDS = 86_400;
+// Devnet beta exception: Squads encodes "no native timelock" as zero.
+// Sensitive program configuration changes still use the program's own 24-hour delay.
+const TIMELOCK_SECONDS = 0;
 const VAULT_INDEX = 0;
 const UPGRADEABLE_LOADER = new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111');
 export const SQUADS_PROGRAM_TREASURY = 'HM5y4mz3Bt9JY9mr1hkyhnvqxSH4H2u2451j7Hc2dtvK';
 const VESSEL_INITIALIZE_DISCRIMINATOR = Buffer.from([175, 175, 109, 31, 13, 152, 155, 237]);
+const VESSEL_CONFIG_DISCRIMINATOR = Buffer.from([155, 12, 170, 224, 30, 250, 204, 130]);
 
 const scriptError = (message) => Object.assign(new Error(message), {
   code: 'invalid_squads_setup',
@@ -232,6 +236,67 @@ async function verifyProgramAuthority(connection, programId, expectedAuthority) 
     programId: program.toBase58(),
     programData: programData.toBase58(),
     upgradeAuthority: expected.toBase58(),
+  });
+}
+
+export async function verifyVesselDeployment({ connection, plan }) {
+  const program = key(plan.programId, 'Vessel Program');
+  const authority = key(plan.authority, 'Vessel authority');
+  const configAddress = key(plan.configPda, 'Config PDA');
+  const vaultAddress = key(plan.vaultAta, 'Vault ATA');
+  const mint = key(plan.mint, 'Accepted mint');
+  const vaultAuthority = key(plan.vaultAuthority, 'Vault authority PDA');
+  const [derivedVaultAuthority, vaultBump] = PublicKey.findProgramAddressSync(
+    [Buffer.from('vault-authority')],
+    program,
+  );
+  const [configInfo, vaultInfo, programAuthority] = await Promise.all([
+    connection.getAccountInfo(configAddress, { commitment: 'finalized' }),
+    connection.getAccountInfo(vaultAddress, { commitment: 'finalized' }),
+    verifyProgramAuthority(connection, program, authority),
+  ]);
+  const data = Buffer.from(configInfo?.data || []);
+  if (
+    !configInfo
+    || !configInfo.owner.equals(program)
+    || data.length < 119
+    || !data.subarray(0, 8).equals(VESSEL_CONFIG_DISCRIMINATOR)
+    || !new PublicKey(data.subarray(8, 40)).equals(authority)
+    || data.subarray(40, 72).toString('hex') !== plan.quotePublicKey
+    || !new PublicKey(data.subarray(72, 104)).equals(mint)
+    || data.readUInt32LE(104) !== plan.network
+    || data.readBigUInt64LE(108) !== BigInt(plan.configVersion)
+    || data[116] !== 0
+    || data[117] !== 0
+    || data[118] !== vaultBump
+    || !derivedVaultAuthority.equals(vaultAuthority)
+  ) {
+    throw scriptError('Vessel Config account does not match the approved deployment');
+  }
+  if (!vaultInfo) throw scriptError('Vessel vault ATA is missing');
+  let vault;
+  try {
+    vault = unpackAccount(vaultAddress, vaultInfo, TOKEN_PROGRAM_ID);
+  } catch {
+    throw scriptError('Vessel vault ATA is invalid');
+  }
+  if (!vault.mint.equals(mint) || !vault.owner.equals(vaultAuthority)) {
+    throw scriptError('Vessel vault ATA does not match its mint and PDA authority');
+  }
+  return Object.freeze({
+    verified: true,
+    programId: program.toBase58(),
+    programData: programAuthority.programData,
+    upgradeAuthority: programAuthority.upgradeAuthority,
+    configPda: configAddress.toBase58(),
+    vaultAuthority: vaultAuthority.toBase58(),
+    vaultAta: vaultAddress.toBase58(),
+    acceptedMint: mint.toBase58(),
+    quotePublicKey: plan.quotePublicKey,
+    network: plan.network,
+    configVersion: plan.configVersion,
+    paused: false,
+    upgradeLockIntent: false,
   });
 }
 

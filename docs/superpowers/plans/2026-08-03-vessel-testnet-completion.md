@@ -4,14 +4,14 @@
 
 **Goal:** Complete the public Aptos Testnet and Solana Devnet contract deployments, prove one real upload per chain, and release the fail-closed contract-only webapp.
 
-**Architecture:** Aptos uses a native 2-of-3 Multisig Account created through `create_with_owners` with no framework timelock; Move-level configuration changes retain their 86,400-second delay. Solana remains controlled by the existing autonomous 2-of-3 Squads vault with an 86,400-second timelock. Production stays disabled until both deployments, receipts, and Shelby byte checks are public and finalized.
+**Architecture:** Aptos uses a native 2-of-3 Multisig Account created through `create_with_owners` with no framework timelock; Move-level configuration changes retain their 86,400-second delay. Solana uses an autonomous 2-of-3 Squads vault with `timeLock = 0` for this Devnet submission beta; Program-level configuration changes retain their 86,400-second delay.
 
 **Tech Stack:** Aptos Move and `@aptos-labs/ts-sdk`, Solana Anchor and `@sqds/multisig`, Node.js test runner, Shelby Testnet, Vercel.
 
 ## Global Constraints
 
 - Aptos governance is exactly 2-of-3 and has `timelock = null` on Testnet.
-- Solana governance remains exactly 2-of-3 with an 86,400-second Squads timelock.
+- Solana governance is exactly 2-of-3 with the approved Devnet `timeLock = 0` exception.
 - No private key, seed, signed quote, or paid authorization is printed or committed.
 - Direct treasury transfers never authorize upload.
 - `SETTLEMENT_CONTRACTS_ENABLED` remains false until both real-flow evidence files pass review.
@@ -116,9 +116,9 @@ Record only finalized public addresses and transaction hashes in the manifest/ch
 - Create: `docs/verification/solana-contract-settlement-devnet.md`
 
 **Interfaces:**
-- Existing Program ID: `6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b`.
-- Existing Squads vault authority: `2yHruBbf2b5P5SdHCXWBypSc1EoQe4Cxm9UbNHKmJSeE`.
-- Initialization is proposed and approved 2-of-3, then executes only after Squads' 86,400-second timelock.
+- Final Program ID: `G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx`.
+- Final Squads vault authority: `5dtfsZNnhctzxFq5f2g3PqYj5eSz9Ab6Tk38Wxgp72g`.
+- Initialization is proposed, approved 2-of-3, and executed immediately under the Devnet beta exception.
 
 - [ ] **Step 1: Verify current authority and accepted mint**
 

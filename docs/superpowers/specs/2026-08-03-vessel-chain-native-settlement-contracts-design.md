@@ -168,7 +168,7 @@ The program creates the unique receipt PDA and transfers the exact quoted Devnet
 
 ### Solana governance
 
-Squads is the program upgrade authority and the authority stored in the configuration PDA. Squads enforces a minimum 24-hour beta timelock for upgrades, withdrawals, signer rotation, accepted-mint changes, and other sensitive actions. The quote signer has no governance capability.
+Squads is the program upgrade authority and the authority stored in the configuration PDA. For this Devnet submission beta, the autonomous 2-of-3 Squads account uses `timeLock = 0`; Solana cannot encode this policy as `null`. The Program still enforces its own 24-hour schedule/execute delay for signer rotation, accepted-mint changes, withdrawals, and other sensitive configuration changes. This exception is not a mainnet governance profile. The quote signer has no governance capability.
 
 Before mainnet, a Squads proposal removes the BPF program upgrade authority permanently. The program records the lock intent before authority removal so indexers and the UI can show the immutable state.
 

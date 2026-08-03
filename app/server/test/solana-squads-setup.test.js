@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Keypair } from '@solana/web3.js';
+import { Keypair, PublicKey } from '@solana/web3.js';
+import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import {
   buildCreateInstruction,
   buildProgramAuthorityInstruction,
@@ -8,12 +9,13 @@ import {
   buildVesselInitializeInstruction,
   buildVesselInitializePlan,
   normalizeSquadsMembers,
+  verifyVesselDeployment,
 } from '../scripts/solana-squads-setup.mjs';
 
 const keys = Array.from({ length: 6 }, () => Keypair.generate().publicKey.toBase58());
 const squadsProgramTreasury = 'HM5y4mz3Bt9JY9mr1hkyhnvqxSH4H2u2451j7Hc2dtvK';
 
-test('Squads creation is autonomous 2-of-3 with a 24-hour timelock', () => {
+test('Squads beta creation is autonomous 2-of-3 without a native timelock', () => {
   const members = normalizeSquadsMembers(keys.slice(0, 3).join(','));
   const plan = buildSquadsCreatePlan({
     members,
@@ -23,7 +25,7 @@ test('Squads creation is autonomous 2-of-3 with a 24-hour timelock', () => {
   });
 
   assert.equal(plan.threshold, 2);
-  assert.equal(plan.timeLock, 86_400);
+  assert.equal(plan.timeLock, 0);
   assert.equal(plan.configAuthority, null);
   assert.equal(plan.members.length, 3);
   assert.deepEqual(plan.members.map((member) => member.key), members);
@@ -112,4 +114,51 @@ test('Vessel initialize instruction binds config, vault, quote key, and Devnet U
     network: 1,
     configVersion: 1n,
   }), /quote public key/i);
+});
+
+test('Solana deployment verifier binds program authority, config, quote key, mint, and vault ATA', async () => {
+  const programId = keys[0];
+  const squadsVault = keys[1];
+  const mint = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+  const quotePublicKey = '59'.repeat(32);
+  const plan = buildVesselInitializePlan({
+    programId, squadsVault, mint, quotePublicKey, network: 1, configVersion: 1n,
+  });
+  const [, vaultBump] = PublicKey.findProgramAddressSync(
+    [Buffer.from('vault-authority')], new PublicKey(programId),
+  );
+  const configData = Buffer.alloc(119);
+  Buffer.from([155, 12, 170, 224, 30, 250, 204, 130]).copy(configData, 0);
+  new PublicKey(squadsVault).toBuffer().copy(configData, 8);
+  Buffer.from(quotePublicKey, 'hex').copy(configData, 40);
+  new PublicKey(mint).toBuffer().copy(configData, 72);
+  configData.writeUInt32LE(1, 104);
+  configData.writeBigUInt64LE(1n, 108);
+  configData[118] = vaultBump;
+  const tokenData = Buffer.alloc(165);
+  new PublicKey(mint).toBuffer().copy(tokenData, 0);
+  new PublicKey(plan.vaultAuthority).toBuffer().copy(tokenData, 32);
+  tokenData[108] = 1;
+  const programData = Buffer.alloc(45);
+  programData.writeUInt32LE(3, 0);
+  programData[12] = 1;
+  new PublicKey(squadsVault).toBuffer().copy(programData, 13);
+  const [programDataAddress] = PublicKey.findProgramAddressSync(
+    [new PublicKey(programId).toBuffer()],
+    new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111'),
+  );
+  const byAddress = new Map([
+    [plan.configPda, { owner: new PublicKey(programId), data: configData }],
+    [plan.vaultAta, { owner: TOKEN_PROGRAM_ID, data: tokenData }],
+    [programDataAddress.toBase58(), {
+      owner: new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111'), data: programData,
+    }],
+  ]);
+  const result = await verifyVesselDeployment({
+    connection: { getAccountInfo: async (address) => byAddress.get(address.toBase58()) || null },
+    plan,
+  });
+  assert.equal(result.verified, true);
+  assert.equal(result.configPda, plan.configPda);
+  assert.equal(result.vaultAta, plan.vaultAta);
 });

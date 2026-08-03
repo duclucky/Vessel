@@ -9,7 +9,9 @@ Production-like beta deployment is intentionally fail-closed:
 
 - Squads v4 must be autonomous (`configAuthority = null`).
 - Exactly three distinct members have initiate, vote, and execute permissions.
-- Threshold is 2 and timelock is 86,400 seconds.
+- Threshold is 2. Devnet beta uses a zero native Squads timelock so the demo can
+  be initialized immediately; sensitive program configuration changes retain
+  the program's own 24-hour schedule/execute delay.
 - `Config.authority` and the Program upgrade authority must both resolve to the
   verified Squads vault PDA before the webapp is enabled.
 - No member private key is read by repository scripts.

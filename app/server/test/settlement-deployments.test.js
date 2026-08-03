@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import bs58 from 'bs58';
@@ -31,7 +31,7 @@ const validManifest = () => ({
     squadsMultisig: key(4),
     acceptedMint: key(5),
     deploymentSignature: signature(6),
-    timelockSeconds: 86400,
+    timelockSeconds: 0,
   },
 });
 
@@ -99,4 +99,10 @@ test('disabled contracts allow undeployed manifests only outside production', ()
     enabled: false,
     environment: 'production',
   }), /production/i);
+});
+
+test('Vercel runtime manifest stays identical to the repository deployment record', () => {
+  const repository = JSON.parse(readFileSync('../../deployments/vessel-settlement.testnet.json', 'utf8'));
+  const runtime = JSON.parse(readFileSync('deployments/vessel-settlement.testnet.json', 'utf8'));
+  assert.deepEqual(runtime, repository);
 });

@@ -3,7 +3,7 @@ import bs58 from 'bs58';
 
 const HEX_32 = /^[0-9a-f]{64}$/;
 const APTOS_ADDRESS = /^0x[0-9a-f]{64}$/;
-const MIN_TIMELOCK_SECONDS = 86_400;
+const SOLANA_BETA_TIMELOCK_SECONDS = 0;
 
 const deploymentError = (message) => Object.assign(new Error(message), {
   code: 'invalid_settlement_deployment',
@@ -54,10 +54,10 @@ function requiredHex32(value, field) {
 }
 
 function requireTimelock(value, field) {
-  if (Number(value) !== MIN_TIMELOCK_SECONDS) {
-    throw deploymentError(`${field} must be ${MIN_TIMELOCK_SECONDS} seconds`);
+  if (Number(value) !== SOLANA_BETA_TIMELOCK_SECONDS) {
+    throw deploymentError(`${field} must be ${SOLANA_BETA_TIMELOCK_SECONDS} seconds`);
   }
-  return MIN_TIMELOCK_SECONDS;
+  return SOLANA_BETA_TIMELOCK_SECONDS;
 }
 
 function requireAptosNoTimelock(value) {

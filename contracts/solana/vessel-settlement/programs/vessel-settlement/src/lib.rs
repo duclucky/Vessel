@@ -18,7 +18,7 @@ use instructions::{
     Withdraw,
 };
 
-declare_id!("6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b");
+declare_id!("G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx");
 
 #[program]
 pub mod vessel_settlement {
