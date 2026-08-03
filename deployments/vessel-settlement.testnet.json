@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
   "environment": "testnet",
-  "quotePublicKey": "0000000000000000000000000000000000000000000000000000000000000000",
+  "quotePublicKey": "596f2b0952d1320aa6a36de45dadef35f27255e457611094552d8fc1fe10edf7",
   "configVersion": "1",
   "aptos": {
     "chainId": 2,
-    "moduleAddress": "0x0",
-    "vaultAddress": "0x0",
-    "multisigAddress": "0x0",
-    "acceptedAsset": "0x0",
-    "deploymentTransaction": "0x0",
-    "timelockSeconds": 86400
+    "moduleAddress": "0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15",
+    "vaultAddress": "0x2025257c90ced758ea49e1492d60a903dbc8c4d5915657611f968b7a27cf3f8a",
+    "multisigAddress": "0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15",
+    "acceptedAsset": "0x1b18363a9f1fe5e6ebf247daba5cc1c18052bb232efdc4c50f556053922d98e1",
+    "deploymentTransaction": "0xbdc7f3ea07c5c2fbac06cb7e9a07db58ef1b93dfe0e41575379e564c6386a8a4",
+    "timelockSeconds": null
   },
   "solana": {
     "cluster": "devnet",
-    "programId": "11111111111111111111111111111111",
+    "programId": "6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b",
     "configPda": "11111111111111111111111111111111",
     "vaultAta": "11111111111111111111111111111111",
-    "squadsMultisig": "11111111111111111111111111111111",
+    "squadsMultisig": "2VQfFVSjR8tSCFwvPmz974XGaJQEY8CKa8krF2AM1qeH",
     "acceptedMint": "11111111111111111111111111111111",
-    "deploymentSignature": "",
+    "deploymentSignature": "c3DD378iJz3iafUfpSXkDiX4M622e3iMtQ4auEaESt1AqMDjGsCDE7SVtqXyuGxsLVa8jwTTJTYfLYw7WFEy41C",
     "timelockSeconds": 86400
   }
 }
