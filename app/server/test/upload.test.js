@@ -91,3 +91,11 @@ test('pre-submission wallet errors restore the signed quote for retry', () => {
     /activeUploadContext = quotedContext;\s*quoteUi\.render\(\{\s*kind: 'ready',\s*quote: quotedContext\.quote,\s*message,/s,
   );
 });
+
+test('post-payment Solana upload errors remain visible instead of disappearing with the toast', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(
+    source,
+    /if \(session\.chain === 'solana'.*?catch \(e\) \{.*?await renderRecoveryPanel\(\);.*?upload-recovery-error/s,
+  );
+});

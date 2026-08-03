@@ -756,7 +756,18 @@ function initUpload() {
           onCheckpoint('recovery_required', { errorCode: e.code });
         }
         const m = String(e?.message || e);
-        toast(m.includes('reject') ? 'Signature rejected' : m.slice(0, 160), 'error');
+        const message = m.includes('reject') ? 'Signature rejected' : m.slice(0, 160);
+        toast(message, 'error');
+        await renderRecoveryPanel();
+        const recoveryPanel = $('#upload-recovery');
+        if (recoveryPanel) {
+          const errorStatus = document.createElement('p');
+          errorStatus.id = 'upload-recovery-error';
+          errorStatus.className = 'mt-3 text-sm leading-6 text-error';
+          errorStatus.setAttribute('role', 'alert');
+          errorStatus.textContent = message;
+          recoveryPanel.appendChild(errorStatus);
+        }
         return;
       }
     }
