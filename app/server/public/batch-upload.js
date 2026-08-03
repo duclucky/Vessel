@@ -22,7 +22,9 @@ export class BatchValidationError extends Error {
 }
 
 export function batchRelativePath(file) {
-  const raw = String(file?.webkitRelativePath || file?.name || '').replaceAll('\\', '/');
+  const raw = String(
+    file?.vesselRelativePath || file?.webkitRelativePath || file?.name || '',
+  ).replaceAll('\\', '/');
   return raw
     .split('/')
     .filter((segment) => segment && segment !== '.' && segment !== '..')

@@ -10,6 +10,7 @@ import { mountQuoteUi } from './quote-ui.js';
 import { settleContractQuote } from './settlement-client.js';
 import { createRecoveryLedger } from './recovery-ledger.js';
 import { createBatchQueue, runBatchQueue } from './batch-upload.js';
+import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -210,6 +211,7 @@ async function initIdentity() {
 
 function initUpload() {
   const dz = $('#drop-zone'); const input = $('#file-input'); const folderInput = $('#folder-input');
+  const folderPicker = $('#folder-picker');
   const vInit = $('#upload-initial-view'); const vProg = $('#upload-progress-view'); const vDone = $('#upload-success-view');
   const bar = $('#progress-bar'); const pct = $('#progress-percentage'); const fname = $('#upload-filename');
   const quoteRoot = $('#upload-options');
@@ -1061,6 +1063,21 @@ function initUpload() {
     });
   }
   if (input) input.addEventListener('change', (e) => void selectFile(e.target.files[0]));
+  if (folderPicker) folderPicker.addEventListener('click', () => void (async () => {
+    if (!supportsDirectoryPicker(window)) {
+      if (folderInput) folderInput.click();
+      return;
+    }
+    try {
+      const directory = await window.showDirectoryPicker({ mode: 'read' });
+      const files = await collectDirectoryFiles(directory);
+      await selectBatch(files);
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        toast(String(error?.message || error).slice(0, 160), 'error');
+      }
+    }
+  })());
   if (folderInput) folderInput.addEventListener('change', (event) => void selectBatch([...event.target.files]));
   window.resetUpload = () => {
     pendingWalletWork.abort();

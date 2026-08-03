@@ -28,6 +28,13 @@ test('batch queue preserves folder paths and rejects unsupported or empty files'
   ]);
 });
 
+test('batch paths accept files returned by the native directory picker', () => {
+  const image = asset('1.png', 12, 'image/png');
+  image.vesselRelativePath = 'collection/images/1.png';
+
+  assert.equal(batchRelativePath(image), 'collection/images/1.png');
+});
+
 test('batch queue rejects an accepted selection larger than the 1 GB beta limit', () => {
   assert.throws(
     () => createBatchQueue([

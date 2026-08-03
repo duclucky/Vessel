@@ -54,7 +54,7 @@
             <p class="mt-4 max-w-lg leading-7 text-on-surface-variant">Drag and drop images or short demo assets here, choose one file, or select an entire collection folder.</p>
             <div class="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
               <label class="vessel-button vessel-button-primary cursor-pointer px-7 py-4" for="file-input"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span>Select file</label>
-              <label class="vessel-button vessel-button-secondary cursor-pointer px-7 py-4" for="folder-input"><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>Select folder</label>
+              <button id="folder-picker" type="button" class="vessel-button vessel-button-secondary cursor-pointer px-7 py-4"><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>Select folder</button>
             </div>
             <input id="file-input" class="sr-only" type="file" accept="image/*,video/*,application/json,text/plain">
             <input id="folder-input" class="sr-only" type="file" webkitdirectory multiple accept="image/*,video/*,application/json,text/plain">

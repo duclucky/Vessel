@@ -12,6 +12,7 @@ test('Upload preserves every runtime state and explains both payment paths', () 
     'upload-initial-view',
     'drop-zone',
     'file-input',
+    'folder-picker',
     'folder-input',
     'batch-summary',
     'batch-file-count',
@@ -64,6 +65,8 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.match(html, /id="custom-days"[^>]*min="1"[^>]*max="365"[^>]*step="1"/);
   assert.match(html, /id="quote-status"[^>]*aria-live="polite"/);
   assert.match(html, /id="folder-input"[^>]*type="file"[^>]*webkitdirectory[^>]*multiple/);
+  assert.match(html, /id="folder-picker"[^>]*type="button"/);
+  assert.doesNotMatch(html, /for="folder-input"/);
   assert.match(html, /id="batch-status"[^>]*aria-live="polite"/);
   assert.match(html, /id="batch-progress"[^>]*max="100"/);
   assert.match(html, /1 GB beta limit/i);
@@ -119,6 +122,11 @@ test('post-payment Solana upload errors remain visible instead of disappearing w
 test('folder uploads run through the existing quote and settlement path sequentially', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);
+  assert.match(source, /import \{[^}]*collectDirectoryFiles[^}]*supportsDirectoryPicker[^}]*\} from '\.\/directory-picker\.js'/s);
+  assert.match(source, /showDirectoryPicker\(\{ mode: 'read' \}\)/);
+  assert.match(source, /await collectDirectoryFiles\(directory\)/);
+  assert.match(source, /folderInput\.click\(\)/);
+  assert.match(source, /folderPicker\.addEventListener\('click'/);
   assert.match(source, /folderInput\.addEventListener\('change'/);
   assert.match(source, /createBatchQueue\(files, \{ maxFileBytes/);
   assert.match(source, /await runBatchQueue\(batchQueue, uploadBatchItem/);
