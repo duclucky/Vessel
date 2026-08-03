@@ -14,9 +14,8 @@ export const config = {
   ipfsGateway: process.env.IPFS_GATEWAY || 'https://ipfs.io/ipfs/',
   // Optional: same asset pinned to IPFS for a fair latency comparison. If unset → ipfs = null.
   ipfsCompareCid: process.env.IPFS_COMPARE_CID || '',
-  // USDC payments (customer pays the app; app sponsors Aptos fees).
+  // Contract settlement uses the public testnet mint; no receiver key is held by the app.
   solanaRpc: process.env.SOLANA_RPC || 'https://api.devnet.solana.com',
-  treasurySecretKey: process.env.SOLANA_TREASURY_SECRET_KEY || '',
   usdcMint: process.env.USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
   walletAptosEnabled: process.env.WALLET_APTOS_ENABLED !== 'false',
   walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
@@ -31,6 +30,5 @@ export const config = {
   aptUsdReferenceMicros: BigInt(process.env.APT_USD_REFERENCE_MICROS || '5000000'),
   registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
   gasSafetyBps: BigInt(process.env.GAS_SAFETY_BPS || '12000'),
-  aptosTreasuryAddress: process.env.APTOS_TREASURY_ADDRESS || process.env.GAS_STATION_ACCOUNT || '',
   telemetryWalletSalt: process.env.TELEMETRY_WALLET_SALT || process.env.PAY_SECRET || '',
 };

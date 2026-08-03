@@ -54,5 +54,12 @@ test('recorded transaction recovery verifies without another wallet approval', a
 
 test('legacy direct-transfer settlement code is absent from the browser entrypoint', () => {
   const source = fs.readFileSync(new URL('../public/settlement-client.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /payUSDC|primary_fungible_store::transfer|treasuryAta|\/api\/pay\//);
+  for (const legacy of [
+    ['pay', 'USDC'].join(''),
+    'primary_fungible_store::transfer',
+    ['treasury', 'Ata'].join(''),
+    '/api/pay/',
+  ]) {
+    assert.equal(source.includes(legacy), false, legacy);
+  }
 });

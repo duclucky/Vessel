@@ -15,7 +15,7 @@ test('public config exposes server-gated wallet families without secrets', () =>
   assert.match(config, /walletSolanaEnabled/);
   assert.match(server, /walletFamilies/);
   assert.match(server, /evm:\s*false/);
-  assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!sponsor\s*&&\s*!!payments/);
+  assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*settlementDeployments\.enabled/);
   assert.doesNotMatch(publicConfigRoute, /gasStationApiKey:\s*config\.gasStationApiKey/);
   assert.doesNotMatch(publicConfigRoute, /paySecret:\s*config\.paySecret/);
 });
@@ -39,7 +39,6 @@ test('dynamic quote configuration is explicit and contains no development signin
     'aptUsdReferenceMicros',
     'registerGasUnitsEstimate',
     'gasSafetyBps',
-    'aptosTreasuryAddress',
     'defaultStorageDays',
   ]) {
     assert.match(config, new RegExp(`${key}:`), key);
@@ -49,6 +48,13 @@ test('dynamic quote configuration is explicit and contains no development signin
   assert.match(config, /process\.env\.QUOTE_SIGNER_PRIVATE_KEY_B64 \|\| ''/);
   assert.match(config, /process\.env\.QUOTE_SIGNER_PUBLIC_KEY_HEX \|\| ''/);
   assert.match(config, /process\.env\.PAY_SECRET \|\| ''/);
-  assert.match(config, /APTOS_TREASURY_ADDRESS \|\| process\.env\.GAS_STATION_ACCOUNT/);
+  for (const legacyKey of [
+    ['treasury', 'Secret', 'Key'].join(''),
+    ['aptos', 'Treasury', 'Address'].join(''),
+    ['SOLANA', 'TREASURY', 'SECRET', 'KEY'].join('_'),
+    ['APTOS', 'TREASURY', 'ADDRESS'].join('_'),
+  ]) {
+    assert.equal(config.includes(legacyKey), false, legacyKey);
+  }
   assert.doesNotMatch(config, /vessel-dev-secret/);
 });

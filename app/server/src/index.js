@@ -4,20 +4,15 @@ import multer from 'multer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
-import {
-  expectedTotalChunksets,
-  SHELBYUSD_FA_METADATA_ADDRESS,
-} from '@shelby-protocol/sdk/node';
+import { expectedTotalChunksets } from '@shelby-protocol/sdk/node';
 import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
-import { PaymentManager } from './lib/payments.js';
 import { SponsorManager } from './lib/sponsor.js';
 import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
 import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
 import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
-import { verifyAptosShelbyUsdTransfer } from './lib/aptos-settlement.js';
 import { targetExpirationMicros } from '../public/retention.js';
 import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
 import { createTelemetry } from './lib/telemetry.js';
@@ -38,14 +33,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const store = getStorageProvider();
 const telemetry = createTelemetry({ walletSalt: config.telemetryWalletSalt });
-let payments = null;
-try {
-  if (config.treasurySecretKey) payments = new PaymentManager({
-    rpc: config.solanaRpc,
-    treasurySecretKey: config.treasurySecretKey,
-    usdcMint: config.usdcMint,
-  });
-} catch (e) { console.warn('[pay] disabled:', String(e?.message || e)); }
 let sponsor = null;
 try {
   if (config.gasStationApiKey) sponsor = new SponsorManager({ gasStationApiKey: config.gasStationApiKey, network: config.network });
@@ -131,21 +118,6 @@ try {
   }
 } catch (e) { console.warn('[paid-auth] disabled:', String(e?.message || e)); }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes } });
-
-async function enrichSettlementQuote(quote) {
-  if (quote.chain === 'solana') {
-    return Object.freeze({
-      ...quote,
-      treasuryAta: payments ? (await payments.treasuryAta()).toString() : '',
-      usdcMint: config.usdcMint,
-    });
-  }
-  return Object.freeze({
-    ...quote,
-    aptosTreasuryAddress: config.aptosTreasuryAddress,
-    shelbyUsdAssetAddress: SHELBYUSD_FA_METADATA_ADDRESS.toString(),
-  });
-}
 
 function recordQuoteOperation(stage, quote, extra = {}) {
   const context = quote?.context || quote || {};
@@ -308,10 +280,13 @@ app.get('/api/config', (_req, res) => {
       aptos: settlementDeployments.aptos,
       solana: settlementDeployments.solana,
     } : { enabled: false },
-    sponsored: !!sponsor && !!payments && !!paidAuthorizations,
+    sponsored: !!sponsor && !!paidAuthorizations && settlementDeployments.enabled,
     walletFamilies: {
-      aptos: config.walletAptosEnabled,
-      solana: config.walletSolanaEnabled && !!sponsor && !!payments && !!paidAuthorizations,
+      aptos: config.walletAptosEnabled && !!paidAuthorizations && settlementDeployments.enabled,
+      solana: config.walletSolanaEnabled
+        && !!sponsor
+        && !!paidAuthorizations
+        && settlementDeployments.enabled,
       evm: false,
     },
     maxUploadBytes: config.maxUploadBytes,
@@ -346,7 +321,7 @@ app.post('/api/quotes/upload', async (req, res) => {
       ...req.body,
       expirationMicros: targetExpirationMicros({ serverTimeMs, days: req.body?.days }),
     });
-    const quote = await enrichSettlementQuote(await quoteManager.issueUpload(context));
+    const quote = await quoteManager.issueUpload(context);
     recordQuoteOperation('quoted', quote);
     send(res, 200, {
       ...quote,
@@ -379,7 +354,7 @@ app.post('/api/quotes/validate', async (req, res) => {
     if (!quoteToken) return send(res, 400, { error: 'quoteToken required', code: 'invalid_quote' });
     const context = normalizeUploadQuoteContext(input);
     const original = quoteManager.validate(quoteToken, context);
-    const quote = await enrichSettlementQuote(await quoteManager.issueUpload(context));
+    const quote = await quoteManager.issueUpload(context);
     const originalTotal = BigInt(original.breakdown.totalAccountingMicro);
     const freshTotal = BigInt(quote.totalAccountingMicro);
     const driftPercentBps = originalTotal === 0n
@@ -519,85 +494,6 @@ app.post('/api/settlements/verify', async (req, res) => {
       }
     }
     fail(res, error);
-  }
-});
-
-app.post('/api/pay/solana/verify', async (req, res) => {
-  try {
-    if (!quoteManager || !paidAuthorizations || !payments) {
-      return send(res, 503, { error: 'Solana settlement is unavailable' });
-    }
-    const { quoteToken, signature } = req.body || {};
-    if (!quoteToken || !signature) {
-      return send(res, 400, { error: 'quoteToken and signature required' });
-    }
-    const quote = quoteManager.validate(quoteToken);
-    if (quote.context.chain !== 'solana') {
-      return send(res, 400, { error: 'Solana quote required', code: 'quote_chain_mismatch' });
-    }
-    const settlementQuote = {
-      ...quote,
-      sourceAddress: quote.context.sourceAddress,
-      solanaAmountMicro: quote.breakdown.totalAccountingMicro,
-    };
-    const verified = await payments.verifyQuotePayment({ quote: settlementQuote, signature });
-    if (!verified.ok) return send(res, 402, verified);
-    const paidAuthorization = paidAuthorizations.issue({
-      quote,
-      settlementChain: 'solana',
-      settlementHash: verified.signature,
-    });
-    recordQuoteOperation('paid', quote, { transactionHash: verified.signature });
-    send(res, 200, { ok: true, paidAuthorization, settlementHash: verified.signature });
-  } catch (e) {
-    telemetry.operation({
-      stage: 'failed', operation: 'upload', network: 'solana-devnet',
-      errorCode: 'payment_verification_failed',
-    });
-    fail(res, e);
-  }
-});
-
-app.post('/api/pay/aptos/verify', async (req, res) => {
-  try {
-    if (!quoteManager || !paidAuthorizations) {
-      return send(res, 503, { error: 'Aptos settlement is unavailable' });
-    }
-    const { quoteToken, transactionHash = '' } = req.body || {};
-    if (!quoteToken) return send(res, 400, { error: 'quoteToken required' });
-    const quote = quoteManager.validate(quoteToken);
-    if (quote.context.chain !== 'aptos') {
-      return send(res, 400, { error: 'Aptos quote required', code: 'quote_chain_mismatch' });
-    }
-    const nativeServiceFeeShelbyUsdUnits = (
-      BigInt(quote.breakdown.serviceFeeAccountingMicro) * 100n
-    ).toString();
-    const settlementHash = nativeServiceFeeShelbyUsdUnits === '0'
-      ? `no-service-fee:${quote.quoteId}`
-      : (await verifyAptosShelbyUsdTransfer({
-        transactionHash,
-        quote: {
-          ...quote,
-          sourceAddress: quote.context.sourceAddress,
-          nativeServiceFeeShelbyUsdUnits,
-        },
-        aptos,
-        treasury: config.aptosTreasuryAddress,
-        assetAddress: SHELBYUSD_FA_METADATA_ADDRESS,
-      })).transactionHash;
-    const paidAuthorization = paidAuthorizations.issue({
-      quote,
-      settlementChain: 'aptos',
-      settlementHash,
-    });
-    recordQuoteOperation('paid', quote, { transactionHash: settlementHash });
-    send(res, 200, { ok: true, paidAuthorization, settlementHash });
-  } catch (e) {
-    telemetry.operation({
-      stage: 'failed', operation: 'upload', network: 'aptos-testnet',
-      errorCode: 'payment_verification_failed',
-    });
-    fail(res, e);
   }
 });
 
