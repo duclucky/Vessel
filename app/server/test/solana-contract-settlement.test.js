@@ -180,7 +180,10 @@ test('simulation failures surface the final program logs instead of truncating t
       return { signedTransaction: transaction.serialize() };
     },
   };
-  const simulationError = Object.assign(new Error('Simulation failed'), {
+  const simulationError = Object.assign(new Error(
+    'Transaction simulation failed: Error processing Instruction 1: custom program error: 0x2',
+  ), {
+    transactionMessage: 'Transaction simulation failed: Error processing Instruction 1: custom program error: 0x2',
     transactionLogs: [
       'Program ComputeBudget111111111111111111111111111111 success',
       'Program log: TransferChecked failed: TokenError::InvalidMint',
@@ -198,7 +201,7 @@ test('simulation failures surface the final program logs instead of truncating t
       contractQuote: quote,
       contractSignature: '66'.repeat(64),
     }),
-    /InvalidMint/,
+    new RegExp(`${programId.toBase58()}.*InvalidMint`),
   );
 });
 

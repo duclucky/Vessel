@@ -68840,12 +68840,23 @@ ${fields.join("\n")}`;
     const signedIntentInstructions = signed.instructions.filter((instruction) => !instruction.programId.equals(import_web36.ComputeBudgetProgram.programId));
     return expected.feePayer?.equals(signed.feePayer) && expected.instructions.length === signedIntentInstructions.length && expected.instructions.every((instruction, index2) => sameInstruction(instruction, signedIntentInstructions[index2]));
   }
-  function simulationFailure(error) {
-    const logs = Array.isArray(error?.transactionLogs) ? error.transactionLogs : Array.isArray(error?.logs) ? error.logs : [];
-    const relevant = logs.filter((line) => /Program log:|failed:/i.test(line)).slice(-4).join(" | ");
-    const detail = relevant || error?.transactionMessage || error?.message || "unknown RPC error";
+  async function simulationFailure(error, connection, signedTransaction) {
+    const logs = Array.isArray(error?.transactionLogs) ? error.transactionLogs : Array.isArray(error?.logs) ? error.logs : Array.isArray(error?.data?.logs) ? error.data.logs : [];
+    let resolvedLogs = logs;
+    if (!resolvedLogs.length && typeof error?.getLogs === "function") {
+      try {
+        resolvedLogs = await error.getLogs(connection) || [];
+      } catch {
+      }
+    }
+    const relevant = resolvedLogs.filter((line) => /Program log:|failed:/i.test(line)).slice(-4).join(" | ");
+    const transactionMessage = error?.transactionMessage || error?.message || "";
+    const instructionIndex = Number(transactionMessage.match(/Instruction (\d+)/i)?.[1]);
+    const failedProgram = Number.isInteger(instructionIndex) ? signedTransaction.instructions[instructionIndex]?.programId?.toBase58?.() : "";
+    const programDetail = failedProgram ? `Instruction ${instructionIndex} \xB7 ${failedProgram}. ` : "";
+    const detail = relevant || transactionMessage || "unknown RPC error";
     return settlementError(
-      `Solana simulation failed: ${detail}`,
+      `Solana simulation failed: ${programDetail}${detail}`,
       "settlement_submission_failed"
     );
   }
@@ -68992,7 +69003,7 @@ ${fields.join("\n")}`;
           preflightCommitment: "confirmed"
         });
       } catch (error) {
-        throw simulationFailure(error);
+        throw await simulationFailure(error, connection, signedTransaction);
       }
     } else {
       const submitted = await provider2.signAndSendTransaction(transaction);
