@@ -2,101 +2,84 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PaymentManager } from '../src/lib/payments.js';
 
-const context = {
-  sizeBytes: 42,
-  chain: 'solana',
+const quote = {
+  quoteId: 'quote-1',
+  solanaAmountMicro: '10000',
   sourceAddress: 'Source111',
-  storageAddress: '0xdaa',
-  expirationMicros: 1_800_000_000_000_000,
 };
 
-const testManager = (options = {}) => PaymentManager.forTest({
-  secret: 'secret',
-  priceBaseUsdc: 0.01,
-  pricePerMbUsdc: 0,
-  treasury: 'Treasury111',
-  treasuryAta: 'Ata111',
-  ...options,
+const transaction = ({
+  source = 'Source111',
+  treasury = 'Treasury111',
+  mint = 'Mint111',
+  received = '10000',
+  debited = '10000',
+  memo = 'quote-1',
+  failed = false,
+} = {}) => ({
+  meta: {
+    err: failed ? { InstructionError: [0, 'failed'] } : null,
+    preTokenBalances: [
+      { owner: source, mint, uiTokenAmount: { amount: '20000' } },
+      { owner: treasury, mint, uiTokenAmount: { amount: '0' } },
+    ],
+    postTokenBalances: [
+      { owner: source, mint, uiTokenAmount: { amount: String(20_000 - Number(debited)) } },
+      { owner: treasury, mint, uiTokenAmount: { amount: received } },
+    ],
+  },
+  transaction: {
+    message: {
+      instructions: [{ program: 'spl-memo', parsed: memo }],
+    },
+  },
 });
 
-test('payment token is bound to the complete upload context', async () => {
-  const manager = testManager();
-  const quote = await manager.createIntent(context);
-  const token = manager.uploadToken(quote.paymentId);
+const managerFor = (tx) => PaymentManager.forTest({
+  treasury: 'Treasury111',
+  treasuryAta: 'Ata111',
+  mint: 'Mint111',
+  tx,
+});
 
-  assert.equal(manager.checkUploadToken(quote.paymentId, token, context), true);
-  for (const changed of [
-    { sourceAddress: 'OtherSource' },
-    { storageAddress: '0xother' },
-    { sizeBytes: 43 },
-    { expirationMicros: context.expirationMicros + 1 },
-    { chain: 'aptos' },
+test('Solana quote payment verifies treasury receipt, source debit, mint, and quote memo', async () => {
+  const manager = managerFor(transaction());
+  const result = await manager.verifyQuotePayment({ quote, signature: 'sig-1' });
+
+  assert.deepEqual(result, {
+    ok: true,
+    signature: 'sig-1',
+    receivedMicro: '10000',
+  });
+});
+
+test('Solana quote payment rejects wrong source, mint, treasury amount, debit, memo, or failed tx', async () => {
+  for (const [tx, reason] of [
+    [transaction({ source: 'Other111' }), 'source_mismatch'],
+    [transaction({ mint: 'OtherMint' }), 'insufficient_amount'],
+    [transaction({ received: '9999' }), 'insufficient_amount'],
+    [transaction({ debited: '9999' }), 'insufficient_source_debit'],
+    [transaction({ memo: 'other-quote' }), 'memo_mismatch'],
+    [transaction({ failed: true }), 'tx_failed'],
   ]) {
     assert.equal(
-      manager.checkUploadToken(quote.paymentId, token, { ...context, ...changed }),
-      false,
+      (await managerFor(tx).verifyQuotePayment({ quote, signature: 'sig-1' })).reason,
+      reason,
     );
   }
 });
 
-test('payment verification requires treasury receipt and a debit owned by the bound source', async () => {
-  const tx = {
-    meta: {
-      err: null,
-      preTokenBalances: [
-        { owner: 'Source111', mint: 'Mint111', uiTokenAmount: { amount: '20000' } },
-        { owner: 'Treasury111', mint: 'Mint111', uiTokenAmount: { amount: '0' } },
-      ],
-      postTokenBalances: [
-        { owner: 'Source111', mint: 'Mint111', uiTokenAmount: { amount: '10000' } },
-        { owner: 'Treasury111', mint: 'Mint111', uiTokenAmount: { amount: '10000' } },
-      ],
-    },
-    transaction: { message: { instructions: [] } },
-  };
-  const manager = testManager({ mint: 'Mint111', tx });
-  const quote = await manager.createIntent(context);
-  tx.transaction.message.instructions.push({ memo: quote.paymentId });
-
-  assert.equal((await manager.verify(quote.paymentId, 'sig')).ok, true);
-
-  tx.meta.preTokenBalances[0].owner = 'Attacker111';
-  assert.equal((await manager.verify(quote.paymentId, 'sig')).reason, 'source_mismatch');
-});
-
-test('payment verification rejects an insufficient source debit', async () => {
-  const tx = {
-    meta: {
-      err: null,
-      preTokenBalances: [
-        { owner: 'Source111', mint: 'Mint111', uiTokenAmount: { amount: '20000' } },
-        { owner: 'Treasury111', mint: 'Mint111', uiTokenAmount: { amount: '0' } },
-      ],
-      postTokenBalances: [
-        { owner: 'Source111', mint: 'Mint111', uiTokenAmount: { amount: '19999' } },
-        { owner: 'Treasury111', mint: 'Mint111', uiTokenAmount: { amount: '10000' } },
-      ],
-    },
-    transaction: { message: { instructions: [] } },
-  };
-  const manager = testManager({ mint: 'Mint111', tx });
-  const quote = await manager.createIntent(context);
-  tx.transaction.message.instructions.push({ memo: quote.paymentId });
-
-  assert.equal(
-    (await manager.verify(quote.paymentId, 'sig')).reason,
-    'insufficient_source_debit',
-  );
-});
-
-test('invalid intent context is rejected before a quote is minted', async () => {
-  const manager = testManager();
-  await assert.rejects(
-    () => manager.createIntent({ ...context, sourceAddress: '' }),
-    (error) => error.code === 'invalid_payment_context',
-  );
-  await assert.rejects(
-    () => manager.createIntent({ ...context, sizeBytes: 0 }),
-    (error) => error.code === 'invalid_payment_context',
-  );
+test('Solana quote payment rejects malformed quote bindings before querying chain', async () => {
+  const manager = managerFor(transaction());
+  for (const changed of [
+    { quoteId: '' },
+    { sourceAddress: '' },
+    { solanaAmountMicro: '0' },
+    { solanaAmountMicro: 'bad' },
+  ]) {
+    await assert.rejects(
+      () => manager.verifyQuotePayment({ quote: { ...quote, ...changed }, signature: 'sig-1' }),
+      (error) => error.code === 'invalid_payment_context',
+    );
+  }
 });

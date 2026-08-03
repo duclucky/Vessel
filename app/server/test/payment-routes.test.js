@@ -6,11 +6,17 @@ const server = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf
 const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const solana = fs.readFileSync(new URL('../client-src/vessel-solana.js', import.meta.url), 'utf8');
 
-test('quote and sponsor routes require the complete normalized payment context', () => {
-  assert.match(server, /normalizePaymentContext\(req\.body/);
-  assert.match(server, /payments\.createIntent\(context\)/);
-  assert.match(server, /payments\.checkUploadToken\(paymentId, uploadToken, context\)/);
-  assert.match(server, /expectedSender:\s*context\.storageAddress/);
+test('settlement and sponsor routes require signed quote and paid authorization context', () => {
+  assert.match(server, /app\.post\('\/api\/pay\/solana\/verify'/);
+  assert.match(server, /app\.post\('\/api\/pay\/aptos\/verify'/);
+  assert.match(server, /quoteManager\.validate\(quoteToken/);
+  assert.match(server, /payments\.verifyQuotePayment/);
+  assert.match(server, /verifyAptosShelbyUsdTransfer/);
+  assert.match(server, /paidAuthorizations\.issue/);
+  assert.match(server, /paidAuthorizations\.validate/);
+  assert.match(server, /expectedSender:\s*quote\.context\.storageAddress/);
+  assert.doesNotMatch(server, /app\.post\('\/api\/pay\/quote'/);
+  assert.doesNotMatch(server, /createIntent/);
 });
 
 test('browser payment flow creates one immutable context and reuses its expiration', () => {

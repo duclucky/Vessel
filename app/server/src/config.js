@@ -17,8 +17,6 @@ export const config = {
   solanaRpc: process.env.SOLANA_RPC || 'https://api.devnet.solana.com',
   treasurySecretKey: process.env.SOLANA_TREASURY_SECRET_KEY || '',
   usdcMint: process.env.USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-  priceBaseUsdc: Number(process.env.PRICE_BASE_USDC || 0.01),
-  pricePerMbUsdc: Number(process.env.PRICE_PER_MB_USDC || 0.01),
   walletAptosEnabled: process.env.WALLET_APTOS_ENABLED !== 'false',
   walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
