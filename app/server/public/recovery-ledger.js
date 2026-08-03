@@ -2,6 +2,7 @@ export const RECOVERY_KEY = 'vessel_recovery_v1';
 
 const STAGES = new Set([
   'quoted',
+  'settlement_submitted',
   'paid',
   'registered',
   'uploading',
@@ -16,6 +17,7 @@ const CONTEXT_FIELDS = [
 ];
 const EVIDENCE_FIELDS = [
   'quoteToken', 'paidAuthorization', 'settlementHash', 'paymentSignature',
+  'settlementTransactionId',
   'registerTransactionHash', 'acknowledgementHash', 'actualStorageUnits',
   'actualGasUsed', 'quotedAccountingMicro', 'errorCode',
   'paymentTier',

@@ -38,11 +38,12 @@ test('recovery ledger advances allowlisted upload stages without storing file or
     privateKey: 'never store this either',
   });
 
-  for (const stage of ['paid', 'registered', 'uploading', 'finalizing', 'active', 'recovery_required']) {
+  for (const stage of ['settlement_submitted', 'paid', 'registered', 'uploading', 'finalizing', 'active', 'recovery_required']) {
     current += 1_000;
     ledger.advance(record.id, stage, {
       paidAuthorization: 'vpaid.signed',
       settlementHash: '0xsettled',
+      settlementTransactionId: '0xcontract-transaction',
       registerTransactionHash: '0xregistered',
       fileBytes: [9, 9, 9],
       privateKey: 'secret',
@@ -56,6 +57,7 @@ test('recovery ledger advances allowlisted upload stages without storing file or
   assert.equal(serialized.includes('privateKey'), false);
   assert.equal(ledger.loadForWallet(identity)[0].paidAuthorization, 'vpaid.signed');
   assert.equal(ledger.loadForWallet(identity)[0].registerTransactionHash, '0xregistered');
+  assert.equal(ledger.loadForWallet(identity)[0].settlementTransactionId, '0xcontract-transaction');
   assert.equal(normalizeWalletIdentity(identity), 'aptos:0xabc:0xabc');
 });
 
