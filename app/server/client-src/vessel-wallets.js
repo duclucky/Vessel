@@ -1,5 +1,6 @@
 import { getWallets } from '@wallet-standard/app';
 import { createWalletRegistry } from './wallets/registry.js';
+import { createWalletController } from './wallets/session.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -7,40 +8,36 @@ const aptosSource = {
   get: standardSource.get.bind(standardSource),
   on: standardSource.on.bind(standardSource),
 };
-const registry = createWalletRegistry({ aptosSource, standardSource, eventTarget: window });
-const registeredAdapterIds = new Set();
-const listeners = new Set();
-let state = { status: 'disconnected', session: null, wallets: [], error: '' };
+const discoveredRegistry = createWalletRegistry({
+  aptosSource,
+  standardSource,
+  eventTarget: window,
+});
+const adapters = new Map();
 
-const publish = (patch) => {
-  state = { ...state, ...patch };
-  listeners.forEach((listener) => listener(state));
+const availableRegistry = {
+  async scan() {
+    return (await discoveredRegistry.scan()).map((wallet) => {
+      if (wallet.chain === 'evm' || adapters.has(wallet.id)) return wallet;
+      return { ...wallet, enabled: false, status: 'unavailable' };
+    });
+  },
+  subscribe: discoveredRegistry.subscribe,
 };
 
-const scan = async () => {
-  const wallets = (await registry.scan()).map((wallet) => {
-    if (wallet.chain === 'evm' || registeredAdapterIds.has(wallet.id)) return wallet;
-    return { ...wallet, enabled: false, status: 'unavailable' };
-  });
-  publish({ wallets });
-  return wallets;
-};
-
-registry.subscribe(() => void scan());
-
-const notReady = () => {
-  throw new Error('Vessel wallet controller is not initialized');
-};
+const controller = createWalletController({
+  registry: availableRegistry,
+  storage: window.localStorage,
+  resolveAdapter(descriptor) {
+    const createAdapter = adapters.get(descriptor.id);
+    if (!createAdapter) {
+      throw new Error(`Wallet adapter for ${descriptor.chain} is not active`);
+    }
+    return createAdapter(descriptor);
+  },
+});
 
 window.VesselWallets = {
-  scan,
-  subscribe(listener) {
-    listeners.add(listener);
-    return () => listeners.delete(listener);
-  },
-  getState: () => state,
-  connect: notReady,
-  restore: async () => null,
-  disconnect: async () => {},
+  ...controller,
   open: () => window.dispatchEvent(new CustomEvent('vessel:wallet-open')),
 };

@@ -5,28 +5,42 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { publicDir, readPage } from './html-test-utils.js';
 
-test('wallet presentation changes both connect CTAs after verification', async () => {
+test('wallet presentation describes disconnected, Aptos, and Solana DAA sessions', async () => {
   const modulePath = path.join(publicDir, 'wallet-ui.js');
   assert.equal(fs.existsSync(modulePath), true, 'wallet presentation module is missing');
   const { walletPresentation } = await import(pathToFileURL(modulePath));
 
-  assert.deepEqual(walletPresentation({ address: '', verified: false }), {
+  assert.deepEqual(walletPresentation(), {
     connected: false,
     headerLabel: 'Connect',
     headerAria: 'Connect wallet',
-    identityLabel: 'CONNECT PHANTOM — OWN YOUR STORAGE',
+    identityLabel: 'CONNECT WALLET — OWN YOUR STORAGE',
     identityDisabled: false,
+    chainLabel: '',
   });
 
-  const connected = walletPresentation({
-    address: 'EUrhHCRu1234567890c418sB',
-    verified: true,
+  const aptos = walletPresentation({
+    status: 'ready',
+    session: { sourceAddress: '0x1234567890abcdef', mode: 'native' },
   });
-  assert.equal(connected.connected, true);
-  assert.equal(connected.headerLabel, 'EUrh…418sB');
-  assert.equal(connected.headerAria, 'Wallet EUrh…418sB connected');
-  assert.equal(connected.identityLabel, 'CONNECTED — STORAGE READY');
-  assert.equal(connected.identityDisabled, true);
+  assert.equal(aptos.headerLabel, '0x12…bcdef');
+  assert.equal(aptos.headerAria, 'Wallet 0x12…bcdef connected on APTOS');
+  assert.equal(aptos.chainLabel, 'APTOS');
+
+  const solana = walletPresentation({
+    status: 'ready',
+    session: { sourceAddress: 'EUrhHCRu1234567890c418sB', mode: 'daa' },
+  });
+  assert.equal(solana.connected, true);
+  assert.equal(solana.headerLabel, 'EUrh…418sB');
+  assert.equal(solana.headerAria, 'Wallet EUrh…418sB connected on SOLANA DAA');
+  assert.equal(solana.identityLabel, 'CONNECTED — STORAGE READY');
+  assert.equal(solana.identityDisabled, true);
+  assert.equal(solana.chainLabel, 'SOLANA DAA');
+
+  const legacyPhantom = walletPresentation({ address: 'LegacyPhantomAddress12345', verified: true });
+  assert.equal(legacyPhantom.connected, true, 'legacy bridge remains active until dApp wiring migrates');
+  assert.equal(legacyPhantom.chainLabel, 'SOLANA DAA');
 
   const identityHtml = readPage('identity.html');
   assert.match(identityHtml, /data-wallet-summary/);

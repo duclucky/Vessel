@@ -1744,16 +1744,16 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   }
 
   // node_modules/@wallet-standard/app/lib/esm/wallets.js
-  var __classPrivateFieldGet = function(receiver, state2, kind, f) {
+  var __classPrivateFieldGet = function(receiver, state, kind, f) {
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a getter");
-    if (typeof state2 === "function" ? receiver !== state2 || !f : !state2.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
-    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state2.get(receiver);
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot read private member from an object whose class did not declare it");
+    return kind === "m" ? f : kind === "a" ? f.call(receiver) : f ? f.value : state.get(receiver);
   };
-  var __classPrivateFieldSet = function(receiver, state2, value, kind, f) {
+  var __classPrivateFieldSet = function(receiver, state, value, kind, f) {
     if (kind === "m") throw new TypeError("Private method is not writable");
     if (kind === "a" && !f) throw new TypeError("Private accessor was defined without a setter");
-    if (typeof state2 === "function" ? receiver !== state2 || !f : !state2.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
-    return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state2.set(receiver, value), value;
+    if (typeof state === "function" ? receiver !== state || !f : !state.has(receiver)) throw new TypeError("Cannot write private member to an object whose class did not declare it");
+    return kind === "a" ? f.call(receiver, value) : f ? f.value = value : state.set(receiver, value), value;
   };
   var _AppReadyEvent_detail;
   var wallets = void 0;
@@ -1868,8 +1868,8 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   var idFor = (chain, wallet) => `${chain}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
   function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
     const evm = /* @__PURE__ */ new Map();
-    const listeners3 = /* @__PURE__ */ new Set();
-    const notify = () => listeners3.forEach((listener) => listener());
+    const listeners2 = /* @__PURE__ */ new Set();
+    const notify = () => listeners2.forEach((listener) => listener());
     const announce = (event) => {
       const { info, provider } = event.detail || {};
       if (!info?.uuid || !provider) return;
@@ -1878,7 +1878,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     };
     eventTarget.addEventListener("eip6963:announceProvider", announce);
     eventTarget.dispatchEvent(new Event("eip6963:requestProvider"));
-    const scan2 = async () => {
+    const scan = async () => {
       const aptos = aptosSource2.get().filter((wallet) => hasAll(wallet, APTOS_REQUIRED)).map((wallet) => ({
         id: idFor("aptos", wallet),
         name: wallet.name,
@@ -1922,16 +1922,119 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     const offAptos = aptosSource2.on("register", notify);
     const offStandard = standardSource2.on("register", notify);
     return {
-      scan: scan2,
+      scan,
       subscribe(listener) {
-        listeners3.add(listener);
-        return () => listeners3.delete(listener);
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
       },
       destroy() {
         offAptos?.();
         offStandard?.();
         eventTarget.removeEventListener("eip6963:announceProvider", announce);
-        listeners3.clear();
+        listeners2.clear();
+      }
+    };
+  }
+
+  // client-src/wallets/session.js
+  var KEYS = {
+    id: "vessel.wallet.id",
+    chain: "vessel.wallet.chain"
+  };
+  function createWalletController({ registry, resolveAdapter, storage }) {
+    let state = { status: "disconnected", wallets: [], session: null, error: "" };
+    let activeAdapter = null;
+    let offAdapter = null;
+    const listeners2 = /* @__PURE__ */ new Set();
+    const publish = (patch) => {
+      state = { ...state, ...patch };
+      listeners2.forEach((listener) => listener(state));
+    };
+    const scan = async () => {
+      const statusBeforeScan = state.status;
+      publish({ status: "scanning" });
+      const wallets2 = await registry.scan();
+      const status = statusBeforeScan === "network_required" ? "network_required" : state.session ? "ready" : "disconnected";
+      publish({ wallets: wallets2, status });
+      return wallets2;
+    };
+    const disconnect = async () => {
+      offAdapter?.();
+      offAdapter = null;
+      const adapter = activeAdapter;
+      activeAdapter = null;
+      try {
+        await adapter?.disconnect?.();
+      } catch {
+      } finally {
+        storage.removeItem(KEYS.id);
+        storage.removeItem(KEYS.chain);
+        publish({ status: "disconnected", session: null, error: "" });
+      }
+    };
+    const connect = async (walletId, { silent = false } = {}) => {
+      const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
+      if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
+      publish({ status: "connecting", error: "" });
+      try {
+        activeAdapter = resolveAdapter(descriptor);
+        const session = await activeAdapter.connect({ silent });
+        if (!session) {
+          publish({ status: "disconnected", session: null });
+          return null;
+        }
+        storage.setItem(KEYS.id, descriptor.id);
+        storage.setItem(KEYS.chain, descriptor.chain);
+        offAdapter?.();
+        offAdapter = activeAdapter.subscribe((event) => {
+          if (event?.status === "network_required") {
+            publish({
+              status: "network_required",
+              session: event.session || state.session,
+              error: event.error || ""
+            });
+            return;
+          }
+          if (event?.session) {
+            publish({ session: event.session, status: "ready", error: "" });
+            return;
+          }
+          void disconnect();
+        });
+        publish({ session, status: "ready", error: "" });
+        return session;
+      } catch (error) {
+        const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
+        publish({
+          status: networkRequired ? "network_required" : "error",
+          session: null,
+          error: error?.message || String(error)
+        });
+        throw error;
+      }
+    };
+    const restore = async () => {
+      await scan();
+      const id = storage.getItem(KEYS.id);
+      if (!id) return null;
+      try {
+        return await connect(id, { silent: true });
+      } catch {
+        if (state.status !== "network_required") {
+          publish({ status: "disconnected", session: null, error: "" });
+        }
+        return null;
+      }
+    };
+    return {
+      scan,
+      connect,
+      restore,
+      disconnect,
+      getState: () => state,
+      subscribe(listener) {
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
       }
     };
   }
@@ -1943,37 +2046,34 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     get: standardSource.get.bind(standardSource),
     on: standardSource.on.bind(standardSource)
   };
-  var registry = createWalletRegistry({ aptosSource, standardSource, eventTarget: window });
-  var registeredAdapterIds = /* @__PURE__ */ new Set();
-  var listeners2 = /* @__PURE__ */ new Set();
-  var state = { status: "disconnected", session: null, wallets: [], error: "" };
-  var publish = (patch) => {
-    state = { ...state, ...patch };
-    listeners2.forEach((listener) => listener(state));
+  var discoveredRegistry = createWalletRegistry({
+    aptosSource,
+    standardSource,
+    eventTarget: window
+  });
+  var adapters = /* @__PURE__ */ new Map();
+  var availableRegistry = {
+    async scan() {
+      return (await discoveredRegistry.scan()).map((wallet) => {
+        if (wallet.chain === "evm" || adapters.has(wallet.id)) return wallet;
+        return { ...wallet, enabled: false, status: "unavailable" };
+      });
+    },
+    subscribe: discoveredRegistry.subscribe
   };
-  var scan = async () => {
-    const wallets2 = (await registry.scan()).map((wallet) => {
-      if (wallet.chain === "evm" || registeredAdapterIds.has(wallet.id)) return wallet;
-      return { ...wallet, enabled: false, status: "unavailable" };
-    });
-    publish({ wallets: wallets2 });
-    return wallets2;
-  };
-  registry.subscribe(() => void scan());
-  var notReady = () => {
-    throw new Error("Vessel wallet controller is not initialized");
-  };
+  var controller = createWalletController({
+    registry: availableRegistry,
+    storage: window.localStorage,
+    resolveAdapter(descriptor) {
+      const createAdapter = adapters.get(descriptor.id);
+      if (!createAdapter) {
+        throw new Error(`Wallet adapter for ${descriptor.chain} is not active`);
+      }
+      return createAdapter(descriptor);
+    }
+  });
   window.VesselWallets = {
-    scan,
-    subscribe(listener) {
-      listeners2.add(listener);
-      return () => listeners2.delete(listener);
-    },
-    getState: () => state,
-    connect: notReady,
-    restore: async () => null,
-    disconnect: async () => {
-    },
+    ...controller,
     open: () => window.dispatchEvent(new CustomEvent("vessel:wallet-open"))
   };
 })();
