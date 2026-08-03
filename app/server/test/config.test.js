@@ -27,3 +27,19 @@ test('wallet identity changes abort pending payment work and clear stale gates',
   assert.match(app, /#pay-gate/);
   assert.match(app, /#aptos-funding-gate/);
 });
+
+test('dynamic quote configuration is explicit and contains no development signing fallback', () => {
+  for (const key of [
+    'dynamicQuotesEnabled',
+    'paySecret',
+    'aptUsdReferenceMicros',
+    'registerGasUnitsEstimate',
+    'gasSafetyBps',
+    'aptosTreasuryAddress',
+  ]) {
+    assert.match(config, new RegExp(`${key}:`), key);
+  }
+  assert.match(config, /process\.env\.DYNAMIC_QUOTES_ENABLED === 'true'/);
+  assert.match(config, /process\.env\.PAY_SECRET \|\| ''/);
+  assert.doesNotMatch(config, /vessel-dev-secret/);
+});

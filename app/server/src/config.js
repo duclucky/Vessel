@@ -23,5 +23,10 @@ export const config = {
   walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
-  paySecret: process.env.PAY_SECRET || 'vessel-dev-secret', // SERVER-ONLY: HMAC secret for payment tokens
+  dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',
+  paySecret: process.env.PAY_SECRET || '', // SERVER-ONLY: HMAC secret for quote/payment tokens
+  aptUsdReferenceMicros: BigInt(process.env.APT_USD_REFERENCE_MICROS || '5000000'),
+  registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
+  gasSafetyBps: BigInt(process.env.GAS_SAFETY_BPS || '12000'),
+  aptosTreasuryAddress: process.env.APTOS_TREASURY_ADDRESS || '',
 };

@@ -26,3 +26,12 @@ test('HTTP helper accepts an abort signal for wallet invalidation', () => {
   assert.match(app, /form, signal/);
   assert.match(app, /opts\.signal = signal/);
 });
+
+test('dynamic upload quote routes use live Shelby pricing, gas price, and SDK chunksets', () => {
+  assert.match(server, /app\.post\('\/api\/quotes\/upload'/);
+  assert.match(server, /app\.post\('\/api\/quotes\/validate'/);
+  assert.match(server, /createShelbyPricingReader/);
+  assert.match(server, /getGasPriceEstimation/);
+  assert.match(server, /expectedTotalChunksets/);
+  assert.match(server, /requiresConfirmation:\s*Math\.abs\(driftPercentBps\) > 500/);
+});

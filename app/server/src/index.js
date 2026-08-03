@@ -3,12 +3,17 @@ import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
+import { expectedTotalChunksets } from '@shelby-protocol/sdk/node';
 import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
 import { PaymentManager, normalizePaymentContext } from './lib/payments.js';
 import { SponsorManager } from './lib/sponsor.js';
+import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
+import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
+import { targetExpirationMicros } from '../public/retention.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -21,6 +26,33 @@ let sponsor = null;
 try {
   if (config.gasStationApiKey) sponsor = new SponsorManager({ gasStationApiKey: config.gasStationApiKey, network: config.network });
 } catch (e) { console.warn('[sponsor] disabled:', String(e?.message || e)); }
+const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
+const pricingReader = createShelbyPricingReader({ aptos });
+let quoteManager = null;
+try {
+  if (config.dynamicQuotesEnabled) {
+    quoteManager = new QuoteManager({
+      secret: config.paySecret,
+      async priceUpload(intent) {
+        const [pricing, gasPrice] = await Promise.all([
+          pricingReader.read(),
+          aptos.getGasPriceEstimation(),
+        ]);
+        const gasUnits = (
+          config.registerGasUnitsEstimate * config.gasSafetyBps + 9_999n
+        ) / 10_000n;
+        return calculateUploadQuote({
+          intent,
+          pricing,
+          chunksetCount: expectedTotalChunksets(intent.sizeBytes),
+          gasUnits,
+          gasUnitPriceOctas: BigInt(gasPrice.gas_estimate),
+          aptUsdMicros: config.aptUsdReferenceMicros,
+        });
+      },
+    });
+  }
+} catch (e) { console.warn('[quotes] disabled:', String(e?.message || e)); }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes } });
 
 app.use(cors());
@@ -160,6 +192,7 @@ app.get('/api/config', (_req, res) => {
     gasStationAccount: config.gasStationAccount, // public fee-payer address (safe to expose)
     priceBaseUsdc: config.priceBaseUsdc,
     pricePerMbUsdc: config.pricePerMbUsdc,
+    dynamicQuotes: !!quoteManager,
     sponsored: !!sponsor && !!payments,
     walletFamilies: {
       aptos: config.walletAptosEnabled,
@@ -168,6 +201,60 @@ app.get('/api/config', (_req, res) => {
     },
     maxUploadBytes: config.maxUploadBytes,
   });
+});
+
+// ---- Five-minute wallet/file-bound dynamic upload quotes ----
+app.post('/api/quotes/upload', async (req, res) => {
+  try {
+    if (!quoteManager) {
+      return send(res, 503, {
+        error: 'Live Shelby pricing is unavailable',
+        code: 'pricing_unavailable',
+        retriable: true,
+      });
+    }
+    const sizeBytes = Number(req.body?.sizeBytes);
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
+      return send(res, 400, { error: 'valid sizeBytes required', code: 'invalid_quote_context' });
+    }
+    if (sizeBytes > config.maxUploadBytes) {
+      return send(res, 413, { error: 'file exceeds upload limit', code: 'file_too_large' });
+    }
+    const pricing = await pricingReader.read();
+    const serverTimeMs = Number(pricing.serverTimeMicros / 1_000n);
+    const context = normalizeUploadQuoteContext({
+      ...req.body,
+      expirationMicros: targetExpirationMicros({ serverTimeMs, days: req.body?.days }),
+    });
+    send(res, 200, await quoteManager.issueUpload(context));
+  } catch (e) { fail(res, e); }
+});
+
+app.post('/api/quotes/validate', async (req, res) => {
+  try {
+    if (!quoteManager) {
+      return send(res, 503, {
+        error: 'Live Shelby pricing is unavailable',
+        code: 'pricing_unavailable',
+        retriable: true,
+      });
+    }
+    const { quoteToken, ...input } = req.body || {};
+    if (!quoteToken) return send(res, 400, { error: 'quoteToken required', code: 'invalid_quote' });
+    const context = normalizeUploadQuoteContext(input);
+    const original = quoteManager.validate(quoteToken, context);
+    const quote = await quoteManager.issueUpload(context);
+    const originalTotal = BigInt(original.breakdown.totalAccountingMicro);
+    const freshTotal = BigInt(quote.totalAccountingMicro);
+    const driftPercentBps = originalTotal === 0n
+      ? 0
+      : Number(((freshTotal - originalTotal) * 10_000n) / originalTotal);
+    send(res, 200, {
+      quote,
+      driftPercentBps,
+      requiresConfirmation: Math.abs(driftPercentBps) > 500,
+    });
+  } catch (e) { fail(res, e); }
 });
 
 // ---- Sponsored on-chain submit (gas station key stays server-side; see NOTES 5j) ----
