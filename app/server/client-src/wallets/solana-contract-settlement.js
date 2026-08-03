@@ -174,10 +174,12 @@ async function simulationFailure(error, connection, signedTransaction) {
     : '';
   const programDetail = failedProgram ? `Instruction ${instructionIndex} · ${failedProgram}. ` : '';
   const detail = relevant || transactionMessage || 'unknown RPC error';
-  return settlementError(
+  const failure = settlementError(
     `Solana simulation failed: ${programDetail}${detail}`,
     'settlement_submission_failed',
   );
+  failure.debugSignedTransaction = Buffer.from(signedTransaction.serialize()).toString('base64');
+  return failure;
 }
 
 async function quoteDigest(quote) {

@@ -174,7 +174,7 @@ test('instruction mutations or unsigned wallet results fail before Devnet broadc
   }
 });
 
-test('simulation failures surface the final program logs instead of truncating the RPC preamble', async () => {
+test('simulation failures surface logs and preserve the signed bytes for opt-in diagnostics', async () => {
   const provider = {
     publicKey: owner,
     async signTransaction(transaction) {
@@ -203,7 +203,15 @@ test('simulation failures surface the final program logs instead of truncating t
       contractQuote: quote,
       contractSignature: '66'.repeat(64),
     }),
-    new RegExp(`${programId.toBase58()}.*InvalidMint`),
+    (error) => {
+      assert.match(error.message, new RegExp(`${programId.toBase58()}.*InvalidMint`));
+      assert.match(error.debugSignedTransaction, /^[A-Za-z0-9+/]+={0,2}$/);
+      const diagnosticTransaction = Transaction.from(
+        Buffer.from(error.debugSignedTransaction, 'base64'),
+      );
+      assert.equal(diagnosticTransaction.verifySignatures(), true);
+      return true;
+    },
   );
 });
 

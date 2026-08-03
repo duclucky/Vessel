@@ -68860,10 +68860,12 @@ ${fields.join("\n")}`;
     const failedProgram = Number.isInteger(instructionIndex) ? signedTransaction.instructions[instructionIndex]?.programId?.toBase58?.() : "";
     const programDetail = failedProgram ? `Instruction ${instructionIndex} \xB7 ${failedProgram}. ` : "";
     const detail = relevant || transactionMessage || "unknown RPC error";
-    return settlementError(
+    const failure = settlementError(
       `Solana simulation failed: ${programDetail}${detail}`,
       "settlement_submission_failed"
     );
+    failure.debugSignedTransaction = Buffer2.from(signedTransaction.serialize()).toString("base64");
+    return failure;
   }
   async function quoteDigest(quote) {
     const bytes = concatBytes2([
