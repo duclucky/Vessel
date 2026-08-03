@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import bs58 from 'bs58';
 import { loadSettlementDeployments } from '../src/lib/settlement/deployments.js';
+import bundledTestnetManifest from '../src/lib/settlement/bundled-testnet-manifest.js';
 
 const key = (byte) => bs58.encode(Buffer.alloc(32, byte));
 const signature = (byte) => bs58.encode(Buffer.alloc(64, byte));
@@ -105,7 +106,20 @@ test('Vercel runtime manifest stays identical to the repository deployment recor
   const repository = JSON.parse(readFileSync('../../deployments/vessel-settlement.testnet.json', 'utf8'));
   const runtime = JSON.parse(readFileSync('deployments/vessel-settlement.testnet.json', 'utf8'));
   assert.deepEqual(runtime, repository);
+  assert.deepEqual(bundledTestnetManifest, repository);
   const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
   const apiBuild = vercel.builds.find((build) => build.src === 'api/index.js');
   assert.ok(apiBuild.config.includeFiles.includes('deployments/**'));
+});
+
+test('bundled manifest keeps serverless startup independent from the process cwd', () => {
+  const manifest = JSON.parse(readFileSync('deployments/vessel-settlement.testnet.json', 'utf8'));
+  const deployment = loadSettlementDeployments({
+    file: 'missing/runtime/vessel-settlement.testnet.json',
+    quotePublicKey: manifest.quotePublicKey,
+    enabled: true,
+    environment: 'production',
+  });
+  assert.equal(deployment.solana.programId, manifest.solana.programId);
+  assert.equal(deployment.aptos.moduleAddress, manifest.aptos.moduleAddress);
 });

@@ -1,0 +1,25 @@
+export default Object.freeze({
+  schemaVersion: 1,
+  environment: 'testnet',
+  quotePublicKey: '596f2b0952d1320aa6a36de45dadef35f27255e457611094552d8fc1fe10edf7',
+  configVersion: '1',
+  aptos: Object.freeze({
+    chainId: 2,
+    moduleAddress: '0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15',
+    vaultAddress: '0x2025257c90ced758ea49e1492d60a903dbc8c4d5915657611f968b7a27cf3f8a',
+    multisigAddress: '0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15',
+    acceptedAsset: '0x1b18363a9f1fe5e6ebf247daba5cc1c18052bb232efdc4c50f556053922d98e1',
+    deploymentTransaction: '0xbdc7f3ea07c5c2fbac06cb7e9a07db58ef1b93dfe0e41575379e564c6386a8a4',
+    timelockSeconds: null,
+  }),
+  solana: Object.freeze({
+    cluster: 'devnet',
+    programId: 'G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx',
+    configPda: 'cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA',
+    vaultAta: 'Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7',
+    squadsMultisig: 'GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh',
+    acceptedMint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+    deploymentSignature: '49KFbqx2eEUTMLfG7CGPvSvgswtu4ye2mJ1vxDmxPJwCSrKpGMK9ngdZqMChGzvhmKPYcen4pY1WFQZ3mE2SXAja',
+    timelockSeconds: 0,
+  }),
+});

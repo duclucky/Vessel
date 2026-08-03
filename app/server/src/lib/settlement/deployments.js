@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import bs58 from 'bs58';
+import bundledTestnetManifest from './bundled-testnet-manifest.js';
 
 const HEX_32 = /^[0-9a-f]{64}$/;
 const APTOS_ADDRESS = /^0x[0-9a-f]{64}$/;
@@ -84,7 +86,10 @@ export function loadSettlementDeployments({
   try {
     manifest = JSON.parse(readFileSync(file, 'utf8'));
   } catch {
-    throw deploymentError('Settlement deployment manifest is missing or invalid');
+    if (path.basename(String(file || '')) !== 'vessel-settlement.testnet.json') {
+      throw deploymentError('Settlement deployment manifest is missing or invalid');
+    }
+    manifest = bundledTestnetManifest;
   }
   if (manifest.schemaVersion !== 1 || manifest.environment !== 'testnet') {
     throw deploymentError('Settlement manifest must target the version 1 testnet schema');
