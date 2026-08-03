@@ -2,6 +2,7 @@
 // (same origin). The only browser-side credential is the user's wallet signature.
 
 import { createLedger, LS } from './ledger.js';
+import { walletPresentation } from './wallet-ui.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -59,6 +60,13 @@ function toast(msg, kind = 'info') {
 
 function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Copied', 'ok')).catch(() => {}); }
 
+function rememberSolanaIdentity(result) {
+  state.set({ address: result.solana, storageAccount: result.storageAccount, verified: true });
+  window.__storageSolana = result.solana;
+  window.__storageAcct = result.storageAccount;
+  renderWallet();
+}
+
 /* ------------------------------- wallet ------------------------------- */
 async function connectWallet() {
   if (!window.ethereum) { toast('No Ethereum wallet found. Install MetaMask.', 'error'); return null; }
@@ -101,6 +109,16 @@ function renderWallet() {
     }
     btn.onclick = state.address ? null : (e) => { e.preventDefault(); connectWallet(); };
   });
+  const presentation = walletPresentation({ address: state.address, verified: state.verified });
+  $$('[data-wallet-label]').forEach((el) => { el.textContent = presentation.headerLabel; });
+  $$('[data-wallet-summary]').forEach((el) => {
+    el.setAttribute('aria-label', presentation.headerAria);
+    el.dataset.connected = presentation.connected ? 'true' : 'false';
+  });
+  const identityLabel = $('#sign-btn-label');
+  if (identityLabel) identityLabel.textContent = presentation.identityLabel;
+  const identityButton = $('#sign-btn');
+  if (identityButton) identityButton.disabled = presentation.identityDisabled;
 }
 
 /* ------------------------------- pages -------------------------------- */
@@ -114,20 +132,20 @@ function initLanding() {}
 async function initIdentity() {
   const originEl = $('#origin-wallet'); const derivedEl = $('#derived-account');
   const SOL = () => window.VesselSolana;
+  const currentSolana = SOL()?.state?.solana || (state.verified ? state.address : '');
+  const currentStorageAccount = SOL()?.state?.storageAccount || (state.verified ? state.storageAccount : '');
   // The storage identity is the VISITOR's own Phantom-derived DAA account — shown once they connect.
-  if (SOL()?.state?.solana) {
-    if (originEl) originEl.textContent = shortMid(SOL().state.solana);
-    if (derivedEl) derivedEl.textContent = shortMid(SOL().state.storageAccount);
+  if (currentSolana) {
+    if (originEl) originEl.textContent = shortMid(currentSolana);
+    if (derivedEl) derivedEl.textContent = shortMid(currentStorageAccount);
     const status = $('#auth-status');
-    if (status) status.textContent = 'Wallet connected · storage identity derived';
-    window.__storageSolana = SOL().state.solana; window.__storageAcct = SOL().state.storageAccount;
+    if (status) status.textContent = state.verified ? 'Ownership verified · ready to upload' : 'Wallet connected · storage identity derived';
+    window.__storageSolana = currentSolana; window.__storageAcct = currentStorageAccount;
   } else {
     if (originEl) originEl.textContent = '—';
     if (derivedEl) derivedEl.textContent = '—';
   }
   const signBtn = $('#sign-btn');
-  const lbl = $('#sign-btn-label');
-  if (SOL()?.available() && lbl) lbl.textContent = 'CONNECT PHANTOM — OWN YOUR STORAGE';
   if (signBtn) signBtn.onclick = async (e) => {
     e.preventDefault();
     signBtn.disabled = true;
@@ -135,10 +153,10 @@ async function initIdentity() {
       if (SOL()?.available()) {
         // Sovereign path: the visitor's own Solana wallet IS the storage identity.
         const r = await SOL().connect();
+        rememberSolanaIdentity(r);
         if (originEl) originEl.textContent = shortMid(r.solana);
         if (derivedEl) derivedEl.textContent = shortMid(r.storageAccount);
         const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified · ready to upload';
-        window.__storageSolana = r.solana; window.__storageAcct = r.storageAccount;
         toast('Connected — your wallet owns this storage identity', 'ok');
       } else {
         if (!state.address) { await connectWallet(); if (!state.address) { signBtn.disabled = false; return; } }
@@ -150,7 +168,7 @@ async function initIdentity() {
         }
       }
     } catch (err) { toast(String(err?.message || err).slice(0, 140), 'error'); }
-    signBtn.disabled = false;
+    renderWallet();
   };
   // copy buttons (copy the real storage identity)
   $$('.js-copy-origin').forEach((b) => (b.onclick = () => copy(window.__storageSolana || state.address)));
@@ -186,7 +204,11 @@ function initUpload() {
     if (SOL()?.available() && cfg.sponsored) {
       show(vProg); setStep('signing');
       try {
-        if (!SOL().state.solana) { await SOL().connect(); toast('Phantom connected — this upload will be owned by YOUR wallet', 'ok'); }
+        if (!SOL().state.solana) {
+          const connected = await SOL().connect();
+          rememberSolanaIdentity(connected);
+          toast('Phantom connected — this upload will be owned by YOUR wallet', 'ok');
+        }
 
         // 1) quote (USDC)
         const quote = await api('/api/pay/quote', { method: 'POST', body: { sizeBytes: file.size } });
