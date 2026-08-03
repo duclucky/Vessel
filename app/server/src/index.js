@@ -20,10 +20,12 @@ import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
 import { verifyAptosShelbyUsdTransfer } from './lib/aptos-settlement.js';
 import { targetExpirationMicros } from '../public/retention.js';
 import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
+import { createTelemetry } from './lib/telemetry.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const store = getStorageProvider();
+const telemetry = createTelemetry({ walletSalt: config.telemetryWalletSalt });
 let payments = null;
 try {
   if (config.treasurySecretKey) payments = new PaymentManager({
@@ -86,6 +88,24 @@ async function enrichSettlementQuote(quote) {
     ...quote,
     aptosTreasuryAddress: config.aptosTreasuryAddress,
     shelbyUsdAssetAddress: SHELBYUSD_FA_METADATA_ADDRESS.toString(),
+  });
+}
+
+function recordQuoteOperation(stage, quote, extra = {}) {
+  const context = quote?.context || quote || {};
+  const breakdown = quote?.breakdown || quote || {};
+  telemetry.operation({
+    stage,
+    operation: context.operation || 'upload',
+    network: context.storageNetwork || config.network,
+    wallet: context.sourceAddress,
+    storageAddress: context.storageAddress,
+    quoteId: quote?.quoteId,
+    configVersion: breakdown.configVersion,
+    durationDays: context.days,
+    sizeBytes: context.sizeBytes,
+    quotedMicro: breakdown.totalAccountingMicro,
+    ...extra,
   });
 }
 
@@ -239,6 +259,11 @@ app.get('/api/config', (_req, res) => {
 app.post('/api/quotes/upload', async (req, res) => {
   try {
     if (!quoteManager) {
+      telemetry.operation({
+        stage: 'failed', operation: 'upload', network: config.network,
+        wallet: req.body?.sourceAddress, storageAddress: req.body?.storageAddress,
+        sizeBytes: req.body?.sizeBytes, errorCode: 'pricing_unavailable',
+      });
       return send(res, 503, {
         error: 'Live Shelby pricing is unavailable',
         code: 'pricing_unavailable',
@@ -258,8 +283,17 @@ app.post('/api/quotes/upload', async (req, res) => {
       ...req.body,
       expirationMicros: targetExpirationMicros({ serverTimeMs, days: req.body?.days }),
     });
-    send(res, 200, await enrichSettlementQuote(await quoteManager.issueUpload(context)));
-  } catch (e) { fail(res, e); }
+    const quote = await enrichSettlementQuote(await quoteManager.issueUpload(context));
+    recordQuoteOperation('quoted', quote);
+    send(res, 200, quote);
+  } catch (e) {
+    telemetry.operation({
+      stage: 'failed', operation: 'upload', network: config.network,
+      wallet: req.body?.sourceAddress, storageAddress: req.body?.storageAddress,
+      sizeBytes: req.body?.sizeBytes, errorCode: e?.code || 'pricing_unavailable',
+    });
+    fail(res, e);
+  }
 });
 
 app.post('/api/quotes/validate', async (req, res) => {
@@ -281,6 +315,10 @@ app.post('/api/quotes/validate', async (req, res) => {
     const driftPercentBps = originalTotal === 0n
       ? 0
       : Number(((freshTotal - originalTotal) * 10_000n) / originalTotal);
+    recordQuoteOperation('validated', quote, {
+      driftBps: driftPercentBps,
+      errorCode: Math.abs(driftPercentBps) > 500 ? 'quote_drift' : undefined,
+    });
     send(res, 200, {
       quote,
       driftPercentBps,
@@ -312,8 +350,21 @@ app.post('/api/sponsor/submit', async (req, res) => {
     if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
     const completed = await aptos.waitForTransaction({ transactionHash: r.hash });
     const evidence = extractShelbyTransactionEvidence(completed);
+    recordQuoteOperation('registered', quote, {
+      transactionHash: evidence.transactionHash,
+      actualStorageUnits: evidence.actualStorageUnits,
+      actualGasUsed: evidence.actualGasUsed,
+    });
     send(res, 200, { ...r, ...evidence });
-  } catch (e) { fail(res, e); }
+  } catch (e) {
+    telemetry.operation({
+      stage: 'failed', operation: 'upload', network: config.network,
+      errorCode: e?.code === 'registration_evidence_missing'
+        ? 'acknowledgement_timeout'
+        : 'sponsor_failed',
+    });
+    fail(res, e);
+  }
 });
 
 // ---- Quote-bound settlement verification ----
@@ -342,8 +393,15 @@ app.post('/api/pay/solana/verify', async (req, res) => {
       settlementChain: 'solana',
       settlementHash: verified.signature,
     });
+    recordQuoteOperation('paid', quote, { transactionHash: verified.signature });
     send(res, 200, { ok: true, paidAuthorization, settlementHash: verified.signature });
-  } catch (e) { fail(res, e); }
+  } catch (e) {
+    telemetry.operation({
+      stage: 'failed', operation: 'upload', network: 'solana-devnet',
+      errorCode: 'payment_verification_failed',
+    });
+    fail(res, e);
+  }
 });
 
 app.post('/api/pay/aptos/verify', async (req, res) => {
@@ -378,8 +436,15 @@ app.post('/api/pay/aptos/verify', async (req, res) => {
       settlementChain: 'aptos',
       settlementHash,
     });
+    recordQuoteOperation('paid', quote, { transactionHash: settlementHash });
     send(res, 200, { ok: true, paidAuthorization, settlementHash });
-  } catch (e) { fail(res, e); }
+  } catch (e) {
+    telemetry.operation({
+      stage: 'failed', operation: 'upload', network: 'aptos-testnet',
+      errorCode: 'payment_verification_failed',
+    });
+    fail(res, e);
+  }
 });
 
 // ---- Static frontend ----

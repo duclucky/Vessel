@@ -27,4 +27,5 @@ export const config = {
   registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
   gasSafetyBps: BigInt(process.env.GAS_SAFETY_BPS || '12000'),
   aptosTreasuryAddress: process.env.APTOS_TREASURY_ADDRESS || process.env.GAS_STATION_ACCOUNT || '',
+  telemetryWalletSalt: process.env.TELEMETRY_WALLET_SALT || process.env.PAY_SECRET || '',
 };
