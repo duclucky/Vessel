@@ -23,6 +23,26 @@ test('settlement and sponsor routes require signed quote and paid authorization 
   assert.doesNotMatch(server, /createIntent/);
 });
 
+test('upload quotes are dual-signed with the configured deployment key', () => {
+  assert.match(server, /new ContractQuoteManager\(\{/);
+  assert.match(server, /privateKeyFromPkcs8Base64\(config\.quoteSignerPrivateKeyBase64\)/);
+  assert.match(server, /contractQuoteManager,/);
+  assert.match(server, /assertContractQuoteMatchesContext\(contractQuote, signedQuote, settlementDeployments\)/);
+});
+
+test('contract receipt verification emits redacted submitted, pending, verified, and failed stages', () => {
+  for (const stage of [
+    'settlement_submitted',
+    'receipt_pending',
+    'receipt_verified',
+    'settlement_failed',
+  ]) {
+    assert.match(server, new RegExp(`stage: '${stage}'`));
+  }
+  assert.match(server, /deploymentId/);
+  assert.match(server, /finalityLatencyMs/);
+});
+
 test('browser payment flow creates one immutable context and reuses its expiration', () => {
   assert.match(app, /activeUploadContext = Object\.freeze\(\{ file, intent, quote \}\)/);
   assert.match(app, /settleQuote\(\{/);

@@ -52,6 +52,39 @@ function settlementAmount(chain, breakdown) {
     : String(breakdown.totalAccountingMicro);
 }
 
+function quoteContextError() {
+  return Object.assign(
+    new Error('Contract quote does not match the signed upload context'),
+    { code: 'quote_context_mismatch', status: 400, retriable: false },
+  );
+}
+
+export function assertContractQuoteMatchesContext(contractQuote, signedQuote, deployments) {
+  const context = normalizeUploadQuoteContext(signedQuote?.context);
+  const breakdown = signedQuote?.breakdown || {};
+  const chain = CHAIN[context.chain];
+  const network = NETWORK[context.chain];
+  const acceptedAsset = context.chain === 'aptos'
+    ? addressBytes32(deployments?.aptos?.acceptedAsset, 'aptos')
+    : addressBytes32(deployments?.solana?.acceptedMint, 'solana');
+  const comparisons = [
+    [Number(contractQuote?.chain), chain],
+    [Number(contractQuote?.network), network],
+    [String(contractQuote?.payer || '').toLowerCase(), addressBytes32(context.sourceAddress, context.chain)],
+    [String(contractQuote?.storageAddress || '').toLowerCase(), addressBytes32(context.storageAddress, 'aptos')],
+    [String(contractQuote?.asset || '').toLowerCase(), acceptedAsset],
+    [String(contractQuote?.amount || ''), settlementAmount(context.chain, breakdown)],
+    [String(contractQuote?.fileHash || '').toLowerCase(), context.fileHash],
+    [Number(contractQuote?.retentionDays), context.days],
+    [String(contractQuote?.storageExpirationMicros || ''), String(context.expirationMicros)],
+    [String(contractQuote?.configVersion || ''), String(deployments?.configVersion || '')],
+  ];
+  if (comparisons.some(([actual, expected]) => actual !== expected)) {
+    throw quoteContextError();
+  }
+  return true;
+}
+
 function toSafeClock(value) {
   const result = BigInt(value);
   if (result <= 0n) throw new TypeError('Invalid quote clock');
@@ -143,6 +176,12 @@ export class ContractQuoteManager {
   async issueUpload(input) {
     const uploadContext = normalizeUploadQuoteContext(input);
     const breakdown = Object.freeze({ ...(await this.priceUpload(uploadContext)) });
+    return this.issueUploadFromBreakdown(uploadContext, breakdown);
+  }
+
+  async issueUploadFromBreakdown(input, quotedBreakdown) {
+    const uploadContext = normalizeUploadQuoteContext(input);
+    const breakdown = Object.freeze({ ...(quotedBreakdown || {}) });
     const issuedAtMs = toSafeClock(this.now());
     const quoteId = Buffer.from(this.randomBytes(32));
     if (quoteId.length !== 32) throw new TypeError('Quote ID generator must return 32 bytes');

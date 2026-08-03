@@ -114,6 +114,57 @@ test('production quote manager refuses missing or weak signing secrets', () => {
   }
 });
 
+test('upload quote includes contract evidence without reading live pricing twice', async () => {
+  let pricingCalls = 0;
+  const contractCalls = [];
+  const manager = new QuoteManager({
+    secret: SECRET,
+    environment: 'test',
+    now: () => 1_000,
+    priceUpload: async () => {
+      pricingCalls += 1;
+      return breakdown;
+    },
+    contractQuoteManager: {
+      issueUploadFromBreakdown: async (context, quotedBreakdown) => {
+        contractCalls.push({ context, quotedBreakdown });
+        return {
+          contractQuote: { quoteId: '11'.repeat(32) },
+          contractSignature: '22'.repeat(64),
+          quotePublicKey: '33'.repeat(32),
+        };
+      },
+    },
+  });
+
+  const quote = await manager.issueUpload(baseContext);
+
+  assert.equal(pricingCalls, 1);
+  assert.equal(contractCalls.length, 1);
+  assert.deepEqual(contractCalls[0].quotedBreakdown, breakdown);
+  assert.equal(contractCalls[0].context.fileHash, baseContext.fileHash);
+  assert.equal(quote.contractQuote.quoteId, '11'.repeat(32));
+  assert.equal(quote.contractSignature, '22'.repeat(64));
+  assert.equal(quote.quotePublicKey, '33'.repeat(32));
+});
+
+test('a fresh server instance validates a quote issued with the same HMAC key', async () => {
+  const issuer = QuoteManager.forTest({
+    secret: SECRET,
+    now: () => 1_000,
+    pricing: async () => breakdown,
+  });
+  const verifier = QuoteManager.forTest({
+    secret: SECRET,
+    now: () => 2_000,
+    pricing: async () => breakdown,
+  });
+
+  const quote = await issuer.issueUpload(baseContext);
+
+  assert.equal(verifier.validate(quote.quoteToken, baseContext).quoteId, quote.quoteId);
+});
+
 test('quote context normalizes defaults and rejects malformed bindings', () => {
   const context = normalizeUploadQuoteContext({
     ...baseContext,

@@ -45,8 +45,13 @@ export function createTelemetry({ write, walletSalt, now = Date.now } = {}) {
     if (present(event.storageAddress)) row.storageRef = ref(event.storageAddress);
     if (present(event.durationDays)) row.durationDays = Number(event.durationDays);
     if (present(event.sizeBytes)) row.sizeBucket = sizeBucket(event.sizeBytes);
-    if (present(event.quoteId)) row.quoteId = String(event.quoteId);
+    if (present(event.chain)) row.chain = String(event.chain);
+    if (present(event.deploymentId)) row.deploymentId = String(event.deploymentId);
+    if (present(event.quoteId)) row.quoteRef = ref(event.quoteId);
     if (present(event.configVersion)) row.configVersion = String(event.configVersion);
+    if (present(event.finalityLatencyMs)) {
+      row.finalityLatencyMs = Math.max(0, Math.trunc(Number(event.finalityLatencyMs)));
+    }
     if (present(event.quotedMicro)) row.quotedMicro = String(event.quotedMicro);
     if (present(event.actualStorageUnits)) row.actualStorageUnits = String(event.actualStorageUnits);
     if (present(event.actualGasUsed)) row.actualGasUsed = String(event.actualGasUsed);

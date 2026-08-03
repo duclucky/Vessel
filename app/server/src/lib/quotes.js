@@ -147,6 +147,7 @@ export class QuoteManager {
     now = Date.now,
     quoteTtlMs = QUOTE_TTL_MS,
     priceUpload,
+    contractQuoteManager = null,
     environment = process.env.NODE_ENV || 'development',
   }) {
     const secretText = String(secret || '');
@@ -158,6 +159,13 @@ export class QuoteManager {
     this.now = now;
     this.quoteTtlMs = quoteTtlMs;
     this.priceUpload = priceUpload;
+    if (
+      contractQuoteManager != null
+      && typeof contractQuoteManager.issueUploadFromBreakdown !== 'function'
+    ) {
+      throw new TypeError('contractQuoteManager must issue precomputed contract quotes');
+    }
+    this.contractQuoteManager = contractQuoteManager;
   }
 
   static forTest({ secret = 'vessel-test-secret-at-least-32-bytes', now = Date.now, pricing }) {
@@ -197,7 +205,13 @@ export class QuoteManager {
     };
     const encodedPayload = encode(JSON.stringify(payload));
     const token = `${QUOTE_PREFIX}.${encodedPayload}.${this.signPayload(encodedPayload)}`;
-    return publicQuote({ token, payload, context });
+    const serverQuote = publicQuote({ token, payload, context });
+    if (!this.contractQuoteManager) return serverQuote;
+    const contractEvidence = await this.contractQuoteManager.issueUploadFromBreakdown(
+      context,
+      breakdown,
+    );
+    return Object.freeze({ ...serverQuote, ...contractEvidence });
   }
 
   validate(token, expectedContext, { allowExpired = false } = {}) {

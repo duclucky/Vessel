@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
+import bs58 from 'bs58';
 import {
+  assertContractQuoteMatchesContext,
   ContractQuoteManager,
   verifyContractQuoteSignature,
 } from '../src/lib/settlement/contract-quotes.js';
@@ -88,6 +90,73 @@ test('Solana quote collects the total accounting amount and expires after five m
   assert.equal(result.contractQuote.amount, breakdown.totalAccountingMicro);
   assert.equal(result.contractQuote.quoteExpiresAtSecs, '1300');
   assert.equal(manager.verifySignature(result), true);
+});
+
+test('precomputed contract quote reuses the server breakdown without another pricing read', async () => {
+  const { privateKey, publicKey } = keys();
+  let pricingCalls = 0;
+  const manager = ContractQuoteManager.forTest({
+    privateKey,
+    publicKey,
+    now: () => 1_000_000n,
+    pricing: async () => {
+      pricingCalls += 1;
+      return breakdown;
+    },
+  });
+
+  const result = await manager.issueUploadFromBreakdown(aptosContext, breakdown);
+
+  assert.equal(pricingCalls, 0);
+  assert.equal(result.contractQuote.amount, '84100');
+  assert.equal(manager.verifySignature(result), true);
+});
+
+test('contract overlap validation binds every Solana context field before RPC', async () => {
+  const { privateKey, publicKey } = keys();
+  const manager = ContractQuoteManager.forTest({
+    privateKey,
+    publicKey,
+    now: () => 1_000_000n,
+    pricing: async () => breakdown,
+    solanaMintHex: '66'.repeat(32),
+  });
+  const context = {
+    ...aptosContext,
+    chain: 'solana',
+    sourceNetwork: 'solana-devnet',
+    sourceAddress: '11111111111111111111111111111111',
+    days: 30,
+  };
+  const issued = await manager.issueUpload(context);
+  const signedQuote = { context, breakdown };
+  const deployments = {
+    configVersion: '1',
+    aptos: { acceptedAsset: `0x${'44'.repeat(32)}` },
+    solana: { acceptedMint: bs58.encode(Buffer.from('66'.repeat(32), 'hex')) },
+  };
+
+  assert.doesNotThrow(() => assertContractQuoteMatchesContext(
+    issued.contractQuote,
+    signedQuote,
+    deployments,
+  ));
+  for (const change of [
+    { network: 2 },
+    { payer: '77'.repeat(32) },
+    { storageAddress: '77'.repeat(32) },
+    { asset: '77'.repeat(32) },
+    { amount: '1' },
+  ]) {
+    assert.throws(
+      () => assertContractQuoteMatchesContext(
+        { ...issued.contractQuote, ...change },
+        signedQuote,
+        deployments,
+      ),
+      (error) => error.code === 'quote_context_mismatch' && error.retriable === false,
+    );
+  }
 });
 
 test('contract quote manager rejects a mismatched key pair', () => {

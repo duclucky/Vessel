@@ -45,3 +45,29 @@ test('normalized operator errors use error severity without stack traces', () =>
     assert.equal(JSON.stringify(rows[0]).includes('do not log'), false);
   }
 });
+
+test('settlement telemetry hashes quote IDs and records only public finality metadata', () => {
+  const rows = [];
+  const telemetry = createTelemetry({ write: (row) => rows.push(row), walletSalt: 'salt' });
+  telemetry.operation({
+    stage: 'receipt_verified',
+    operation: 'settlement',
+    chain: 'solana',
+    network: 'solana-devnet',
+    deploymentId: 'VesselProgram111',
+    quoteId: 'private-quote-id',
+    configVersion: '1',
+    finalityLatencyMs: 4_200,
+    contractSignature: 'do-not-log-contract-signature',
+    walletSignature: 'do-not-log-wallet-signature',
+    signedQuoteBytes: 'do-not-log-quote-bytes',
+    paidAuthorization: 'do-not-log-paid-authorization',
+  });
+
+  assert.equal(rows[0].chain, 'solana');
+  assert.equal(rows[0].deploymentId, 'VesselProgram111');
+  assert.equal(rows[0].quoteRef.length, 12);
+  assert.equal(rows[0].finalityLatencyMs, 4_200);
+  assert.equal(JSON.stringify(rows).includes('private-quote-id'), false);
+  assert.equal(JSON.stringify(rows).includes('do-not-log'), false);
+});

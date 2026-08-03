@@ -25,8 +25,14 @@ import { loadSettlementDeployments } from './lib/settlement/deployments.js';
 import { SettlementAdapterRegistry } from './lib/settlement/adapters.js';
 import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
 import { SolanaSettlementAdapter } from './lib/settlement/solana-adapter.js';
-import { verifyContractQuoteSignature } from './lib/settlement/contract-quotes.js';
-import { Connection } from '@solana/web3.js';
+import {
+  assertContractQuoteMatchesContext,
+  ContractQuoteManager,
+  privateKeyFromPkcs8Base64,
+  publicKeyFromRawHex,
+  verifyContractQuoteSignature,
+} from './lib/settlement/contract-quotes.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -48,6 +54,7 @@ const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
 const pricingReader = createShelbyPricingReader({ aptos });
 let settlementDeployments = Object.freeze({ enabled: false });
 let settlementAdapters = null;
+let contractQuoteManager = null;
 try {
   settlementDeployments = loadSettlementDeployments({
     file: path.resolve(process.cwd(), config.settlementDeploymentsFile),
@@ -56,6 +63,18 @@ try {
     environment: process.env.NODE_ENV || 'development',
   });
   if (settlementDeployments.enabled) {
+    contractQuoteManager = new ContractQuoteManager({
+      privateKey: privateKeyFromPkcs8Base64(config.quoteSignerPrivateKeyBase64),
+      publicKey: publicKeyFromRawHex(config.quoteSignerPublicKeyHex),
+      priceUpload: async () => {
+        throw new Error('Contract quotes must reuse the signed server breakdown');
+      },
+      aptosAssetHex: settlementDeployments.aptos.acceptedAsset,
+      solanaMintHex: new PublicKey(settlementDeployments.solana.acceptedMint)
+        .toBuffer()
+        .toString('hex'),
+      configVersion: settlementDeployments.configVersion,
+    });
     settlementAdapters = new SettlementAdapterRegistry({
       aptos: new AptosSettlementAdapter({
         aptos,
@@ -80,6 +99,7 @@ try {
   if (config.dynamicQuotesEnabled) {
     quoteManager = new QuoteManager({
       secret: config.paySecret,
+      contractQuoteManager,
       async priceUpload(intent) {
         const [pricing, gasPrice] = await Promise.all([
           pricingReader.read(),
@@ -328,7 +348,14 @@ app.post('/api/quotes/upload', async (req, res) => {
     });
     const quote = await enrichSettlementQuote(await quoteManager.issueUpload(context));
     recordQuoteOperation('quoted', quote);
-    send(res, 200, quote);
+    send(res, 200, {
+      ...quote,
+      settlementDeployment: settlementDeployments.enabled ? {
+        quotePublicKey: settlementDeployments.quotePublicKey,
+        configVersion: settlementDeployments.configVersion,
+        chain: settlementDeployments[context.chain],
+      } : null,
+    });
   } catch (e) {
     telemetry.operation({
       stage: 'failed', operation: 'upload', network: config.network,
@@ -410,42 +437,8 @@ app.post('/api/sponsor/submit', async (req, res) => {
   }
 });
 
-// ---- Quote-bound settlement verification ----
-function aptosAddressBytesHex(value) {
-  const text = String(value || '').replace(/^0x/, '').toLowerCase();
-  return /^[0-9a-f]{1,64}$/.test(text) ? text.padStart(64, '0') : '';
-}
-
-function assertContractEvidenceMatchesContext(contractQuote, signedQuote) {
-  const context = signedQuote.context;
-  const expectedChain = context.chain === 'aptos' ? 1 : 2;
-  const expectedAmount = context.chain === 'aptos'
-    ? (BigInt(signedQuote.breakdown.serviceFeeAccountingMicro) * 100n).toString()
-    : String(signedQuote.breakdown.totalAccountingMicro);
-  const mismatched = (
-    Number(contractQuote?.chain) !== expectedChain
-    || String(contractQuote?.fileHash || '').toLowerCase() !== context.fileHash
-    || Number(contractQuote?.retentionDays) !== context.days
-    || String(contractQuote?.storageExpirationMicros) !== String(context.expirationMicros)
-    || String(contractQuote?.amount) !== expectedAmount
-    || String(contractQuote?.configVersion) !== settlementDeployments.configVersion
-    || (context.chain === 'aptos' && (
-      String(contractQuote?.payer || '') !== aptosAddressBytesHex(context.sourceAddress)
-      || String(contractQuote?.storageAddress || '') !== aptosAddressBytesHex(context.storageAddress)
-      || String(contractQuote?.asset || '')
-        !== aptosAddressBytesHex(settlementDeployments.aptos.acceptedAsset)
-    ))
-  );
-  if (mismatched) {
-    throw Object.assign(new Error('Contract quote does not match the signed upload context'), {
-      code: 'quote_context_mismatch',
-      status: 409,
-      retriable: false,
-    });
-  }
-}
-
 app.post('/api/settlements/verify', async (req, res) => {
+  let settlementTelemetry = null;
   try {
     if (!settlementDeployments.enabled || !settlementAdapters || !quoteManager || !paidAuthorizations) {
       return send(res, 503, { error: 'Contract settlement is unavailable' });
@@ -476,7 +469,21 @@ app.post('/api/settlements/verify', async (req, res) => {
         code: 'invalid_contract_quote', status: 401, retriable: false,
       });
     }
-    assertContractEvidenceMatchesContext(contractQuote, signedQuote);
+    assertContractQuoteMatchesContext(contractQuote, signedQuote, settlementDeployments);
+    const chainDeployment = settlementDeployments[signedQuote.context.chain];
+    settlementTelemetry = {
+      operation: 'settlement',
+      chain: signedQuote.context.chain,
+      network: signedQuote.context.sourceNetwork,
+      deploymentId: signedQuote.context.chain === 'aptos'
+        ? `${chainDeployment.moduleAddress}::vessel_settlement`
+        : chainDeployment.programId,
+      wallet: signedQuote.context.sourceAddress,
+      storageAddress: signedQuote.context.storageAddress,
+      quoteId: contractQuote.quoteId,
+      configVersion: contractQuote.configVersion,
+    };
+    telemetry.operation({ stage: 'settlement_submitted', ...settlementTelemetry });
     const receipt = await settlementAdapters.verify({
       chain: signedQuote.context.chain,
       quote: contractEvidence,
@@ -487,8 +494,30 @@ app.post('/api/settlements/verify', async (req, res) => {
       receipt,
     });
     recordQuoteOperation('paid', signedQuote, { transactionHash: receipt.transactionId });
+    telemetry.operation({
+      stage: 'receipt_verified',
+      ...settlementTelemetry,
+      finalityLatencyMs: Math.max(0, receipt.finalizedAtMs - signedQuote.issuedAtMs),
+    });
     send(res, 200, { ok: true, paidAuthorization, receipt });
   } catch (error) {
+    if (settlementTelemetry) {
+      if (error?.code === 'receipt_pending') {
+        telemetry.operation({
+          stage: 'receipt_pending',
+          ...settlementTelemetry,
+          errorCode: error.code,
+          severity: 'info',
+        });
+      } else {
+        telemetry.operation({
+          stage: 'settlement_failed',
+          ...settlementTelemetry,
+          errorCode: error?.code || 'settlement_failed',
+          severity: 'error',
+        });
+      }
+    }
     fail(res, error);
   }
 });
