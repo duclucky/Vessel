@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-03
 
-**Status:** Approved architecture, awaiting written-spec review
+**Status:** Approved architecture; Aptos Testnet no-timelock exception approved
 
 **Initial chains:** Aptos Testnet and Solana Devnet
 
@@ -22,7 +22,11 @@ The direct-transfer settlement paths must be retired. Vessel will deploy one nat
 - A settlement is valid only when the chain-native contract verifies the Vessel quote signature and creates a unique receipt for its `quote_id`.
 - Vault withdrawals, signer rotation, accepted-asset changes, pausing, and upgrades are controlled by multisig from the first public deployment.
 - Aptos governance uses an Aptos Multisig Account. Solana governance uses Squads.
-- Beta upgrades are delayed by at least 24 hours. Upgrade authority can be removed permanently before mainnet.
+- Solana beta upgrades are delayed by at least 24 hours through Squads. Aptos
+  Testnet uses a 2-of-3 native Multisig Account without the framework timelock
+  because that feature is disabled on Testnet; the Move module still enforces its
+  own 24-hour schedule/execute delay for configuration changes. Upgrade authority
+  can be removed permanently before mainnet.
 - One dedicated Ed25519 quote-signing key is shared by the Aptos and Solana settlement implementations. Its public key is stored on-chain; its private key is an online operational key and never has withdrawal or upgrade authority.
 
 ## Goals
@@ -133,7 +137,15 @@ For native Aptos uploads, only the Vessel service fee or minimum uplift enters t
 
 ### Aptos governance
 
-The package is published and administered by an Aptos Multisig Account. Early execution is disabled and the multisig voting duration enforces a minimum 24-hour beta delay for upgrades and sensitive configuration actions. Contract-level configuration changes use schedule/execute operations and cannot execute before their recorded timestamp.
+The package is published and administered by a 2-of-3 Aptos Multisig Account
+created with no native timelock. Aptos Testnet aborts every call to the framework's
+timelock-enabled creation entry point with `ETIMELOCK_NOT_ENABLED`, even when the
+timelock option is `None`, so deployment uses `create_with_owners` instead. The
+Move module's contract-level configuration changes retain their 24-hour
+schedule/execute delay. Package upgrades, emergency pause, and withdrawals have no
+additional time delay beyond the 2-of-3 approval threshold in this Testnet beta.
+This exception must not be carried into mainnet without a separately approved
+governance design.
 
 The multisig controls withdrawals, pause/unpause, accepted metadata, quote-signer rotation, and package upgrades. The online quote signer controls none of these. Before mainnet, the package upgrade policy is changed irreversibly to immutable and the contract records `UpgradeLocked`.
 
@@ -166,7 +178,7 @@ Before mainnet, a Squads proposal removes the BPF program upgrade authority perm
 
 The quote service calculates the same itemized prices already shown by Vessel, builds `QuoteV1`, hashes the domain-separated BCS bytes, and signs the digest with the shared Ed25519 operational key. Production startup fails closed if the key is missing, malformed, or does not match both on-chain configurations.
 
-The signing key is versioned and stored in a secret manager or KMS-compatible signing service. Rotation is: schedule both on-chain changes, wait for both timelocks, execute both changes, update the signer service, and verify both configurations before issuing new quotes. Old quotes expire within five minutes, so no long dual-key window is required.
+The signing key is versioned and stored in a secret manager or KMS-compatible signing service. Rotation is: schedule both on-chain changes, wait for the Move module's configuration delay and the Squads timelock, execute both changes, update the signer service, and verify both configurations before issuing new quotes. Old quotes expire within five minutes, so no long dual-key window is required.
 
 ### SettlementAdapter
 
@@ -221,7 +233,8 @@ The known pre-contract Aptos test payment is legacy diagnostic evidence only and
 
 ## Upgrade, pause, and withdrawal policy
 
-- The beta timelock is 24 hours on both chains.
+- The Solana beta timelock is 24 hours. Aptos Testnet has no native multisig
+  timelock; its configuration schedule/execute path remains delayed by 24 hours.
 - All sensitive actions require the configured chain-native multisig threshold.
 - Emergency pause may be proposed and executed through multisig; there is no single-key pause authority.
 - Withdrawals specify asset, amount, and destination and emit an event. The destination may be a multisig-controlled operating account, but users never pay that account directly.
@@ -284,7 +297,9 @@ Implementation follows test-driven development.
 - Aptos: Petra settles through the Move contract, receipt is finalized, Shelby registration succeeds, bytes are acknowledged, and replay is rejected without another debit.
 - Solana: an installed wallet settles through the Vessel Program, the vault receives exact Devnet USDC, receipt PDA is finalized, DAA registration succeeds, and bytes are acknowledged.
 - Both records preserve file hash, storage address, retention, quote ID, contract identity, and transaction evidence.
-- Multisig schedules one harmless configuration-version update on each chain; execution before 24 hours fails and execution after the delay succeeds.
+- Each chain schedules one harmless configuration-version update; Aptos rejects
+  early execution through the Move module and Solana rejects it through Squads.
+  Execution after 24 hours succeeds on both chains.
 
 ## Observability
 
@@ -302,6 +317,8 @@ The public UI links each successful settlement to the correct chain explorer and
 - Native Aptos continues to pay protocol gas and Shelby storage directly during registration; only Vessel revenue enters the settlement vault.
 - Solana receipts unlock Aptos sponsorship only after finalized program verification.
 - Interrupted verification resumes from the existing receipt without a second payment.
-- Aptos Multisig Account and Squads control administration and beta upgrades with a 24-hour delay.
+- Aptos 2-of-3 Multisig Account controls Testnet administration and upgrades
+  without a native delay; Move configuration changes retain a 24-hour delay.
+  Squads controls Solana administration and upgrades with a 24-hour delay.
 - Upgradeability can be removed permanently before mainnet.
 - Real Testnet/Devnet evidence proves settlement, receipt, registration, byte acknowledgement, recovery, and replay rejection on both chains.
