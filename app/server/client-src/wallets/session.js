@@ -65,6 +65,7 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
   const connect = async (walletId, { silent = false } = {}) => {
     const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
     if (!descriptor?.enabled) throw new Error('Wallet is not available for connection');
+    if (state.session && state.session.walletId !== walletId) await disconnect();
     publish({ status: 'connecting', error: '' });
 
     try {

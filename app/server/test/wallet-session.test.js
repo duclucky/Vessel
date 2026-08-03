@@ -200,3 +200,39 @@ test('disconnect clears app state even when the provider disconnect fails', asyn
   assert.equal(store.getItem('vessel.wallet.id'), null);
   assert.equal(store.getItem('vessel.wallet.chain'), null);
 });
+
+test('switching wallet disconnects the previous adapter before connecting the next one', async () => {
+  const calls = [];
+  const first = { id: 'solana:first:1', chain: 'solana', enabled: true };
+  const second = { id: 'aptos:second:1', chain: 'aptos', enabled: true };
+  const controller = createWalletController({
+    registry: { scan: async () => [first, second], subscribe: () => () => {} },
+    storage: storage(),
+    resolveAdapter: (descriptor) => ({
+      connect: async () => {
+        calls.push(`connect:${descriptor.id}`);
+        return {
+          chain: descriptor.chain,
+          walletId: descriptor.id,
+          walletName: descriptor.id,
+          sourceAddress: descriptor.id,
+          sourceNetwork: 'testnet',
+          storageAddress: descriptor.id,
+          mode: descriptor.chain === 'aptos' ? 'native' : 'daa',
+        };
+      },
+      disconnect: async () => calls.push(`disconnect:${descriptor.id}`),
+      subscribe: () => () => {},
+    }),
+  });
+  await controller.scan();
+  await controller.connect(first.id);
+  await controller.connect(second.id);
+
+  assert.deepEqual(calls, [
+    `connect:${first.id}`,
+    `disconnect:${first.id}`,
+    `connect:${second.id}`,
+  ]);
+  assert.equal(controller.getState().session.walletId, second.id);
+});

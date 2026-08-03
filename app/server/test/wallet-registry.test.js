@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createWalletRegistry } from '../client-src/wallets/registry.js';
+import {
+  applyFamilyCapabilities,
+  createWalletRegistry,
+} from '../client-src/wallets/registry.js';
 
 const aptosFeatures = {
   'aptos:account': {},
@@ -109,4 +112,18 @@ test('Solana providers without legacy transaction support are incompatible', asy
 
   assert.equal(row.enabled, false);
   assert.equal(row.status, 'incompatible');
+});
+
+test('server family flags can disable a discovered wallet without hiding it', () => {
+  const rows = applyFamilyCapabilities([
+    { id: 'aptos:petra', chain: 'aptos', enabled: true, status: 'ready' },
+    { id: 'solana:phantom', chain: 'solana', enabled: true, status: 'ready' },
+    { id: 'evm:beta', chain: 'evm', enabled: false, status: 'beta' },
+  ], { aptos: false, solana: true, evm: false });
+
+  assert.deepEqual(rows.map(({ enabled, status }) => ({ enabled, status })), [
+    { enabled: false, status: 'unavailable' },
+    { enabled: true, status: 'ready' },
+    { enabled: false, status: 'beta' },
+  ]);
 });

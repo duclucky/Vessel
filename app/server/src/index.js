@@ -161,6 +161,11 @@ app.get('/api/config', (_req, res) => {
     priceBaseUsdc: config.priceBaseUsdc,
     pricePerMbUsdc: config.pricePerMbUsdc,
     sponsored: !!sponsor && !!payments,
+    walletFamilies: {
+      aptos: config.walletAptosEnabled,
+      solana: config.walletSolanaEnabled && !!sponsor && !!payments,
+      evm: false,
+    },
     maxUploadBytes: config.maxUploadBytes,
   });
 });

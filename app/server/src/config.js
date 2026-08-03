@@ -19,6 +19,8 @@ export const config = {
   usdcMint: process.env.USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
   priceBaseUsdc: Number(process.env.PRICE_BASE_USDC || 0.01),
   pricePerMbUsdc: Number(process.env.PRICE_PER_MB_USDC || 0.01),
+  walletAptosEnabled: process.env.WALLET_APTOS_ENABLED !== 'false',
+  walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
   paySecret: process.env.PAY_SECRET || 'vessel-dev-secret', // SERVER-ONLY: HMAC secret for payment tokens

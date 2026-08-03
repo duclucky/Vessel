@@ -52,6 +52,25 @@ function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Cop
 const walletController = () => window.VesselWallets;
 let pendingWalletWork = new AbortController();
 let activeUploadContext = null;
+let activeWalletIdentity = '';
+
+const walletIdentityKey = (next) => (
+  next?.status === 'ready' && next.session
+    ? `${next.session.chain}:${next.session.sourceAddress}:${next.session.storageAddress}`
+    : ''
+);
+
+function invalidateWalletWork(next) {
+  const identity = walletIdentityKey(next);
+  if (identity === activeWalletIdentity) return;
+  activeWalletIdentity = identity;
+  pendingWalletWork.abort();
+  pendingWalletWork = new AbortController();
+  activeUploadContext = null;
+  $('#pay-gate')?.remove();
+  $('#aptos-funding-gate')?.remove();
+  window.resetUpload?.();
+}
 
 function renderWallet() {
   const controller = walletController();
@@ -261,6 +280,7 @@ function initUpload() {
         return;
       } catch (e) {
         show(vInit);
+        if (e?.name === 'AbortError') return;
         const m = String(e?.message || e);
         toast(m.includes('reject') ? 'Signature rejected' : m.slice(0, 160), 'error');
         return;
@@ -486,7 +506,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       void walletUi.open(event.detail?.opener);
     });
     await window.VesselWallets.restore();
-    window.VesselWallets.subscribe(() => renderWallet());
+    activeWalletIdentity = walletIdentityKey(window.VesselWallets.getState());
+    window.VesselWallets.subscribe((next) => {
+      invalidateWalletWork(next);
+      renderWallet();
+    });
   }
   renderWallet();
   const p = page();

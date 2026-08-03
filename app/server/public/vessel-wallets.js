@@ -10654,6 +10654,15 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     return versions2 != null && Array.from(versions2).includes("legacy");
   };
   var idFor = (chain2, wallet) => `${chain2}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
+  function applyFamilyCapabilities(wallets2, families = {}) {
+    return wallets2.map((wallet) => {
+      if (wallet.chain === "evm") return wallet;
+      if (!families[wallet.chain]) {
+        return { ...wallet, enabled: false, status: "unavailable" };
+      }
+      return wallet;
+    });
+  }
   function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
     const evm = /* @__PURE__ */ new Map();
     const listeners2 = /* @__PURE__ */ new Set();
@@ -10785,6 +10794,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     const connect = async (walletId, { silent = false } = {}) => {
       const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
       if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
+      if (state.session && state.session.walletId !== walletId) await disconnect();
       publish({ status: "connecting", error: "" });
       try {
         activeAdapter = resolveAdapter(descriptor);
@@ -41175,7 +41185,11 @@ Message: ${transactionMessage}.
   var availableRegistry = {
     async scan() {
       adapters.clear();
-      return (await discoveredRegistry.scan()).map((wallet) => {
+      const [wallets2, publicConfig] = await Promise.all([
+        discoveredRegistry.scan(),
+        window.VesselSolana.loadConfig()
+      ]);
+      return applyFamilyCapabilities(wallets2, publicConfig.walletFamilies).map((wallet) => {
         if (wallet.chain === "aptos" && wallet.enabled) {
           adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
           return wallet;

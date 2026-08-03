@@ -1,5 +1,5 @@
 import { getWallets } from '@wallet-standard/app';
-import { createWalletRegistry } from './wallets/registry.js';
+import { applyFamilyCapabilities, createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
 import { uploadNativeAptos } from './wallets/aptos-upload.js';
@@ -22,7 +22,11 @@ const adapters = new Map();
 const availableRegistry = {
   async scan() {
     adapters.clear();
-    return (await discoveredRegistry.scan()).map((wallet) => {
+    const [wallets, publicConfig] = await Promise.all([
+      discoveredRegistry.scan(),
+      window.VesselSolana.loadConfig(),
+    ]);
+    return applyFamilyCapabilities(wallets, publicConfig.walletFamilies).map((wallet) => {
       if (wallet.chain === 'aptos' && wallet.enabled) {
         adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
         return wallet;

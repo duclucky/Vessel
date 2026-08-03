@@ -22,6 +22,16 @@ const supportsLegacy = (wallet) => {
 };
 const idFor = (chain, wallet) => `${chain}:${wallet.name}:${wallet.version || '1'}`.toLowerCase();
 
+export function applyFamilyCapabilities(wallets, families = {}) {
+  return wallets.map((wallet) => {
+    if (wallet.chain === 'evm') return wallet;
+    if (!families[wallet.chain]) {
+      return { ...wallet, enabled: false, status: 'unavailable' };
+    }
+    return wallet;
+  });
+}
+
 export function createWalletRegistry({ aptosSource, standardSource, eventTarget }) {
   const evm = new Map();
   const listeners = new Set();
