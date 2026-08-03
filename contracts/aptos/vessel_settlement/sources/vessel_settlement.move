@@ -1,5 +1,6 @@
 module vessel_settlement::vessel_settlement {
     use std::bcs;
+    use std::option::{Self, Option};
     use std::signer;
     use std::table::{Self, Table};
     use std::vector;
@@ -8,6 +9,7 @@ module vessel_settlement::vessel_settlement {
     use aptos_framework::object::{Self, ExtendRef, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
+    use aptos_std::from_bcs;
     use vessel_settlement::quote_v1;
 
     const VERSION: u8 = 1;
@@ -22,6 +24,21 @@ module vessel_settlement::vessel_settlement {
     const ERECEIPT_EXISTS: u64 = 0x20008;
     const EQUOTE_EXPIRED: u64 = 0x20009;
     const ESTALE_CONFIG: u64 = 0x2000a;
+    const EPENDING_CHANGE: u64 = 0x2000b;
+    const ENO_PENDING_CHANGE: u64 = 0x2000c;
+    const ECHANGE_NOT_READY: u64 = 0x2000d;
+    const EINVALID_CHANGE: u64 = 0x2000e;
+    const EUPGRADE_LOCKED: u64 = 0x2000f;
+    const EINVALID_WITHDRAWAL: u64 = 0x20010;
+    const CHANGE_QUOTE_SIGNER: u8 = 1;
+    const CHANGE_ACCEPTED_ASSET: u8 = 2;
+    const CHANGE_TIMELOCK_SECONDS: u64 = 86400;
+
+    struct PendingChange has copy, drop, store {
+        kind: u8,
+        value: vector<u8>,
+        execute_after_secs: u64,
+    }
 
     struct Config has key {
         quote_public_key: vector<u8>,
@@ -33,6 +50,7 @@ module vessel_settlement::vessel_settlement {
         vault_extend_ref: ExtendRef,
         vault_address: address,
         settled: Table<vector<u8>, bool>,
+        pending_change: Option<PendingChange>,
     }
 
     #[event]
@@ -47,6 +65,35 @@ module vessel_settlement::vessel_settlement {
         file_hash: vector<u8>,
         storage_expiration_micros: u64,
         config_version: u64,
+    }
+
+    #[event]
+    public struct ConfigChangeScheduled has copy, drop, store {
+        kind: u8,
+        execute_after_secs: u64,
+    }
+
+    #[event]
+    public struct ConfigChangeExecuted has copy, drop, store {
+        kind: u8,
+        config_version: u64,
+    }
+
+    #[event]
+    public struct Withdrawal has copy, drop, store {
+        asset: address,
+        destination: address,
+        amount: u64,
+    }
+
+    #[event]
+    public struct Paused has copy, drop, store {
+        paused: bool,
+    }
+
+    #[event]
+    public struct UpgradeLocked has copy, drop, store {
+        locked: bool,
     }
 
     #[view]
@@ -85,7 +132,98 @@ module vessel_settlement::vessel_settlement {
             vault_extend_ref,
             vault_address,
             settled: table::new(),
+            pending_change: option::none(),
         });
+    }
+
+    fun assert_admin(admin: &signer, config: &Config) {
+        assert!(
+            signer::address_of(admin) == config.admin
+                && signer::address_of(admin) == @vessel_settlement,
+            ENOT_ADMIN,
+        )
+    }
+
+    public entry fun schedule_change(
+        admin: &signer,
+        kind: u8,
+        value: vector<u8>,
+    ) acquires Config {
+        let config = borrow_global_mut<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        assert!(option::is_none(&config.pending_change), EPENDING_CHANGE);
+        assert!(
+            (kind == CHANGE_QUOTE_SIGNER || kind == CHANGE_ACCEPTED_ASSET)
+                && vector::length(&value) == 32,
+            EINVALID_CHANGE,
+        );
+        let execute_after_secs = timestamp::now_seconds() + CHANGE_TIMELOCK_SECONDS;
+        option::fill(&mut config.pending_change, PendingChange {
+            kind,
+            value,
+            execute_after_secs,
+        });
+        event::emit(ConfigChangeScheduled { kind, execute_after_secs });
+    }
+
+    public entry fun execute_change(admin: &signer) acquires Config {
+        let config = borrow_global_mut<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        assert!(option::is_some(&config.pending_change), ENO_PENDING_CHANGE);
+        let pending = option::extract(&mut config.pending_change);
+        assert!(timestamp::now_seconds() >= pending.execute_after_secs, ECHANGE_NOT_READY);
+        if (pending.kind == CHANGE_QUOTE_SIGNER) {
+            config.quote_public_key = pending.value;
+        } else if (pending.kind == CHANGE_ACCEPTED_ASSET) {
+            config.accepted_asset = from_bcs::to_address(pending.value);
+        } else {
+            abort EINVALID_CHANGE
+        };
+        config.config_version = config.config_version + 1;
+        event::emit(ConfigChangeExecuted {
+            kind: pending.kind,
+            config_version: config.config_version,
+        });
+    }
+
+    public entry fun pause(admin: &signer) acquires Config {
+        let config = borrow_global_mut<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        config.paused = true;
+        event::emit(Paused { paused: true });
+    }
+
+    public entry fun unpause(admin: &signer) acquires Config {
+        let config = borrow_global_mut<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        config.paused = false;
+        event::emit(Paused { paused: false });
+    }
+
+    public entry fun withdraw<T: key>(
+        admin: &signer,
+        metadata: Object<T>,
+        destination: address,
+        amount: u64,
+    ) acquires Config {
+        let config = borrow_global<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        let asset = object::object_address(&metadata);
+        assert!(
+            asset == config.accepted_asset && destination != @0x0 && amount > 0,
+            EINVALID_WITHDRAWAL,
+        );
+        let vault_signer = object::generate_signer_for_extending(&config.vault_extend_ref);
+        primary_fungible_store::transfer(&vault_signer, metadata, destination, amount);
+        event::emit(Withdrawal { asset, destination, amount });
+    }
+
+    public entry fun lock_upgrade_intent(admin: &signer) acquires Config {
+        let config = borrow_global_mut<Config>(@vessel_settlement);
+        assert_admin(admin, config);
+        assert!(!config.upgrade_locked, EUPGRADE_LOCKED);
+        config.upgrade_locked = true;
+        event::emit(UpgradeLocked { locked: true });
     }
 
     public entry fun settle<T: key>(
@@ -180,6 +318,21 @@ module vessel_settlement::vessel_settlement {
     #[view]
     public fun vault_address(): address acquires Config {
         borrow_global<Config>(@vessel_settlement).vault_address
+    }
+
+    #[view]
+    public fun is_paused(): bool acquires Config {
+        borrow_global<Config>(@vessel_settlement).paused
+    }
+
+    #[view]
+    public fun is_upgrade_locked(): bool acquires Config {
+        borrow_global<Config>(@vessel_settlement).upgrade_locked
+    }
+
+    #[view]
+    public fun has_pending_change(): bool acquires Config {
+        option::is_some(&borrow_global<Config>(@vessel_settlement).pending_change)
     }
 
     #[view]
