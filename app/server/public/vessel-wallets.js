@@ -6,9 +6,6 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
-  var __typeError = (msg) => {
-    throw TypeError(msg);
-  };
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __esm = (fn2, res, err) => function __init() {
     if (err) throw err[0];
@@ -47,19 +44,6 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   ));
   var __toCommonJS = (mod2) => __copyProps(__defProp({}, "__esModule", { value: true }), mod2);
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
-  var __accessCheck = (obj, member, msg) => member.has(obj) || __typeError("Cannot " + msg);
-  var __privateGet = (obj, member, getter) => (__accessCheck(obj, member, "read from private field"), getter ? getter.call(obj) : member.get(obj));
-  var __privateAdd = (obj, member, value) => member.has(obj) ? __typeError("Cannot add the same private member more than once") : member instanceof WeakSet ? member.add(obj) : member.set(obj, value);
-  var __privateSet = (obj, member, value, setter) => (__accessCheck(obj, member, "write to private field"), setter ? setter.call(obj, value) : member.set(obj, value), value);
-  var __privateMethod = (obj, member, method) => (__accessCheck(obj, member, "access private method"), method);
-  var __privateWrapper = (obj, member, setter, getter) => ({
-    set _(value) {
-      __privateSet(obj, member, value, setter);
-    },
-    get _() {
-      return __privateGet(obj, member, getter);
-    }
-  });
 
   // node_modules/@esbuild-plugins/node-globals-polyfill/process.js
   function defaultSetTimout() {
@@ -10631,6 +10615,442 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   };
   _AppReadyEvent_detail = /* @__PURE__ */ new WeakMap();
 
+  // client-src/wallets/registry.js
+  init_process();
+  init_buffer();
+  var SOLANA_REQUIRED = [
+    "standard:connect",
+    "standard:events",
+    "solana:signMessage",
+    "solana:signAndSendTransaction"
+  ];
+  var APTOS_REQUIRED = [
+    "aptos:connect",
+    "aptos:disconnect",
+    "aptos:network",
+    "aptos:onAccountChange",
+    "aptos:onNetworkChange",
+    "aptos:signAndSubmitTransaction"
+  ];
+  var hasAll = (wallet, names) => names.every((name) => name in (wallet.features || {}));
+  var supportsLegacy = (wallet) => {
+    const versions2 = wallet.features?.["solana:signAndSendTransaction"]?.supportedTransactionVersions;
+    return versions2 != null && Array.from(versions2).includes("legacy");
+  };
+  var idFor = (chain2, wallet) => `${chain2}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
+  function applyFamilyCapabilities(wallets2, families = {}) {
+    return wallets2.map((wallet) => {
+      if (wallet.chain === "evm") return wallet;
+      if (!families[wallet.chain]) {
+        return { ...wallet, enabled: false, status: "unavailable" };
+      }
+      return wallet;
+    });
+  }
+  function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
+    const evm = /* @__PURE__ */ new Map();
+    const listeners2 = /* @__PURE__ */ new Set();
+    const notify = () => listeners2.forEach((listener) => listener());
+    const announce = (event) => {
+      const { info, provider } = event.detail || {};
+      if (!info?.uuid || !provider) return;
+      evm.set(info.uuid, { info, provider });
+      notify();
+    };
+    eventTarget.addEventListener("eip6963:announceProvider", announce);
+    eventTarget.dispatchEvent(new Event("eip6963:requestProvider"));
+    const scan = async () => {
+      const aptos = aptosSource2.get().filter((wallet) => hasAll(wallet, APTOS_REQUIRED)).map((wallet) => ({
+        id: idFor("aptos", wallet),
+        name: wallet.name,
+        icon: wallet.icon,
+        chain: "aptos",
+        installed: true,
+        enabled: true,
+        status: "ready",
+        capabilities: [...APTOS_REQUIRED],
+        provider: wallet
+      }));
+      const solana = standardSource2.get().filter((wallet) => wallet.chains?.some((chain2) => String(chain2).startsWith("solana:"))).map((wallet) => {
+        const enabled = hasAll(wallet, SOLANA_REQUIRED) && supportsLegacy(wallet);
+        return {
+          id: idFor("solana", wallet),
+          name: wallet.name,
+          icon: wallet.icon,
+          chain: "solana",
+          installed: true,
+          enabled,
+          status: enabled ? "ready" : "incompatible",
+          capabilities: SOLANA_REQUIRED.filter((name) => name in (wallet.features || {})),
+          provider: wallet
+        };
+      });
+      const ethereum = [...evm.values()].map(({ info, provider }) => ({
+        id: `evm:${info.uuid}`,
+        name: info.name,
+        icon: info.icon,
+        chain: "evm",
+        installed: true,
+        enabled: false,
+        status: "beta",
+        capabilities: [],
+        provider
+      }));
+      return [...aptos, ...solana, ...ethereum].filter(
+        (row, index, all) => all.findIndex((item) => item.id === row.id) === index
+      );
+    };
+    const offAptos = aptosSource2.on("register", notify);
+    const offStandard = standardSource2.on("register", notify);
+    return {
+      scan,
+      subscribe(listener) {
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
+      },
+      destroy() {
+        offAptos?.();
+        offStandard?.();
+        eventTarget.removeEventListener("eip6963:announceProvider", announce);
+        listeners2.clear();
+      }
+    };
+  }
+
+  // client-src/wallets/session.js
+  init_process();
+  init_buffer();
+  var KEYS = {
+    id: "vessel.wallet.id",
+    chain: "vessel.wallet.chain"
+  };
+  function createWalletController({ registry, resolveAdapter, storage }) {
+    let state = { status: "disconnected", wallets: [], session: null, error: "" };
+    let activeAdapter = null;
+    let offAdapter = null;
+    const listeners2 = /* @__PURE__ */ new Set();
+    const publish = (patch) => {
+      state = { ...state, ...patch };
+      listeners2.forEach((listener) => listener(state));
+    };
+    const scan = async () => {
+      const statusBeforeScan = state.status;
+      publish({ status: "scanning" });
+      const wallets2 = await registry.scan();
+      const status = ["network_required", "identity_required"].includes(statusBeforeScan) ? statusBeforeScan : state.session ? "ready" : "disconnected";
+      publish({ wallets: wallets2, status });
+      return wallets2;
+    };
+    const disconnect = async () => {
+      offAdapter?.();
+      offAdapter = null;
+      const adapter = activeAdapter;
+      activeAdapter = null;
+      try {
+        await adapter?.disconnect?.();
+      } catch {
+      } finally {
+        storage.removeItem(KEYS.id);
+        storage.removeItem(KEYS.chain);
+        publish({ status: "disconnected", session: null, error: "" });
+      }
+    };
+    const attachAdapter = (descriptor, session) => {
+      storage.setItem(KEYS.id, descriptor.id);
+      storage.setItem(KEYS.chain, descriptor.chain);
+      offAdapter?.();
+      offAdapter = activeAdapter.subscribe((event) => {
+        if (["network_required", "identity_required"].includes(event?.status)) {
+          publish({
+            status: event.status,
+            session: event.session || state.session,
+            error: event.error || ""
+          });
+          return;
+        }
+        if (event?.session) {
+          publish({ session: event.session, status: "ready", error: "" });
+          return;
+        }
+        void disconnect();
+      });
+    };
+    const connect = async (walletId, { silent = false } = {}) => {
+      const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
+      if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
+      if (state.session && state.session.walletId !== walletId) await disconnect();
+      publish({ status: "connecting", error: "" });
+      try {
+        activeAdapter = resolveAdapter(descriptor);
+        const session = await activeAdapter.connect({ silent });
+        if (!session) {
+          publish({ status: "disconnected", session: null });
+          return null;
+        }
+        attachAdapter(descriptor, session);
+        publish({ session, status: "ready", error: "" });
+        return session;
+      } catch (error) {
+        const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
+        if (networkRequired && error.session) attachAdapter(descriptor, error.session);
+        publish({
+          status: networkRequired ? "network_required" : "error",
+          session: networkRequired ? error.session || null : null,
+          error: error?.message || String(error)
+        });
+        throw error;
+      }
+    };
+    const ensureNetwork = async () => {
+      if (!activeAdapter?.ensureNetwork || !state.session) {
+        throw new Error("Connect an Aptos wallet before switching network");
+      }
+      publish({ status: "connecting", error: "" });
+      try {
+        await activeAdapter.ensureNetwork();
+        publish({ status: "ready", error: "" });
+        return state.session;
+      } catch (error) {
+        publish({
+          status: ["wrong_network", "switch_unsupported"].includes(error?.code) ? "network_required" : "error",
+          error: error?.message || String(error)
+        });
+        throw error;
+      }
+    };
+    const restore = async () => {
+      await scan();
+      const id = storage.getItem(KEYS.id);
+      if (!id) return null;
+      try {
+        return await connect(id, { silent: true });
+      } catch {
+        if (state.status !== "network_required") {
+          publish({ status: "disconnected", session: null, error: "" });
+        }
+        return null;
+      }
+    };
+    return {
+      scan,
+      connect,
+      restore,
+      disconnect,
+      ensureNetwork,
+      getState: () => state,
+      getActiveAdapter: () => activeAdapter,
+      subscribe(listener) {
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
+      }
+    };
+  }
+
+  // client-src/wallets/aptos-adapter.js
+  init_process();
+  init_buffer();
+  var TESTNET = { name: "testnet", chainId: 2 };
+  var walletError = (message, code) => Object.assign(new Error(message), { code });
+  function normalizeAptosError(error, walletName = "Aptos wallet") {
+    const raw = String(error?.message || error || "");
+    if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
+    if (error?.session) {
+      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
+    }
+    if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
+      return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
+    }
+    if (/reject|declin|cancel/i.test(raw)) {
+      return walletError("Wallet request was rejected", "user_rejected");
+    }
+    return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
+  }
+  var approvedArgs = (response, code = "user_rejected") => {
+    if (response?.status !== "Approved") {
+      throw walletError("Wallet request was rejected", code);
+    }
+    return response.args;
+  };
+  var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
+  var isTestnet = (network) => String(network?.name || "").toLowerCase() === TESTNET.name && Number(network?.chainId) === TESTNET.chainId;
+  function createAptosAdapter(descriptor) {
+    const wallet = descriptor.provider;
+    const listeners2 = /* @__PURE__ */ new Set();
+    let session = null;
+    let eventsBound = false;
+    const feature = (name, method, { optional: optional2 = false } = {}) => {
+      const implementation = wallet?.features?.[name];
+      if (implementation?.[method]) return implementation;
+      if (optional2) return null;
+      throw walletError(`${descriptor.name} does not provide ${name}`, "provider_unavailable");
+    };
+    const emit2 = (event) => listeners2.forEach((listener) => listener(event));
+    const buildSession = (account) => {
+      const address = addressOf(account);
+      if (!address) throw walletError("Aptos wallet did not return an account", "provider_unavailable");
+      return {
+        chain: "aptos",
+        walletId: descriptor.id,
+        walletName: descriptor.name,
+        sourceAddress: address,
+        sourceNetwork: "testnet",
+        storageAddress: address,
+        mode: "native"
+      };
+    };
+    const ensureNetwork = async () => {
+      const current = await feature("aptos:network", "network").network();
+      if (isTestnet(current)) return current;
+      const changer = feature("aptos:changeNetwork", "changeNetwork", { optional: true });
+      if (!changer) {
+        throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
+      }
+      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
+      if (!changed?.success) {
+        throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
+      }
+      return TESTNET;
+    };
+    const bindEvents = () => {
+      if (eventsBound) return;
+      eventsBound = true;
+      const accountEvents = feature("aptos:onAccountChange", "onAccountChange");
+      const networkEvents = feature("aptos:onNetworkChange", "onNetworkChange");
+      void accountEvents.onAccountChange((account) => {
+        try {
+          session = buildSession(account);
+          emit2({ session, status: "ready" });
+        } catch (error) {
+          session = null;
+          emit2({ session: null, status: "disconnected", error: error.message });
+        }
+      });
+      void networkEvents.onNetworkChange((network) => {
+        if (!isTestnet(network)) {
+          emit2({ session, status: "network_required", error: "Switch your wallet to Aptos Testnet" });
+          return;
+        }
+        emit2({ session, status: session ? "ready" : "disconnected", error: "" });
+      });
+    };
+    return {
+      async connect({ silent = false } = {}) {
+        try {
+          const connector = feature("aptos:connect", "connect");
+          const account = approvedArgs(
+            await (silent ? connector.connect(true) : connector.connect())
+          );
+          session = buildSession(account);
+          try {
+            await ensureNetwork();
+          } catch (error) {
+            error.session = session;
+            throw error;
+          }
+          return session;
+        } catch (error) {
+          const normalized = normalizeAptosError(error, descriptor.name);
+          if (error?.session) normalized.session = error.session;
+          throw normalized;
+        }
+      },
+      ensureNetwork,
+      async signAndSubmitTransaction({ data }) {
+        return approvedArgs(
+          await feature("aptos:signAndSubmitTransaction", "signAndSubmitTransaction").signAndSubmitTransaction({ payload: data })
+        );
+      },
+      subscribe(listener) {
+        listeners2.add(listener);
+        bindEvents();
+        return () => listeners2.delete(listener);
+      },
+      async disconnect() {
+        await feature("aptos:disconnect", "disconnect").disconnect();
+        session = null;
+      }
+    };
+  }
+
+  // client-src/wallets/aptos-contract-settlement.js
+  init_process();
+  init_buffer();
+  var HEX_32 = /^[0-9a-f]{64}$/;
+  var HEX_64 = /^[0-9a-f]{128}$/;
+  var settlementError = (message, code = "invalid_contract_settlement") => Object.assign(
+    new Error(message),
+    { code, retriable: false }
+  );
+  function aptosAddressHex(value) {
+    const text = String(value || "").replace(/^0x/, "").toLowerCase();
+    if (!/^[0-9a-f]{1,64}$/.test(text)) {
+      throw settlementError("Invalid Aptos payer address", "settlement_context_mismatch");
+    }
+    return text.padStart(64, "0");
+  }
+  function hexBytes(value, expectedPattern = HEX_32) {
+    const text = String(value || "").replace(/^0x/, "").toLowerCase();
+    if (!expectedPattern.test(text)) throw settlementError("Invalid signed settlement bytes");
+    return Uint8Array.from(text.match(/../g).map((byte) => Number.parseInt(byte, 16)));
+  }
+  async function submitAptosContractSettlement({
+    adapter,
+    session,
+    deployment,
+    contractQuote: quote,
+    contractSignature
+  }) {
+    if (session?.chain !== "aptos" || aptosAddressHex(session?.sourceAddress) !== String(quote?.payer || "")) {
+      throw settlementError(
+        "The connected Aptos account no longer matches this quote",
+        "settlement_context_mismatch"
+      );
+    }
+    const moduleAddress = String(deployment?.moduleAddress || "").toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(moduleAddress) || /^0x0+$/.test(moduleAddress)) {
+      throw settlementError("Vessel Aptos settlement contract is not deployed", "settlement_unavailable");
+    }
+    if (typeof adapter?.signAndSubmitTransaction !== "function") {
+      throw settlementError("Reconnect the selected Aptos wallet", "settlement_unavailable");
+    }
+    const signature = hexBytes(contractSignature, HEX_64);
+    const data = {
+      function: `${moduleAddress}::vessel_settlement::settle`,
+      typeArguments: ["0x1::fungible_asset::Metadata"],
+      functionArguments: [
+        `0x${quote.asset}`,
+        quote.version,
+        quote.chain,
+        quote.network,
+        hexBytes(quote.quoteId),
+        hexBytes(quote.payer),
+        hexBytes(quote.storageAddress),
+        hexBytes(quote.asset),
+        String(quote.amount),
+        hexBytes(quote.fileHash),
+        quote.retentionDays,
+        String(quote.storageExpirationMicros),
+        String(quote.quoteExpiresAtSecs),
+        String(quote.configVersion),
+        signature
+      ]
+    };
+    const submitted = await adapter.signAndSubmitTransaction({ data });
+    const transactionId = String(submitted?.hash || "");
+    if (!transactionId) {
+      throw settlementError("Aptos wallet did not return a transaction hash", "settlement_submission_failed");
+    }
+    return Object.freeze({ transactionId });
+  }
+
+  // client-src/wallets/aptos-upload.js
+  init_process();
+  init_buffer();
+
+  // node_modules/@shelby-protocol/sdk/dist/browser/index.mjs
+  init_process();
+  init_buffer();
+
   // node_modules/@aptos-labs/ts-sdk/dist/esm/index.mjs
   init_process();
   init_buffer();
@@ -16164,7 +16584,6 @@ KeylessErrorResolutionTip: ${r12}`, R7;
   init_process();
   init_buffer();
   var t4 = ((S6) => (S6.FULLNODE = "Fullnode", S6.INDEXER = "Indexer", S6.FAUCET = "Faucet", S6.PEPPER = "Pepper", S6.PROVER = "Prover", S6))(t4 || {});
-  var E6 = 20;
   var R3 = "0x1::aptos_coin::AptosCoin";
   var n9 = "0x000000000000000000000000000000000000000000000000000000000000000a";
   var T7 = "APTOS::RawTransaction";
@@ -16342,9 +16761,9 @@ KeylessErrorResolutionTip: ${r12}`, R7;
     };
   }
   function buildRequest(options) {
-    var _a3, _b, _c2;
+    var _a2, _b, _c2;
     const headers = new Headers();
-    Object.entries((_a3 = options == null ? void 0 : options.headers) != null ? _a3 : {}).forEach(([key, value]) => {
+    Object.entries((_a2 = options == null ? void 0 : options.headers) != null ? _a2 : {}).forEach(([key, value]) => {
       headers.append(key, String(value));
     });
     const body = options.body instanceof Uint8Array ? options.body.buffer : JSON.stringify(options.body);
@@ -16965,12 +17384,12 @@ KeylessErrorResolutionTip: ${r12}`, R7;
       const RkA = R7.add(A12.multiplyUnsafe(k4));
       return RkA.subtract(SB).clearCofactor().is0();
     }
-    const _size2 = Fp3.BYTES;
+    const _size = Fp3.BYTES;
     const lengths = {
-      secretKey: _size2,
-      publicKey: _size2,
-      signature: 2 * _size2,
-      seed: _size2
+      secretKey: _size,
+      publicKey: _size,
+      signature: 2 * _size,
+      seed: _size
     };
     function randomSecretKey(seed = randomBytes2(lengths.seed)) {
       return _abytes2(seed, lengths.seed, "seed");
@@ -23494,10 +23913,6 @@ KeylessErrorResolutionTip: ${r12}`, R7;
   init_buffer();
 
   // node_modules/@aptos-labs/ts-sdk/dist/esm/chunk-4WPQQPUF.mjs
-  init_process();
-  init_buffer();
-
-  // node_modules/@shelby-protocol/sdk/dist/browser/index.mjs
   init_process();
   init_buffer();
 
@@ -32382,156 +32797,6 @@ ${String(result)}`);
   gql2["default"] = gql2;
   var lib_default = gql2;
 
-  // node_modules/p-limit/index.js
-  init_process();
-  init_buffer();
-
-  // node_modules/yocto-queue/index.js
-  init_process();
-  init_buffer();
-  var Node = class {
-    constructor(value) {
-      __publicField(this, "value");
-      __publicField(this, "next");
-      this.value = value;
-    }
-  };
-  var _head, _tail, _size;
-  var Queue = class {
-    constructor() {
-      __privateAdd(this, _head);
-      __privateAdd(this, _tail);
-      __privateAdd(this, _size);
-      this.clear();
-    }
-    enqueue(value) {
-      const node = new Node(value);
-      if (__privateGet(this, _head)) {
-        __privateGet(this, _tail).next = node;
-        __privateSet(this, _tail, node);
-      } else {
-        __privateSet(this, _head, node);
-        __privateSet(this, _tail, node);
-      }
-      __privateWrapper(this, _size)._++;
-    }
-    dequeue() {
-      const current = __privateGet(this, _head);
-      if (!current) {
-        return;
-      }
-      __privateSet(this, _head, __privateGet(this, _head).next);
-      __privateWrapper(this, _size)._--;
-      if (!__privateGet(this, _head)) {
-        __privateSet(this, _tail, void 0);
-      }
-      return current.value;
-    }
-    peek() {
-      if (!__privateGet(this, _head)) {
-        return;
-      }
-      return __privateGet(this, _head).value;
-    }
-    clear() {
-      __privateSet(this, _head, void 0);
-      __privateSet(this, _tail, void 0);
-      __privateSet(this, _size, 0);
-    }
-    get size() {
-      return __privateGet(this, _size);
-    }
-    *[Symbol.iterator]() {
-      let current = __privateGet(this, _head);
-      while (current) {
-        yield current.value;
-        current = current.next;
-      }
-    }
-    *drain() {
-      while (__privateGet(this, _head)) {
-        yield this.dequeue();
-      }
-    }
-  };
-  _head = new WeakMap();
-  _tail = new WeakMap();
-  _size = new WeakMap();
-
-  // node_modules/p-limit/index.js
-  function pLimit(concurrency) {
-    validateConcurrency(concurrency);
-    const queue2 = new Queue();
-    let activeCount = 0;
-    const resumeNext = () => {
-      if (activeCount < concurrency && queue2.size > 0) {
-        activeCount++;
-        queue2.dequeue()();
-      }
-    };
-    const next = () => {
-      activeCount--;
-      resumeNext();
-    };
-    const run2 = async (function_, resolve, arguments_) => {
-      const result = (async () => function_(...arguments_))();
-      resolve(result);
-      try {
-        await result;
-      } catch {
-      }
-      next();
-    };
-    const enqueue = (function_, resolve, arguments_) => {
-      new Promise((internalResolve) => {
-        queue2.enqueue(internalResolve);
-      }).then(run2.bind(void 0, function_, resolve, arguments_));
-      if (activeCount < concurrency) {
-        resumeNext();
-      }
-    };
-    const generator = (function_, ...arguments_) => new Promise((resolve) => {
-      enqueue(function_, resolve, arguments_);
-    });
-    Object.defineProperties(generator, {
-      activeCount: {
-        get: () => activeCount
-      },
-      pendingCount: {
-        get: () => queue2.size
-      },
-      clearQueue: {
-        value() {
-          queue2.clear();
-        }
-      },
-      concurrency: {
-        get: () => concurrency,
-        set(newConcurrency) {
-          validateConcurrency(newConcurrency);
-          concurrency = newConcurrency;
-          queueMicrotask(() => {
-            while (activeCount < concurrency && queue2.size > 0) {
-              resumeNext();
-            }
-          });
-        }
-      },
-      map: {
-        async value(array2, function_) {
-          const promises = array2.map((value, index) => this(function_, value, index));
-          return Promise.all(promises);
-        }
-      }
-    });
-    return generator;
-  }
-  function validateConcurrency(concurrency) {
-    if (!((Number.isInteger(concurrency) || concurrency === Number.POSITIVE_INFINITY) && concurrency > 0)) {
-      throw new TypeError("Expected `concurrency` to be a number from 1 and up");
-    }
-  }
-
   // node_modules/@shelby-protocol/sdk/dist/browser/index.mjs
   async function* readInChunks(input, chunkSize) {
     let idx = 0;
@@ -32609,12 +32874,6 @@ ${String(result)}`);
   }
   function toUint8Array(view) {
     return view instanceof Uint8Array ? view : new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-  }
-  function buildRequestUrl(path, baseUrl) {
-    const baseHasSlash = baseUrl.endsWith("/");
-    const safeBase = baseHasSlash ? baseUrl : `${baseUrl}/`;
-    const safePath = path.replace(/^\/+/, "");
-    return new URL(safePath, safeBase);
   }
   function getBlobNameSuffix(blobName) {
     const parts = blobName.split("/");
@@ -32866,7 +33125,6 @@ ${String(result)}`);
     [e7.CUSTOM]: void 0
   };
   var SHELBY_DEPLOYER = "0x85fdb9a176ab8ef1d9d9c1b60d60b3924f0800ac1de1cc2085fb0b8bb4988e6a";
-  var MICROPAYMENTS_DEPLOYER = "0x1ae7275148bf6ef742b658fd9cbcc2e094201606f4a7bc707bab0201da8043ee";
   var SHELBYUSD_FA_METADATA_ADDRESS = "0x1b18363a9f1fe5e6ebf247daba5cc1c18052bb232efdc4c50f556053922d98e1";
   function getTotalChunks(config2) {
     return config2.erasure_n;
@@ -33031,9 +33289,6 @@ ${String(result)}`);
       },
       faucetConfig: baseFaucetConfig
     });
-  };
-  var getShelbyRPCBaseUrl = (config2) => {
-    return config2.rpc?.baseUrl ?? NetworkToShelbyRPCBaseUrl[config2.network] ?? NetworkToShelbyRPCBaseUrl.testnet;
   };
   var GetBlobsDocument = lib_default`
     query getBlobs($where: blobs_bool_exp, $orderBy: [blobs_order_by!], $limit: Int, $offset: Int) {
@@ -33891,243 +34146,12 @@ ${String(result)}`);
       };
     }
   };
-  function parseStorageProviderState(raw) {
-    switch (raw.__variant__) {
-      case "Active":
-        return {
-          variant: "Active",
-          quota: raw.quota.value,
-          stakeAtStartOfStakingEpoch: raw.stake_at_start_of_staking_epoch,
-          faulty: raw.faulty,
-          leaving: raw.leaving
-        };
-      case "Waitlisted":
-        return {
-          variant: "Waitlisted"
-        };
-      case "Frozen":
-        return {
-          variant: "Frozen",
-          frozenReason: raw.frozen_reason,
-          frozenFrom: raw.frozen_from,
-          frozenTill: raw.frozen_till
-        };
-    }
-  }
-  var ShelbyMetadataClient = class {
-    /**
-     * The ShelbyMetadataClient is used to interact with the Shelby contract on the Aptos blockchain. This
-     * includes functions like gathering basic details about the Shelby system, including storage provider information.
-     *
-     * @param config.aptos.config - The Aptos config.
-     * @param config.shelbyDeployer - The deployer account address of the Shelby contract. If not provided, the default deployer address will be used.
-     *
-     * @example
-     * ```typescript
-     * const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
-     * const metadataClient = new ShelbyMetadataClient({ aptos });
-     * ```
-     */
-    constructor(config2) {
-      __publicField(this, "aptos");
-      __publicField(this, "deployer");
-      this.aptos = new X4(getAptosConfig(config2));
-      this.deployer = config2.deployer ?? l2.fromString(SHELBY_DEPLOYER);
-    }
-    /**
-     * Retrieves storage provider list from the blockchain.
-     *
-     * @returns A list of storage providers, or empty array if none exist.
-     *
-     * @example
-     * ```typescript
-     * const spList = await client.getStorageProviders();
-     * ```
-     */
-    async getStorageProviders() {
-      try {
-        const rawMetadata = await this.aptos.view({
-          payload: {
-            function: `${this.deployer.toString()}::storage_provider_registry::get_all_storage_providers`,
-            functionArguments: []
-          }
-        });
-        const metadata = rawMetadata[0];
-        return metadata.map((provider) => ({
-          address: normalizeAddress(provider.address),
-          ipAddress: provider.ip_address,
-          port: provider.port,
-          blsPublicKey: a.fromHexInput(provider.bls_public_key).toUint8Array(),
-          availabilityZone: provider.availability_zone,
-          state: parseStorageProviderState(provider.state)
-        }));
-      } catch (error) {
-        if (error instanceof Error && // Depending on the network, the error message may show up differently.
-        error.message?.includes("sub_status: Some(404)")) {
-          return [];
-        }
-        throw error;
-      }
-    }
-    /**
-     * Retrieves the list of placement group addresses.
-     *
-     * @returns The placement group address list, or an empty array if none exist.
-     *
-     * @example
-     * ```typescript
-     * const pgList = await client.getPlacementGroupAddresses();
-     * ```
-     */
-    async getPlacementGroupAddresses() {
-      try {
-        const pgSizeMetadata = await this.aptos.view({
-          payload: {
-            function: `${this.deployer.toString()}::placement_group_registry::get_number_of_placement_groups`,
-            functionArguments: []
-          }
-        });
-        const finalPlacementGroupIndex = pgSizeMetadata[0] - 1;
-        const addressMetadataArray = await this.aptos.view({
-          payload: {
-            function: `${this.deployer.toString()}::placement_group_registry::get_placement_group_addresses`,
-            functionArguments: [0, finalPlacementGroupIndex]
-          }
-        });
-        const metadata = addressMetadataArray[0];
-        return metadata.map((pg) => normalizeAddress(pg));
-      } catch (error) {
-        if (error instanceof Error && // Depending on the network, the error message may show up differently.
-        (error.message?.includes("sub_status: Some(404)") || error.message?.includes("E_PLACEMENT_GROUP_NOT_FOUND"))) {
-          return [];
-        }
-        throw error;
-      }
-    }
-    /**
-     * Retrieves the list of slice addresses.
-     *
-     * @returns The slice group list, or an empty array if none exist.
-     *
-     * @example
-     * ```typescript
-     * const pgList = await client.getSliceAddresses();
-     * ```
-     */
-    async getSliceAddresses() {
-      try {
-        const sliceSizeMetadata = await this.aptos.view({
-          payload: {
-            function: `${this.deployer.toString()}::slice_registry::get_number_of_slices`,
-            functionArguments: []
-          }
-        });
-        const finalSliceIndex = sliceSizeMetadata[0] - 1;
-        const addressMetadataArray = await this.aptos.view({
-          payload: {
-            function: `${this.deployer.toString()}::slice_registry::get_slice_addresses`,
-            functionArguments: [0, finalSliceIndex]
-          }
-        });
-        const metadata = addressMetadataArray[0];
-        return metadata.map((slice3) => normalizeAddress(slice3));
-      } catch (error) {
-        if (error instanceof Error && // Depending on the network, the error message may show up differently.
-        (error.message?.includes("sub_status: Some(404)") || error.message?.includes("E_SLICE_NOT_FOUND"))) {
-          return [];
-        }
-        throw error;
-      }
-    }
-    /**
-     * Gets the placement group address for a slice.
-     *
-     * @param sliceAddress - The address of the slice account.
-     * @returns The placement group address as a string.
-     */
-    async getPlacementGroupAddressForSlice(sliceAddress) {
-      const sliceMetadata = await this.aptos.view({
-        payload: {
-          function: `${this.deployer.toString()}::slice::get_slice_info`,
-          functionArguments: [sliceAddress.toString()]
-        }
-      });
-      return sliceMetadata[0].placement_group_assignments[0].placement_group_address;
-    }
-    /**
-     * Retrieves the designated storage providers for a slice.
-     *
-     * Designated SPs are those appointed to store data for their slots:
-     * - Active: Currently serving data
-     * - Receiving: Receiving data during slot transfer
-     * - Repairing: Repairing data after crash or failed transfer
-     * - Reconstructing: Reconstructing data if the repair fails
-     *
-     * @param params.account - The address of the slice account.
-     * @returns An array where result[i] is the designated SP for slot i, or null if no SP is designated.
-     *
-     * @example
-     * ```typescript
-     * const providers = await client.getDesignatedStorageProvidersForSlice({ account: sliceAddress });
-     * ```
-     */
-    async getDesignatedStorageProvidersForSlice(params) {
-      const placementGroupAddress = await this.getPlacementGroupAddressForSlice(
-        params.account
-      );
-      const rawMetadata = await this.aptos.view({
-        payload: {
-          function: `${this.deployer.toString()}::placement_group::get_designated_storage_providers`,
-          functionArguments: [placementGroupAddress]
-        }
-      });
-      const providers = rawMetadata[0];
-      return providers.map(
-        (opt) => opt.vec.length > 0 ? normalizeAddress(opt.vec[0]) : null
-      );
-    }
-    /**
-     * Retrieves the serving storage providers for a slice.
-     *
-     * Serving SPs are those that can respond to read requests. The serving logic is:
-     * - If an Active SP exists for a slot: Only the Active SP is serving
-     * - If no Active SP (transition in progress): Both Designated and Vacating SPs serve
-     *
-     * Each slot may have multiple serving SPs during transitions.
-     *
-     * @param params.account - The address of the slice account.
-     * @returns An array where result[i] contains the serving SPs for slot i.
-     *
-     * @example
-     * ```typescript
-     * const providers = await client.getServingStorageProvidersForSlice({ account: sliceAddress });
-     * ```
-     */
-    async getServingStorageProvidersForSlice(params) {
-      const placementGroupAddress = await this.getPlacementGroupAddressForSlice(
-        params.account
-      );
-      const rawMetadata = await this.aptos.view({
-        payload: {
-          function: `${this.deployer.toString()}::placement_group::get_serving_storage_providers`,
-          functionArguments: [placementGroupAddress]
-        }
-      });
-      const providers = rawMetadata[0];
-      return providers.map(
-        (slotProviders) => slotProviders.map((addr) => normalizeAddress(addr))
-      );
-    }
-  };
   var BlobNameSchema = external_exports.string().min(1, "Blob name path parameter cannot be empty.").max(
     190,
     "Blob name suffix cannot exceed 190 characters (on-chain full key limit is 256 bytes)."
   ).refine((name) => !name.endsWith("/"), {
     message: "Blob name cannot end with a slash"
   });
-  function sleep(ms2) {
-    return new Promise((resolve) => setTimeout(resolve, ms2));
-  }
   var ChallengeResponseSchema = external_exports.object({
     challenge: external_exports.string(),
     expiresAt: external_exports.number()
@@ -34155,1679 +34179,11 @@ ${String(result)}`);
     error: external_exports.string().optional(),
     storedMicropayment: external_exports.string().optional()
   });
-  var MICROPAYMENTS_MODULE_NAME = "micropayments";
-  var WITHDRAW_APPROVAL_STRUCT_NAME = "WithdrawApproval";
-  function serializeTypeInfo(serializer, moduleAddress, moduleName, structName) {
-    moduleAddress.serialize(serializer);
-    const moduleNameBytes = new TextEncoder().encode(moduleName);
-    serializer.serializeBytes(moduleNameBytes);
-    const structNameBytes = new TextEncoder().encode(structName);
-    serializer.serializeBytes(structNameBytes);
-  }
-  var StaleChannelStateError = class _StaleChannelStateError extends Error {
-    constructor(storedMicropayment, message) {
-      super(
-        message ?? "Client has stale channel state. Use the returned micropayment to reset local state."
-      );
-      /**
-       * The last valid micropayment stored by the server.
-       * Clients can use this to reset their local channel state.
-       */
-      __publicField(this, "storedMicropayment");
-      this.name = "StaleChannelStateError";
-      this.storedMicropayment = storedMicropayment;
-    }
-    /**
-     * Returns the stored micropayment as a base64-encoded string.
-     */
-    toBase64() {
-      const bytes = this.storedMicropayment.bcsToBytes();
-      const binaryString = Array.from(
-        bytes,
-        (byte) => String.fromCharCode(byte)
-      ).join("");
-      return btoa(binaryString);
-    }
-    /**
-     * Creates a StaleChannelStateError from a base64-encoded micropayment string.
-     */
-    static fromBase64(base64, message) {
-      const binaryString = atob(base64);
-      const bytes = Uint8Array.from(binaryString, (char) => char.charCodeAt(0));
-      const micropayment = SenderBuiltMicropayment.deserialize(bytes);
-      return new _StaleChannelStateError(micropayment, message);
-    }
-  };
-  var SenderBuiltMicropayment = class _SenderBuiltMicropayment {
-    constructor(sender, receiver, paymentChannelId, amount, fungibleAssetAddress, sequenceNumber, publicKey2, signature, deployer) {
-      /**
-       * The sender's address (owner of the payment channel).
-       */
-      __publicField(this, "sender");
-      /**
-       * The receiver's address (beneficiary of the withdrawal).
-       */
-      __publicField(this, "receiver");
-      /**
-       * The unique ID of the payment channel.
-       */
-      __publicField(this, "paymentChannelId");
-      /**
-       * The cumulative amount the receiver is authorized to withdraw.
-       */
-      __publicField(this, "amount");
-      /**
-       * The fungible asset metadata address.
-       */
-      __publicField(this, "fungibleAssetAddress");
-      /**
-       * Monotonically increasing sequence number for replay protection.
-       */
-      __publicField(this, "sequenceNumber");
-      /**
-       * The sender's Ed25519 public key (32 bytes).
-       * Used by the receiver to verify the signature before submitting.
-       */
-      __publicField(this, "publicKey");
-      /**
-       * The Ed25519 signature of the SignedMessage<WithdrawApproval> struct.
-       * The SignedMessage includes TypeInfo for domain separation.
-       */
-      __publicField(this, "signature");
-      /**
-       * The deployer address of the micropayments module.
-       * This is needed to reconstruct the TypeInfo for signature verification.
-       */
-      __publicField(this, "deployer");
-      this.sender = sender;
-      this.receiver = receiver;
-      this.paymentChannelId = paymentChannelId;
-      this.amount = amount;
-      this.fungibleAssetAddress = fungibleAssetAddress;
-      this.sequenceNumber = sequenceNumber;
-      this.publicKey = publicKey2;
-      this.signature = signature;
-      this.deployer = deployer ?? l2.fromString(MICROPAYMENTS_DEPLOYER);
-    }
-    /**
-     * Creates the BCS-serialized message that was signed.
-     * This is a SignedMessage<WithdrawApproval> which includes:
-     * 1. TypeInfo (module_address, module_name, struct_name)
-     * 2. WithdrawApproval struct fields
-     *
-     * This format is used with signature_verify_strict_t for domain separation.
-     */
-    getSignedMessage() {
-      return _SenderBuiltMicropayment.buildSignedMessage({
-        deployer: this.deployer,
-        sender: this.sender,
-        receiver: this.receiver,
-        fungibleAssetAddress: this.fungibleAssetAddress,
-        amount: this.amount,
-        paymentChannelId: this.paymentChannelId,
-        sequenceNumber: this.sequenceNumber
-      });
-    }
-    /**
-     * Static helper to build the SignedMessage<WithdrawApproval> bytes from raw parameters.
-     * This can be used to create the message for signing without constructing the full object.
-     *
-     * @param params - The withdrawal approval parameters.
-     * @returns The BCS-serialized SignedMessage<WithdrawApproval> bytes.
-     */
-    static buildSignedMessage(params) {
-      const serializer = new n3();
-      serializeTypeInfo(
-        serializer,
-        params.deployer,
-        MICROPAYMENTS_MODULE_NAME,
-        WITHDRAW_APPROVAL_STRUCT_NAME
-      );
-      params.sender.serialize(serializer);
-      params.receiver.serialize(serializer);
-      params.fungibleAssetAddress.serialize(serializer);
-      serializer.serializeU64(params.amount);
-      serializer.serializeU64(params.paymentChannelId);
-      serializer.serializeU64(params.sequenceNumber);
-      return serializer.toUint8Array();
-    }
-    serialize(serializer) {
-      this.sender.serialize(serializer);
-      this.receiver.serialize(serializer);
-      this.fungibleAssetAddress.serialize(serializer);
-      serializer.serializeU64(this.amount);
-      serializer.serializeU64(this.paymentChannelId);
-      serializer.serializeU64(this.sequenceNumber);
-      serializer.serializeBytes(this.publicKey);
-      serializer.serializeBytes(this.signature);
-      this.deployer.serialize(serializer);
-    }
-    bcsToBytes() {
-      const serializer = new n3();
-      this.serialize(serializer);
-      return serializer.toUint8Array();
-    }
-    bcsToHex() {
-      return a.fromHexInput(this.bcsToBytes());
-    }
-    toStringWithoutPrefix() {
-      return this.bcsToHex().toStringWithoutPrefix();
-    }
-    toString() {
-      return this.bcsToHex().toString();
-    }
-    /**
-     * Deserializes a SenderBuiltMicropayment from BCS bytes.
-     * @param bytes - The bytes to deserialize from (Uint8Array or hex string).
-     * @returns A new SenderBuiltMicropayment instance.
-     */
-    static deserialize(bytes) {
-      const bytesArray = typeof bytes === "string" ? a.fromHexInput(bytes).toUint8Array() : bytes;
-      const deserializer = new a5(bytesArray);
-      const sender = l2.deserialize(deserializer);
-      const receiver = l2.deserialize(deserializer);
-      const fungibleAssetAddress = l2.deserialize(deserializer);
-      const amount = deserializer.deserializeU64();
-      const paymentChannelId = deserializer.deserializeU64();
-      const sequenceNumber = deserializer.deserializeU64();
-      const publicKey2 = deserializer.deserializeBytes();
-      const signature = deserializer.deserializeBytes();
-      const deployer = l2.deserialize(deserializer);
-      return new _SenderBuiltMicropayment(
-        sender,
-        receiver,
-        paymentChannelId,
-        amount,
-        fungibleAssetAddress,
-        sequenceNumber,
-        publicKey2,
-        signature,
-        deployer
-      );
-    }
-  };
-  var MICROPAYMENT_HEADER = "X-Shelby-Micropayment";
-  var BLOB_OWNER_CHALLENGE_HEADER = "X-Shelby-Challenge";
-  var BLOB_OWNER_SIGNATURE_HEADER = "X-Shelby-Signature";
-  var BLOB_OWNER_PUBLIC_KEY_HEADER = "X-Shelby-Public-Key";
-  var BLOB_OWNER_AUTH_SCHEME_HEADER = "X-Shelby-Auth-Scheme";
-  var BLOB_OWNER_IDENTITY_HEADER = "X-Shelby-Identity";
-  var BLOB_OWNER_DOMAIN_HEADER = "X-Shelby-Domain";
-  var BLOB_OWNER_AUTH_FUNCTION_HEADER = "X-Shelby-Auth-Function";
-  function buildAuthHeaders(auth) {
-    const signatureBase64 = btoa(
-      Array.from(auth.signature, (byte) => String.fromCharCode(byte)).join("")
-    );
-    const publicKeyHex = a.fromHexInput(auth.publicKey).toString();
-    const headers = {
-      [BLOB_OWNER_CHALLENGE_HEADER]: auth.challenge,
-      [BLOB_OWNER_SIGNATURE_HEADER]: signatureBase64,
-      [BLOB_OWNER_PUBLIC_KEY_HEADER]: publicKeyHex
-    };
-    if (auth.authScheme === "derivable") {
-      headers[BLOB_OWNER_AUTH_SCHEME_HEADER] = auth.authScheme;
-      headers[BLOB_OWNER_IDENTITY_HEADER] = auth.identity;
-      headers[BLOB_OWNER_DOMAIN_HEADER] = auth.domain;
-      headers[BLOB_OWNER_AUTH_FUNCTION_HEADER] = auth.authFunction;
-    } else if (auth.authScheme) {
-      headers[BLOB_OWNER_AUTH_SCHEME_HEADER] = auth.authScheme;
-    }
-    return headers;
-  }
-  function encodeURIComponentKeepSlashes(str) {
-    return encodeURIComponent(str).replace(/%2F/g, "/");
-  }
-  function validateTotalBytes(totalBytes) {
-    if (!Number.isInteger(totalBytes) || totalBytes < 0) {
-      throw new Error("totalBytes must be a non-negative integer");
-    }
-  }
-  function isRetryableStatus(status) {
-    return status === 408 || status === 429 || status >= 500;
-  }
-  function getErrorCode(error) {
-    if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") {
-      return error.code;
-    }
-    if (error instanceof Error) {
-      const match = error.message.match(/\bE[A-Z0-9_]+\b/);
-      return match?.[0];
-    }
-    return void 0;
-  }
-  var _signChallengeOverride, _ShelbyRPCClient_instances, uploadPart_fn, putBlobMultipart_fn, uploadPartWithAuth_fn, _a2;
-  var ShelbyRPCClient = (_a2 = class {
-    /**
-     * Creates a new ShelbyRPCClient for interacting with Shelby RPC nodes.
-     * This client handles blob storage operations including upload and download.
-     *
-     * @param config - The client configuration object.
-     * @param config.network - The Shelby network to use.
-     * @param options.signChallengeHandler - Optional override for challenge
-     *   signing. When set, `putBlobResumable` uses this instead of the built-in
-     *   `signChallenge`. Intended for kit-level overrides (e.g. Solana DAA).
-     *
-     * @example
-     * ```typescript
-     * const client = new ShelbyRPCClient({
-     *   network: Network.SHELBYNET,
-     *   apiKey: "AG-***",
-     * });
-     * ```
-     */
-    constructor(config2, options) {
-      __privateAdd(this, _ShelbyRPCClient_instances);
-      __publicField(this, "baseUrl");
-      __publicField(this, "apiKey");
-      __publicField(this, "rpcConfig");
-      __publicField(this, "indexer");
-      __privateAdd(this, _signChallengeOverride);
-      this.baseUrl = getShelbyRPCBaseUrl(config2);
-      this.apiKey = config2.apiKey ?? config2.rpc?.apiKey;
-      this.rpcConfig = config2.rpc ?? {};
-      this.indexer = getShelbyIndexerClient(config2);
-      __privateSet(this, _signChallengeOverride, options?.signChallengeHandler);
-    }
-    /**
-     * Request an authentication challenge for the given account.
-     * The challenge must be signed and included in subsequent authenticated requests.
-     *
-     * @param account - The Aptos account address to authenticate as.
-     * @returns The challenge string and expiration timestamp.
-     *
-     * @example
-     * ```typescript
-     * const { challenge, expiresAt } = await client.getChallenge(account.accountAddress);
-     * const auth = client.signChallenge(account, challenge);
-     * ```
-     */
-    async getChallenge(account) {
-      const response = await fetch(
-        buildRequestUrl("/v1/auth/challenge", this.baseUrl),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}
-          },
-          body: JSON.stringify({ account: account.toString() })
-        }
-      );
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        throw new Error(
-          `Failed to get challenge: status ${response.status}, body: ${errorBody}`
-        );
-      }
-      return ChallengeResponseSchema.parse(await response.json());
-    }
-    /**
-     * Check if there's an existing multipart upload for a blob.
-     * Returns the upload status including which parts have been uploaded.
-     *
-     * @param account - The account that owns the blob.
-     * @param blobName - The name of the blob.
-     * @returns The upload status, or undefined if no pending upload exists.
-     *
-     * @example
-     * ```typescript
-     * const status = await client.getMultipartUploadStatus(account, "myblob.txt");
-     * if (status) {
-     *   console.log(`Resuming upload ${status.uploadId}, ${status.completedParts.length} parts done`);
-     * }
-     * ```
-     */
-    async getMultipartUploadStatus(account, blobName) {
-      const url = new URL(buildRequestUrl("/v1/multipart-uploads", this.baseUrl));
-      url.searchParams.set("account", account.toString());
-      url.searchParams.set("blobName", blobName);
-      const response = await fetch(url.toString(), {
-        method: "GET",
-        headers: {
-          ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}
-        }
-      });
-      if (response.status === 404) {
-        return void 0;
-      }
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => "");
-        throw new Error(
-          `Failed to get multipart upload status: status ${response.status}, body: ${errorBody}`
-        );
-      }
-      return MultipartUploadStatusResponseSchema.parse(await response.json());
-    }
-    /**
-     * Sign a challenge using the given account and return auth credentials.
-     *
-     * @param account - The Aptos account to sign with.
-     * @param challenge - The hex-encoded challenge string from getChallenge().
-     * @returns BlobOwnerAuth credentials for authenticated requests.
-     */
-    signChallenge(account, challenge) {
-      const challengeBytes = a.fromHexInput(challenge).toUint8Array();
-      const signature = account.sign(challengeBytes);
-      return {
-        challenge,
-        signature: signature.toUint8Array(),
-        publicKey: account.publicKey.toUint8Array()
-      };
-    }
-    /**
-     * Uploads blob data to the Shelby RPC node for storage by storage providers.
-     * This method should be called after blob commitments have been registered on the blockchain.
-     * Uses multipart upload for efficient handling of large files.
-     *
-     * @param params.account - The account that owns the blob.
-     * @param params.blobName - The name/path of the blob (e.g. "folder/file.txt").
-     * @param params.blobData - The raw blob data as a Uint8Array or ReadableStream.
-     * @param params.totalBytes - Total byte length. Required for streams; optional for Uint8Array.
-     *
-     * @example
-     * ```typescript
-     * const blobData = new TextEncoder().encode("Hello, world!");
-     *
-     * await client.putBlob({
-     *   account: AccountAddress.from("0x1"),
-     *   blobName: "greetings/hello.txt",
-     *   blobData,
-     * });
-     * ```
-     */
-    async putBlob(params) {
-      BlobNameSchema.parse(params.blobName);
-      let totalBytes;
-      if (params.blobData instanceof Uint8Array) {
-        totalBytes = params.totalBytes ?? params.blobData.length;
-        if (totalBytes !== params.blobData.length) {
-          throw new Error(
-            "totalBytes must match blobData.length when blobData is a Uint8Array"
-          );
-        }
-      } else {
-        if (params.totalBytes === void 0) {
-          throw new Error(
-            "totalBytes is required when blobData is a ReadableStream"
-          );
-        }
-        totalBytes = params.totalBytes;
-      }
-      validateTotalBytes(totalBytes);
-      await __privateMethod(this, _ShelbyRPCClient_instances, putBlobMultipart_fn).call(this, params.account, params.blobName, params.blobData, totalBytes, void 0, params.onProgress);
-    }
-    /**
-     * Uploads blob data to the Shelby RPC node with authentication and resume support.
-     * This method authenticates using challenge-response and can resume interrupted uploads.
-     *
-     * @param params.account - The Aptos Account (with signing capability) that owns the blob.
-     * @param params.blobName - The name/path of the blob (e.g. "folder/file.txt").
-     * @param params.blobData - The raw blob data as a Uint8Array or ReadableStream.
-     * @param params.totalBytes - Total byte length. Required for streams; optional for Uint8Array.
-     * @param params.onProgress - Optional callback for upload progress.
-     *
-     * @example
-     * ```typescript
-     * await client.putBlobResumable({
-     *   account: myAccount, // Aptos Account with signing capability
-     *   blobName: "documents/report.pdf",
-     *   blobData: fileData,
-     *   totalBytes: fileData.length,
-     * });
-     * ```
-     */
-    async putBlobResumable(params) {
-      BlobNameSchema.parse(params.blobName);
-      let totalBytes;
-      if (params.blobData instanceof Uint8Array) {
-        totalBytes = params.totalBytes ?? params.blobData.length;
-        if (totalBytes !== params.blobData.length) {
-          throw new Error(
-            "totalBytes must match blobData.length when blobData is a Uint8Array"
-          );
-        }
-      } else {
-        if (params.totalBytes === void 0) {
-          throw new Error(
-            "totalBytes is required when blobData is a ReadableStream"
-          );
-        }
-        totalBytes = params.totalBytes;
-      }
-      validateTotalBytes(totalBytes);
-      const partSize = params.partSize ?? 5 * 1024 * 1024;
-      const { challenge } = await this.getChallenge(
-        params.account.accountAddress
-      );
-      const signFn = __privateGet(this, _signChallengeOverride) ?? this.signChallenge.bind(this);
-      const auth = signFn(params.account, challenge);
-      const authHeaders = buildAuthHeaders(auth);
-      const existingUpload = await this.getMultipartUploadStatus(
-        params.account.accountAddress,
-        params.blobName
-      );
-      let uploadId;
-      let completedPartsSet;
-      let totalParts;
-      if (existingUpload) {
-        uploadId = existingUpload.uploadId;
-        completedPartsSet = new Set(existingUpload.completedParts);
-        totalParts = existingUpload.nParts;
-        if (existingUpload.partSize !== partSize) {
-          throw new Error(
-            `Cannot resume upload: part size mismatch. Existing upload uses ${existingUpload.partSize} bytes, but ${partSize} was requested.`
-          );
-        }
-      } else {
-        const startResponse = await fetch(
-          buildRequestUrl("/v1/multipart-uploads", this.baseUrl),
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
-              ...authHeaders
-            },
-            body: JSON.stringify({
-              rawAccount: params.account.accountAddress.toString(),
-              rawBlobName: params.blobName,
-              rawPartSize: partSize
-            })
-          }
-        );
-        if (!startResponse.ok) {
-          const errorBodyText = await startResponse.text().catch(() => "");
-          throw new Error(
-            `Failed to start multipart upload! status: ${startResponse.status}, body: ${errorBodyText}`
-          );
-        }
-        const parsed = StartMultipartUploadResponseSchema.parse(
-          await startResponse.json()
-        );
-        uploadId = parsed.uploadId;
-        completedPartsSet = /* @__PURE__ */ new Set();
-        totalParts = Math.ceil(totalBytes / partSize);
-      }
-      let uploadedBytes = 0;
-      let partIdx = 0;
-      for await (const [idx, partData] of readInChunks(
-        params.blobData,
-        partSize
-      )) {
-        partIdx = idx;
-        if (completedPartsSet.has(partIdx)) {
-          uploadedBytes += partData.length;
-          continue;
-        }
-        await __privateMethod(this, _ShelbyRPCClient_instances, uploadPartWithAuth_fn).call(this, uploadId, partIdx, partData, auth);
-        uploadedBytes += partData.length;
-        params.onProgress?.({
-          phase: "uploading",
-          partIdx,
-          totalParts,
-          partBytes: partData.length,
-          uploadedBytes,
-          totalBytes
-        });
-      }
-      const finalPartIdx = totalParts > 0 ? totalParts - 1 : 0;
-      params.onProgress?.({
-        phase: "finalizing",
-        partIdx: finalPartIdx,
-        totalParts,
-        partBytes: 0,
-        uploadedBytes: totalBytes,
-        totalBytes
-      });
-      const completeResponse = await fetch(
-        buildRequestUrl(
-          `/v1/multipart-uploads/${uploadId}/complete`,
-          this.baseUrl
-        ),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
-            ...authHeaders
-          }
-        }
-      );
-      if (!completeResponse.ok) {
-        const errorBodyText = await completeResponse.text().catch(() => "");
-        throw new Error(
-          `Failed to complete multipart upload! status: ${completeResponse.status}, body: ${errorBodyText}`
-        );
-      }
-    }
-    /**
-     * Downloads a blob from the Shelby RPC node.
-     * Returns a streaming response with validation to ensure data integrity.
-     *
-     * @param params.account - The account that owns the blob.
-     * @param params.blobName - The name/path of the blob (e.g. "folder/file.txt").
-     * @param params.range - Optional byte range for partial downloads.
-     * @param params.range.start - Starting byte position (inclusive).
-     * @param params.range.end - Ending byte position (inclusive, optional).
-     * @param params.micropayment - Optional micropayment to attach to the request.
-     *
-     * @returns A ShelbyBlob object containing the account, name, readable stream, and content length.
-     *
-     * @throws Error if the download fails or content length doesn't match.
-     * @throws StaleChannelStateError if the micropayment is stale (server has newer state).
-     *
-     * @example
-     * ```typescript
-     * // Download entire blob
-     * const blob = await client.getBlob({
-     *   account: AccountAddress.from("0x1"),
-     *   blobName: "documents/report.pdf"
-     * });
-     *
-     * // Download partial content (bytes 100-199)
-     * const partial = await client.getBlob({
-     *   account: AccountAddress.from("0x1"),
-     *   blobName: "large-file.bin",
-     *   range: { start: 100, end: 199 }
-     * });
-     *
-     * // Download with micropayment
-     * const blob = await client.getBlob({
-     *   account: AccountAddress.from("0x1"),
-     *   blobName: "documents/report.pdf",
-     *   micropayment: senderBuiltMicropayment
-     * });
-     * ```
-     */
-    async getBlob(params) {
-      BlobNameSchema.parse(params.blobName);
-      const url = buildRequestUrl(
-        `/v1/blobs/${params.account.toString()}/${encodeURIComponentKeepSlashes(
-          params.blobName
-        )}`,
-        this.baseUrl
-      );
-      const headers = new Headers();
-      if (params.range !== void 0) {
-        const { start, end } = params.range;
-        if (end === void 0) {
-          headers.set("Range", `bytes=${start}-`);
-        } else {
-          if (end < start) {
-            throw new Error("Range end cannot be less than start.");
-          }
-          headers.set("Range", `bytes=${start}-${end}`);
-        }
-      }
-      if (this.apiKey) {
-        headers.set("Authorization", `Bearer ${this.apiKey}`);
-      }
-      if (params.micropayment) {
-        const bytes = params.micropayment.bcsToBytes();
-        const binaryString = Array.from(
-          bytes,
-          (byte) => String.fromCharCode(byte)
-        ).join("");
-        headers.set(MICROPAYMENT_HEADER, btoa(binaryString));
-      }
-      const response = await fetch(url, { headers });
-      if (response.status === 409) {
-        let json;
-        try {
-          json = await response.json();
-        } catch {
-          throw new Error(
-            `Failed to download blob: ${response.status} ${response.statusText}`
-          );
-        }
-        const parseResult = StaleMicropaymentErrorResponseSchema.safeParse(json);
-        if (!parseResult.success) {
-          throw new Error(
-            `Failed to download blob: ${response.status} ${response.statusText}`
-          );
-        }
-        const errorBody = parseResult.data;
-        if (errorBody.storedMicropayment) {
-          throw StaleChannelStateError.fromBase64(
-            errorBody.storedMicropayment,
-            errorBody.error
-          );
-        }
-        throw new Error(
-          errorBody.error ?? `Failed to download blob: ${response.status} ${response.statusText}`
-        );
-      }
-      if (!response.ok) {
-        throw new Error(
-          `Failed to download blob: ${response.status} ${response.statusText}`
-        );
-      }
-      if (!response.body) {
-        throw new Error("Response body is null");
-      }
-      const contentLengthHeader = response.headers.get("content-length");
-      if (contentLengthHeader === null) {
-        throw new Error(
-          "Response did not have content-length header, which is required"
-        );
-      }
-      const expectedContentLength = Number.parseInt(contentLengthHeader, 10);
-      if (Number.isNaN(expectedContentLength)) {
-        throw new Error(
-          `Invalid content-length header received: ${contentLengthHeader}`
-        );
-      }
-      const validatingStream = new ReadableStream({
-        start(controller2) {
-          const maybeReader = response.body?.getReader();
-          if (!maybeReader) {
-            controller2.error(new Error("Response body reader is unavailable"));
-            return;
-          }
-          const reader = maybeReader;
-          let bytesReceived = 0;
-          function pump() {
-            return reader.read().then(({ done, value }) => {
-              if (done) {
-                if (bytesReceived !== expectedContentLength) {
-                  controller2.error(
-                    new Error(
-                      `Downloaded data size (${bytesReceived} bytes) does not match content-length header (${expectedContentLength} bytes). This might indicate a partial or corrupted download.`
-                    )
-                  );
-                  return;
-                }
-                controller2.close();
-                return;
-              }
-              bytesReceived += value.byteLength;
-              controller2.enqueue(value);
-              return pump();
-            }).catch((error) => {
-              controller2.error(error);
-            });
-          }
-          return pump();
-        }
-      });
-      return {
-        account: normalizeAddress(params.account),
-        name: params.blobName,
-        readable: validatingStream,
-        contentLength: expectedContentLength
-      };
-    }
-  }, _signChallengeOverride = new WeakMap(), _ShelbyRPCClient_instances = new WeakSet(), uploadPart_fn = async function(uploadId, partIdx, partData) {
-    const nRetries = 5;
-    let lastResponse;
-    let lastError;
-    let attempts = 0;
-    const partUrl = buildRequestUrl(
-      `/v1/multipart-uploads/${uploadId}/parts/${partIdx}`,
-      this.baseUrl
-    );
-    for (let i23 = 0; i23 < nRetries; ++i23) {
-      attempts++;
-      try {
-        lastResponse = await fetch(partUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/octet-stream",
-            ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}
-          },
-          body: partData
-        });
-        lastError = void 0;
-      } catch (error) {
-        lastError = error;
-        if (i23 < nRetries - 1) {
-          const delay = 2 ** i23 * 100;
-          await sleep(delay);
-          continue;
-        }
-        break;
-      }
-      if (lastResponse.ok) return;
-      if (!isRetryableStatus(lastResponse.status)) {
-        break;
-      }
-      if (i23 < nRetries - 1) {
-        const delay = 2 ** i23 * 100;
-        await sleep(delay);
-      }
-    }
-    if (lastError !== void 0) {
-      const errorCode = getErrorCode(lastError);
-      const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-      throw new Error(
-        `Failed to upload part ${partIdx} for multipart upload ${uploadId} after ${attempts} attempt${attempts === 1 ? "" : "s"}. The connection to the Shelby RPC endpoint was interrupted while sending data${errorCode ? ` (${errorCode})` : ""}. Endpoint: ${partUrl.toString()}, partBytes: ${partData.length}. Last error: ${errorMessage}`,
-        { cause: lastError }
-      );
-    }
-    const errorBody = await lastResponse?.text().catch(() => "");
-    throw new Error(
-      `Failed to upload part ${partIdx} for multipart upload ${uploadId} after ${attempts} attempt${attempts === 1 ? "" : "s"}. status: ${lastResponse?.status}, body: ${errorBody}`
-    );
-  }, putBlobMultipart_fn = async function(account, blobName, blobData, totalBytes, partSize = 5 * 1024 * 1024, onProgress) {
-    validateTotalBytes(totalBytes);
-    const startResponse = await fetch(
-      buildRequestUrl("/v1/multipart-uploads", this.baseUrl),
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}
-        },
-        body: JSON.stringify({
-          rawAccount: account.toString(),
-          rawBlobName: blobName,
-          rawPartSize: partSize
-        })
-      }
-    );
-    if (!startResponse.ok) {
-      let errorBodyText = "Could not read error body";
-      try {
-        errorBodyText = await startResponse.text();
-      } catch (_e2) {
-      }
-      throw new Error(
-        `Failed to start multipart upload! status: ${startResponse.status}, body: ${errorBodyText}`
-      );
-    }
-    const { uploadId } = StartMultipartUploadResponseSchema.parse(
-      await startResponse.json()
-    );
-    const totalParts = Math.ceil(totalBytes / partSize);
-    let uploadedBytes = 0;
-    for await (const [partIdx, partData] of readInChunks(blobData, partSize)) {
-      await __privateMethod(this, _ShelbyRPCClient_instances, uploadPart_fn).call(this, uploadId, partIdx, partData);
-      uploadedBytes += partData.length;
-      onProgress?.({
-        phase: "uploading",
-        partIdx,
-        totalParts,
-        partBytes: partData.length,
-        uploadedBytes,
-        totalBytes
-      });
-    }
-    if (uploadedBytes !== totalBytes) {
-      throw new Error(
-        `Uploaded bytes (${uploadedBytes}) did not match declared totalBytes (${totalBytes})`
-      );
-    }
-    const finalPartIdx = totalParts > 0 ? totalParts - 1 : 0;
-    onProgress?.({
-      phase: "finalizing",
-      partIdx: finalPartIdx,
-      totalParts,
-      // no part uploaded in this phase
-      partBytes: 0,
-      uploadedBytes: totalBytes,
-      totalBytes
-    });
-    const completeResponse = await fetch(
-      buildRequestUrl(
-        `/v1/multipart-uploads/${uploadId}/complete`,
-        this.baseUrl
-      ),
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}
-        }
-      }
-    );
-    if (!completeResponse.ok) {
-      let errorBodyText = "Could not read error body";
-      try {
-        errorBodyText = await completeResponse.text();
-      } catch (_e2) {
-      }
-      throw new Error(
-        `Failed to complete multipart upload! status: ${completeResponse.status}, body: ${errorBodyText}`
-      );
-    }
-  }, uploadPartWithAuth_fn = async function(uploadId, partIdx, partData, auth) {
-    const nRetries = 5;
-    let lastResponse;
-    let lastError;
-    let attempts = 0;
-    const partUrl = buildRequestUrl(
-      `/v1/multipart-uploads/${uploadId}/parts/${partIdx}`,
-      this.baseUrl
-    );
-    const authHeaders = buildAuthHeaders(auth);
-    for (let i23 = 0; i23 < nRetries; ++i23) {
-      attempts++;
-      try {
-        lastResponse = await fetch(partUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/octet-stream",
-            ...this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {},
-            ...authHeaders
-          },
-          body: partData
-        });
-        lastError = void 0;
-      } catch (error) {
-        lastError = error;
-        if (i23 < nRetries - 1) {
-          const delay = 2 ** i23 * 100;
-          await sleep(delay);
-          continue;
-        }
-        break;
-      }
-      if (lastResponse.ok) return;
-      if (!isRetryableStatus(lastResponse.status)) {
-        break;
-      }
-      if (i23 < nRetries - 1) {
-        const delay = 2 ** i23 * 100;
-        await sleep(delay);
-      }
-    }
-    if (lastError !== void 0) {
-      const errorCode = getErrorCode(lastError);
-      const errorMessage = lastError instanceof Error ? lastError.message : String(lastError);
-      throw new Error(
-        `Failed to upload part ${partIdx} for multipart upload ${uploadId} after ${attempts} attempt${attempts === 1 ? "" : "s"}. ${errorCode ? `(${errorCode}) ` : ""}Last error: ${errorMessage}`,
-        { cause: lastError }
-      );
-    }
-    const errorBody = await lastResponse?.text().catch(() => "");
-    throw new Error(
-      `Failed to upload part ${partIdx} for multipart upload ${uploadId} after ${attempts} attempt${attempts === 1 ? "" : "s"}. status: ${lastResponse?.status}, body: ${errorBody}`
-    );
-  }, _a2);
-  var ShelbyClient = class {
-    /**
-     * Creates a new ShelbyClient instance for interacting with the Shelby Protocol.
-     * This client combines blockchain operations (via coordination) and storage operations (via RPC).
-     *
-     * @param config - The client configuration object.
-     * @param config.aptos.config - The Aptos network configuration.
-     * @param config.shelby.rpc.baseUrl - The base URL of the Shelby RPC node (optional, defaults to devnet).
-     * @param config.shelby.indexer - The indexer configuration for GraphQL queries.
-     * @param provider - Optional erasure coding provider for encoding/decoding operations.
-     *                   If not provided, a ClayErasureCodingProvider will be created on first use.
-     *                   Pass a shared provider to reuse across multiple clients.
-     *
-     * @example
-     * ```typescript
-     * // Basic usage (provider created automatically)
-     * const client = new ShelbyClient({
-     *   network: Network.SHELBYNET,
-     * });
-     *
-     * // Advanced: Share provider across multiple clients
-     * const provider = await ClayErasureCodingProvider.create();
-     * const mainnetClient = new ShelbyClient(mainnetConfig, provider);
-     * const devnetClient = new ShelbyClient(devnetConfig, provider);
-     * ```
-     */
-    constructor(config2, provider) {
-      /**
-       * The coordination client is used to interact with the Aptos blockchain which handles the commitments
-       * and metadata for blobs.
-       */
-      __publicField(this, "coordination");
-      /**
-       * The metadata client is used for protocol-level metadata queries.
-       */
-      __publicField(this, "metadata");
-      /**
-       * The RPC client is used to interact with the Shelby RPC node which can be responsible for storing,
-       * confirming, and retrieving blobs from the storage layer.
-       *
-       * If not provided, the default RPC client will be created.
-       */
-      __publicField(this, "rpc");
-      /**
-       * The configuration for the Shelby client.
-       */
-      __publicField(this, "config");
-      /**
-       * The Aptos client.
-       *
-       * If not provided, a default Aptos client will be created.
-       */
-      __publicField(this, "aptos");
-      /**
-       * The erasure coding provider used for encoding/decoding operations.
-       * Lazily initialized on first use if not provided.
-       */
-      __publicField(this, "_provider");
-      this.config = config2;
-      this.aptos = new X4(getAptosConfig(config2));
-      this.coordination = new ShelbyBlobClient(config2);
-      this.metadata = new ShelbyMetadataClient(config2);
-      this.rpc = new ShelbyRPCClient(config2, {
-        signChallengeHandler: (account, challenge) => this.signChallenge(account, challenge)
-      });
-      this._provider = provider;
-    }
-    /**
-     * Sign an authentication challenge for blob owner verification.
-     *
-     * The default implementation delegates to `ShelbyRPCClient.signChallenge`
-     * which works for standard Ed25519 accounts. Kits that use derived /
-     * abstracted accounts (Solana, Ethereum) should override this method to
-     * provide the correct public key bytes and derivation metadata.
-     */
-    signChallenge(account, challenge) {
-      return this.rpc.signChallenge(account, challenge);
-    }
-    /**
-     * Get the erasure coding provider, creating it if necessary.
-     * This allows lazy initialization for users who don't provide a provider.
-     */
-    async getProvider() {
-      if (!this._provider) {
-        this._provider = await ClayErasureCodingProvider.create(
-          defaultErasureCodingConfig()
-        );
-      }
-      return this._provider;
-    }
-    /**
-     * The base URL for the Shelby RPC node.
-     */
-    get baseUrl() {
-      return getShelbyRPCBaseUrl(this.config);
-    }
-    /**
-     * Uploads a blob to the Shelby network.
-     * This method handles the complete upload flow including commitment generation,
-     * blockchain registration, and storage upload.
-     *
-     * Note: This method accepts only `Uint8Array` and buffers the entire blob in memory.
-     * For streaming uploads of large files (e.g. >2 GiB), orchestrate the steps manually
-     * using `generateCommitments()`, `coordination.registerBlob()`, and `rpc.putBlob()`
-     * with a `ReadableStream`.
-     *
-     * @param params.blobData - The raw data to upload as a Uint8Array.
-     * @param params.signer - The account that signs and pays for the transaction.
-     * @param params.blobName - The name/path of the blob (e.g. "folder/file.txt").
-     * @param params.expirationMicros - The expiration time in microseconds since Unix epoch.
-     * @param params.options - Optional upload configuration.
-     * @param params.options.chunksetSizeBytes - Custom chunkset size.
-     * @param params.options.build - Additional Aptos transaction options.
-     *
-     * @returns The transaction and generated blob commitments (when implemented).
-     *
-     * @example
-     * ```typescript
-     * await client.upload({
-     *   blobData: Buffer.from("Hello, World!"),
-     *   signer: account,
-     *   blobName: "hello.txt",
-     *   expirationMicros: Date.now() * 1000 + 86400_000_000 // 24 hours from now
-     * });
-     * ```
-     */
-    async upload(params) {
-      const existingBlobMetadata = await this.coordination.getBlobMetadata({
-        account: params.signer.accountAddress,
-        name: params.blobName
-      });
-      if (!existingBlobMetadata) {
-        const provider = await this.getProvider();
-        const blobCommitments = await generateCommitments(
-          provider,
-          params.blobData
-        );
-        const { transaction: pendingRegisterBlobTransaction } = await this.coordination.registerBlob({
-          account: params.signer,
-          blobName: params.blobName,
-          blobMerkleRoot: blobCommitments.blob_merkle_root,
-          size: params.blobData.length,
-          expirationMicros: params.expirationMicros,
-          config: provider.config,
-          options: params.options
-        });
-        await this.coordination.aptos.waitForTransaction({
-          transactionHash: pendingRegisterBlobTransaction.hash
-        });
-      }
-      await this.rpc.putBlobResumable({
-        account: params.signer,
-        blobName: params.blobName,
-        blobData: params.blobData
-      });
-    }
-    /**
-     * Uploads a batch of blobs to the Shelby network.
-     * This method handles the complete upload flow including commitment generation,
-     * blockchain registration, and storage upload.
-     *
-     * Note: This method accepts only `Uint8Array` and buffers each blob in memory.
-     * For streaming uploads of large files, orchestrate the steps manually using
-     * `generateCommitments()`, `coordination.registerBlob()`, and `rpc.putBlob()`
-     * with a `ReadableStream`.
-     *
-     * @param params.blobs - The blobs to upload.
-     * @param params.blobs.blobData - The raw data to upload as a Uint8Array.
-     * @param params.blobs.blobName - The name/path of the blob (e.g. "folder/file.txt").
-     * @param params.expirationMicros - The expiration time in microseconds since Unix epoch.
-     * @param params.signer - The account that signs and pays for the transaction.
-     * @param params.options - Optional upload configuration.
-     * @param params.options.chunksetSizeBytes - Custom chunkset size.
-     * @param params.options.build - Additional Aptos transaction options.
-     *
-     * @returns The transaction and generated blob commitments (when implemented).
-     *
-     * @example
-     * ```typescript
-     * await client.batchUpload({
-     *   blobs: [
-     *     { blobData: Buffer.from("Hello, World!"), blobName: "hello.txt" },
-     *     { blobData: Buffer.from("Hello, World 2!"), blobName: "hello2.txt" },
-     *   ],
-     *   expirationMicros: Date.now() * 1000 + 86400_000_000 // 24 hours from now
-     * });
-     * ```
-     */
-    async batchUpload(params) {
-      const existingBlobs = await this.coordination.getBlobs({
-        where: {
-          blob_name: {
-            _in: params.blobs.map(
-              (blob3) => createBlobKey({
-                account: params.signer.accountAddress,
-                blobName: blob3.blobName
-              })
-            )
-          }
-        }
-      });
-      const blobsToRegister = params.blobs.filter(
-        (blob3) => !existingBlobs.some(
-          (existingBlob) => existingBlob.name === createBlobKey({
-            account: params.signer.accountAddress,
-            blobName: blob3.blobName
-          })
-        )
-      );
-      if (blobsToRegister.length > 0) {
-        const provider = await this.getProvider();
-        const blobCommitments = await Promise.all(
-          blobsToRegister.map(
-            async (blob3) => generateCommitments(provider, blob3.blobData)
-          )
-        );
-        const { transaction: pendingRegisterBlobTransaction } = await this.coordination.batchRegisterBlobs({
-          account: params.signer,
-          expirationMicros: params.expirationMicros,
-          blobs: blobsToRegister.map((blob3, index) => ({
-            blobName: blob3.blobName,
-            blobSize: blob3.blobData.length,
-            blobMerkleRoot: blobCommitments[index].blob_merkle_root
-          })),
-          config: provider.config,
-          options: params.options
-        });
-        await this.coordination.aptos.waitForTransaction({
-          transactionHash: pendingRegisterBlobTransaction.hash,
-          options: { waitForIndexer: true }
-        });
-      }
-      const limit = pLimit(3);
-      await Promise.all(
-        params.blobs.map(
-          (blob3) => limit(
-            () => this.rpc.putBlobResumable({
-              account: params.signer,
-              blobName: blob3.blobName,
-              blobData: blob3.blobData
-            })
-          )
-        )
-      );
-    }
-    /**
-     * Downloads a blob from the Shelby RPC node.
-     *
-     * @param params.account - The account namespace the blob is stored in (e.g. "0x1")
-     * @param params.blobName - The name of the blob (e.g. "foo/bar")
-     * @param params.range - The range of the blob to download.
-     *
-     * @returns A `ShelbyBlob` object containing the blob data.
-     *
-     * @example
-     * ```typescript
-     * const blob = await client.download({
-     *   account,
-     *   blobName: "foo/bar.txt",
-     * });
-     * ```
-     */
-    async download(params) {
-      return await this.rpc.getBlob(params);
-    }
-    /**
-     *
-     * Funds an account with ShelbyUSD tokens.
-     *
-     * @param params.address - The address to fund.
-     * @param params.amount - The amount to fund.
-     * @returns The transaction hash of the funded account.
-     *
-     * @example
-     * ```typescript
-     * const hash = await client.fundAccountWithShelbyUSD({
-     *   address: "0x1",
-     *   amount: 100000000,
-     * });
-     * ```
-     */
-    async fundAccountWithShelbyUSD(params) {
-      if (this.config.network === e7.TESTNET) {
-        throw new Error(
-          `ShelbyUSD cannot be minted programmatically on ${e7.TESTNET}. Please use the faucet at https://docs.shelby.xyz/apis/faucet/shelbyusd instead.`
-        );
-      }
-      const { address, amount } = params;
-      try {
-        const faucet = this.config.faucet?.baseUrl ?? "https://faucet.shelbynet.shelby.xyz/fund?asset=shelbyusd";
-        const authToken = this.config.faucet?.authToken;
-        const response = await fetch(`${faucet}`, {
-          method: "POST",
-          body: JSON.stringify({
-            address: normalizeAddress(address).toString(),
-            amount
-          }),
-          headers: {
-            "Content-Type": "application/json",
-            ...authToken ? { Authorization: `Bearer ${authToken}` } : {}
-          }
-        });
-        if (!response.ok) {
-          const errorBody = await response.text();
-          throw new Error(`Failed to fund account: ${errorBody}`);
-        }
-        const json = await response.json();
-        const res = await this.aptos.waitForTransaction({
-          transactionHash: json.txn_hashes[0],
-          options: {
-            timeoutSecs: E6,
-            checkSuccess: true
-          }
-        });
-        if (res.type === I4.User) {
-          return res.hash;
-        }
-        throw new Error(
-          `Unexpected transaction received for fund account: ${res.type}`
-        );
-      } catch (error) {
-        throw new Error(`Failed to fund account: ${error}`);
-      }
-    }
-    /**
-     * Fund an account with APT tokens
-     *
-     * @param params.address - The address to fund
-     * @param params.amount - The amount to fund
-     * @returns The transaction hash of the funded account
-     *
-     * @example
-     * ```typescript
-     * const hash = await client.fundAccountWithAPT({
-     *   address: "0x1",
-     *   amount: 100000000,
-     * });
-     * ```
-     */
-    async fundAccountWithAPT(params) {
-      const transaction = await this.aptos.fundAccount({
-        accountAddress: params.address,
-        amount: params.amount
-      });
-      return transaction.hash;
-    }
-  };
   var shelbyNetworks = [
     e7.LOCAL,
     e7.TESTNET,
     e7.SHELBYNET
   ];
-
-  // client-src/wallets/registry.js
-  init_process();
-  init_buffer();
-  var SOLANA_REQUIRED = [
-    "standard:connect",
-    "standard:events",
-    "solana:signMessage",
-    "solana:signAndSendTransaction"
-  ];
-  var APTOS_REQUIRED = [
-    "aptos:connect",
-    "aptos:disconnect",
-    "aptos:network",
-    "aptos:onAccountChange",
-    "aptos:onNetworkChange",
-    "aptos:signAndSubmitTransaction"
-  ];
-  var hasAll = (wallet, names) => names.every((name) => name in (wallet.features || {}));
-  var supportsLegacy = (wallet) => {
-    const versions2 = wallet.features?.["solana:signAndSendTransaction"]?.supportedTransactionVersions;
-    return versions2 != null && Array.from(versions2).includes("legacy");
-  };
-  var idFor = (chain2, wallet) => `${chain2}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
-  function applyFamilyCapabilities(wallets2, families = {}) {
-    return wallets2.map((wallet) => {
-      if (wallet.chain === "evm") return wallet;
-      if (!families[wallet.chain]) {
-        return { ...wallet, enabled: false, status: "unavailable" };
-      }
-      return wallet;
-    });
-  }
-  function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
-    const evm = /* @__PURE__ */ new Map();
-    const listeners2 = /* @__PURE__ */ new Set();
-    const notify = () => listeners2.forEach((listener) => listener());
-    const announce = (event) => {
-      const { info, provider } = event.detail || {};
-      if (!info?.uuid || !provider) return;
-      evm.set(info.uuid, { info, provider });
-      notify();
-    };
-    eventTarget.addEventListener("eip6963:announceProvider", announce);
-    eventTarget.dispatchEvent(new Event("eip6963:requestProvider"));
-    const scan = async () => {
-      const aptos = aptosSource2.get().filter((wallet) => hasAll(wallet, APTOS_REQUIRED)).map((wallet) => ({
-        id: idFor("aptos", wallet),
-        name: wallet.name,
-        icon: wallet.icon,
-        chain: "aptos",
-        installed: true,
-        enabled: true,
-        status: "ready",
-        capabilities: [...APTOS_REQUIRED],
-        provider: wallet
-      }));
-      const solana = standardSource2.get().filter((wallet) => wallet.chains?.some((chain2) => String(chain2).startsWith("solana:"))).map((wallet) => {
-        const enabled = hasAll(wallet, SOLANA_REQUIRED) && supportsLegacy(wallet);
-        return {
-          id: idFor("solana", wallet),
-          name: wallet.name,
-          icon: wallet.icon,
-          chain: "solana",
-          installed: true,
-          enabled,
-          status: enabled ? "ready" : "incompatible",
-          capabilities: SOLANA_REQUIRED.filter((name) => name in (wallet.features || {})),
-          provider: wallet
-        };
-      });
-      const ethereum = [...evm.values()].map(({ info, provider }) => ({
-        id: `evm:${info.uuid}`,
-        name: info.name,
-        icon: info.icon,
-        chain: "evm",
-        installed: true,
-        enabled: false,
-        status: "beta",
-        capabilities: [],
-        provider
-      }));
-      return [...aptos, ...solana, ...ethereum].filter(
-        (row, index, all) => all.findIndex((item) => item.id === row.id) === index
-      );
-    };
-    const offAptos = aptosSource2.on("register", notify);
-    const offStandard = standardSource2.on("register", notify);
-    return {
-      scan,
-      subscribe(listener) {
-        listeners2.add(listener);
-        return () => listeners2.delete(listener);
-      },
-      destroy() {
-        offAptos?.();
-        offStandard?.();
-        eventTarget.removeEventListener("eip6963:announceProvider", announce);
-        listeners2.clear();
-      }
-    };
-  }
-
-  // client-src/wallets/session.js
-  init_process();
-  init_buffer();
-  var KEYS = {
-    id: "vessel.wallet.id",
-    chain: "vessel.wallet.chain"
-  };
-  function createWalletController({ registry, resolveAdapter, storage }) {
-    let state = { status: "disconnected", wallets: [], session: null, error: "" };
-    let activeAdapter = null;
-    let offAdapter = null;
-    const listeners2 = /* @__PURE__ */ new Set();
-    const publish = (patch) => {
-      state = { ...state, ...patch };
-      listeners2.forEach((listener) => listener(state));
-    };
-    const scan = async () => {
-      const statusBeforeScan = state.status;
-      publish({ status: "scanning" });
-      const wallets2 = await registry.scan();
-      const status = ["network_required", "identity_required"].includes(statusBeforeScan) ? statusBeforeScan : state.session ? "ready" : "disconnected";
-      publish({ wallets: wallets2, status });
-      return wallets2;
-    };
-    const disconnect = async () => {
-      offAdapter?.();
-      offAdapter = null;
-      const adapter = activeAdapter;
-      activeAdapter = null;
-      try {
-        await adapter?.disconnect?.();
-      } catch {
-      } finally {
-        storage.removeItem(KEYS.id);
-        storage.removeItem(KEYS.chain);
-        publish({ status: "disconnected", session: null, error: "" });
-      }
-    };
-    const attachAdapter = (descriptor, session) => {
-      storage.setItem(KEYS.id, descriptor.id);
-      storage.setItem(KEYS.chain, descriptor.chain);
-      offAdapter?.();
-      offAdapter = activeAdapter.subscribe((event) => {
-        if (["network_required", "identity_required"].includes(event?.status)) {
-          publish({
-            status: event.status,
-            session: event.session || state.session,
-            error: event.error || ""
-          });
-          return;
-        }
-        if (event?.session) {
-          publish({ session: event.session, status: "ready", error: "" });
-          return;
-        }
-        void disconnect();
-      });
-    };
-    const connect = async (walletId, { silent = false } = {}) => {
-      const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
-      if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
-      if (state.session && state.session.walletId !== walletId) await disconnect();
-      publish({ status: "connecting", error: "" });
-      try {
-        activeAdapter = resolveAdapter(descriptor);
-        const session = await activeAdapter.connect({ silent });
-        if (!session) {
-          publish({ status: "disconnected", session: null });
-          return null;
-        }
-        attachAdapter(descriptor, session);
-        publish({ session, status: "ready", error: "" });
-        return session;
-      } catch (error) {
-        const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
-        if (networkRequired && error.session) attachAdapter(descriptor, error.session);
-        publish({
-          status: networkRequired ? "network_required" : "error",
-          session: networkRequired ? error.session || null : null,
-          error: error?.message || String(error)
-        });
-        throw error;
-      }
-    };
-    const ensureNetwork = async () => {
-      if (!activeAdapter?.ensureNetwork || !state.session) {
-        throw new Error("Connect an Aptos wallet before switching network");
-      }
-      publish({ status: "connecting", error: "" });
-      try {
-        await activeAdapter.ensureNetwork();
-        publish({ status: "ready", error: "" });
-        return state.session;
-      } catch (error) {
-        publish({
-          status: ["wrong_network", "switch_unsupported"].includes(error?.code) ? "network_required" : "error",
-          error: error?.message || String(error)
-        });
-        throw error;
-      }
-    };
-    const restore = async () => {
-      await scan();
-      const id = storage.getItem(KEYS.id);
-      if (!id) return null;
-      try {
-        return await connect(id, { silent: true });
-      } catch {
-        if (state.status !== "network_required") {
-          publish({ status: "disconnected", session: null, error: "" });
-        }
-        return null;
-      }
-    };
-    return {
-      scan,
-      connect,
-      restore,
-      disconnect,
-      ensureNetwork,
-      getState: () => state,
-      getActiveAdapter: () => activeAdapter,
-      subscribe(listener) {
-        listeners2.add(listener);
-        return () => listeners2.delete(listener);
-      }
-    };
-  }
-
-  // client-src/wallets/aptos-adapter.js
-  init_process();
-  init_buffer();
-  var TESTNET = { name: "testnet", chainId: 2 };
-  var walletError = (message, code) => Object.assign(new Error(message), { code });
-  function normalizeAptosError(error, walletName = "Aptos wallet") {
-    const raw = String(error?.message || error || "");
-    if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
-    if (error?.session) {
-      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
-    }
-    if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
-      return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
-    }
-    if (/reject|declin|cancel/i.test(raw)) {
-      return walletError("Wallet request was rejected", "user_rejected");
-    }
-    return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
-  }
-  var approvedArgs = (response, code = "user_rejected") => {
-    if (response?.status !== "Approved") {
-      throw walletError("Wallet request was rejected", code);
-    }
-    return response.args;
-  };
-  var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
-  var isTestnet = (network) => String(network?.name || "").toLowerCase() === TESTNET.name && Number(network?.chainId) === TESTNET.chainId;
-  function createAptosAdapter(descriptor) {
-    const wallet = descriptor.provider;
-    const listeners2 = /* @__PURE__ */ new Set();
-    let session = null;
-    let eventsBound = false;
-    const feature = (name, method, { optional: optional2 = false } = {}) => {
-      const implementation = wallet?.features?.[name];
-      if (implementation?.[method]) return implementation;
-      if (optional2) return null;
-      throw walletError(`${descriptor.name} does not provide ${name}`, "provider_unavailable");
-    };
-    const emit2 = (event) => listeners2.forEach((listener) => listener(event));
-    const buildSession = (account) => {
-      const address = addressOf(account);
-      if (!address) throw walletError("Aptos wallet did not return an account", "provider_unavailable");
-      return {
-        chain: "aptos",
-        walletId: descriptor.id,
-        walletName: descriptor.name,
-        sourceAddress: address,
-        sourceNetwork: "testnet",
-        storageAddress: address,
-        mode: "native"
-      };
-    };
-    const ensureNetwork = async () => {
-      const current = await feature("aptos:network", "network").network();
-      if (isTestnet(current)) return current;
-      const changer = feature("aptos:changeNetwork", "changeNetwork", { optional: true });
-      if (!changer) {
-        throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
-      }
-      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
-      if (!changed?.success) {
-        throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
-      }
-      return TESTNET;
-    };
-    const bindEvents = () => {
-      if (eventsBound) return;
-      eventsBound = true;
-      const accountEvents = feature("aptos:onAccountChange", "onAccountChange");
-      const networkEvents = feature("aptos:onNetworkChange", "onNetworkChange");
-      void accountEvents.onAccountChange((account) => {
-        try {
-          session = buildSession(account);
-          emit2({ session, status: "ready" });
-        } catch (error) {
-          session = null;
-          emit2({ session: null, status: "disconnected", error: error.message });
-        }
-      });
-      void networkEvents.onNetworkChange((network) => {
-        if (!isTestnet(network)) {
-          emit2({ session, status: "network_required", error: "Switch your wallet to Aptos Testnet" });
-          return;
-        }
-        emit2({ session, status: session ? "ready" : "disconnected", error: "" });
-      });
-    };
-    return {
-      async connect({ silent = false } = {}) {
-        try {
-          const connector = feature("aptos:connect", "connect");
-          const account = approvedArgs(
-            await (silent ? connector.connect(true) : connector.connect())
-          );
-          session = buildSession(account);
-          try {
-            await ensureNetwork();
-          } catch (error) {
-            error.session = session;
-            throw error;
-          }
-          return session;
-        } catch (error) {
-          const normalized = normalizeAptosError(error, descriptor.name);
-          if (error?.session) normalized.session = error.session;
-          throw normalized;
-        }
-      },
-      ensureNetwork,
-      async signAndSubmitTransaction({ data }) {
-        return approvedArgs(
-          await feature("aptos:signAndSubmitTransaction", "signAndSubmitTransaction").signAndSubmitTransaction({ payload: data })
-        );
-      },
-      subscribe(listener) {
-        listeners2.add(listener);
-        bindEvents();
-        return () => listeners2.delete(listener);
-      },
-      async disconnect() {
-        await feature("aptos:disconnect", "disconnect").disconnect();
-        session = null;
-      }
-    };
-  }
-
-  // client-src/wallets/aptos-contract-settlement.js
-  init_process();
-  init_buffer();
-  var HEX_32 = /^[0-9a-f]{64}$/;
-  var HEX_64 = /^[0-9a-f]{128}$/;
-  var settlementError = (message, code = "invalid_contract_settlement") => Object.assign(
-    new Error(message),
-    { code, retriable: false }
-  );
-  function aptosAddressHex(value) {
-    const text = String(value || "").replace(/^0x/, "").toLowerCase();
-    if (!/^[0-9a-f]{1,64}$/.test(text)) {
-      throw settlementError("Invalid Aptos payer address", "settlement_context_mismatch");
-    }
-    return text.padStart(64, "0");
-  }
-  function hexBytes(value, expectedPattern = HEX_32) {
-    const text = String(value || "").replace(/^0x/, "").toLowerCase();
-    if (!expectedPattern.test(text)) throw settlementError("Invalid signed settlement bytes");
-    return Uint8Array.from(text.match(/../g).map((byte) => Number.parseInt(byte, 16)));
-  }
-  async function submitAptosContractSettlement({
-    adapter,
-    session,
-    deployment,
-    contractQuote: quote,
-    contractSignature
-  }) {
-    if (session?.chain !== "aptos" || aptosAddressHex(session?.sourceAddress) !== String(quote?.payer || "")) {
-      throw settlementError(
-        "The connected Aptos account no longer matches this quote",
-        "settlement_context_mismatch"
-      );
-    }
-    const moduleAddress = String(deployment?.moduleAddress || "").toLowerCase();
-    if (!/^0x[0-9a-f]{64}$/.test(moduleAddress) || /^0x0+$/.test(moduleAddress)) {
-      throw settlementError("Vessel Aptos settlement contract is not deployed", "settlement_unavailable");
-    }
-    if (typeof adapter?.signAndSubmitTransaction !== "function") {
-      throw settlementError("Reconnect the selected Aptos wallet", "settlement_unavailable");
-    }
-    const signature = hexBytes(contractSignature, HEX_64);
-    const data = {
-      function: `${moduleAddress}::vessel_settlement::settle`,
-      typeArguments: ["0x1::fungible_asset::Metadata"],
-      functionArguments: [
-        `0x${quote.asset}`,
-        quote.version,
-        quote.chain,
-        quote.network,
-        hexBytes(quote.quoteId),
-        hexBytes(quote.payer),
-        hexBytes(quote.storageAddress),
-        hexBytes(quote.asset),
-        String(quote.amount),
-        hexBytes(quote.fileHash),
-        quote.retentionDays,
-        String(quote.storageExpirationMicros),
-        String(quote.quoteExpiresAtSecs),
-        String(quote.configVersion),
-        signature
-      ]
-    };
-    const submitted = await adapter.signAndSubmitTransaction({ data });
-    const transactionId = String(submitted?.hash || "");
-    if (!transactionId) {
-      throw settlementError("Aptos wallet did not return a transaction hash", "settlement_submission_failed");
-    }
-    return Object.freeze({ transactionId });
-  }
-
-  // client-src/wallets/aptos-upload.js
-  init_process();
-  init_buffer();
 
   // client-src/wallets/transaction-evidence.js
   init_process();
@@ -35864,25 +34220,106 @@ ${String(result)}`);
     });
   }
 
+  // client-src/wallets/shelby-browser-upload.js
+  init_process();
+  init_buffer();
+  var uploadError = (message, code = "shelby_upload_failed") => Object.assign(
+    new Error(message),
+    { code }
+  );
+  async function readJson(response) {
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw uploadError(json.error || `Upload request failed (${response.status})`, json.code);
+    }
+    return json;
+  }
+  async function uploadBlobViaVesselGateway(blobData, {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    request: request2 = fetch,
+    onProgress
+  } = {}) {
+    const data = blobData instanceof Uint8Array ? blobData : new Uint8Array(blobData || []);
+    if (!data.byteLength || !quoteToken || !paidAuthorization || !uploadContext || !contractQuote || !contractSignature) {
+      throw uploadError("Paid upload context is required", "invalid_paid_authorization");
+    }
+    const start = await readJson(await request2("/api/shelby/uploads", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        quoteToken,
+        paidAuthorization,
+        uploadContext,
+        contractQuote,
+        contractSignature,
+        totalBytes: data.byteLength
+      })
+    }));
+    if (!start.uploadId || !start.uploadToken || !Number.isSafeInteger(start.partSize) || start.partSize <= 0) {
+      throw uploadError("Vessel returned an invalid Shelby upload session");
+    }
+    let uploadedBytes = 0;
+    let partIdx = 0;
+    for (let offset2 = 0; offset2 < data.byteLength; offset2 += start.partSize) {
+      const part = data.subarray(offset2, Math.min(data.byteLength, offset2 + start.partSize));
+      await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/parts/${partIdx}`, {
+        method: "PUT",
+        headers: {
+          "content-type": "application/octet-stream",
+          Authorization: `Bearer ${start.uploadToken}`
+        },
+        body: part
+      }));
+      uploadedBytes += part.byteLength;
+      partIdx += 1;
+      onProgress?.({ uploadedBytes, totalBytes: data.byteLength, partIdx, totalParts: Math.ceil(data.byteLength / start.partSize) });
+    }
+    await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/complete`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${start.uploadToken}` }
+    }));
+    return Object.freeze({ uploadId: start.uploadId, uploadedBytes });
+  }
+
   // client-src/wallets/aptos-upload.js
   var nativeError = (message, code) => Object.assign(new Error(message), { code });
   var sha2562 = (data) => crypto.subtle.digest("SHA-256", data);
   function defaultDeps() {
-    const aptos = new X4(new a19({ network: e7.TESTNET }));
-    const shelby = new ShelbyClient({ network: e7.TESTNET });
     return {
-      aptos,
-      shelby,
       shelbyUsdAsset: SHELBYUSD_FA_METADATA_ADDRESS,
       createProvider: createDefaultErasureCodingProvider,
       generateCommitments,
       expectedTotalChunksets,
       createRegisterPayload: (args) => ShelbyBlobClient.createRegisterBlobPayload(args),
       now: () => Date.now(),
-      digest: sha2562
+      digest: sha2562,
+      async readBalances(address) {
+        const response = await fetch(`/api/shelby/accounts/${encodeURIComponent(address)}/balances`);
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) throw nativeError(json.error || "Unable to read Aptos balances", json.code);
+        return json;
+      },
+      async waitForTransaction(transactionHash) {
+        const response = await fetch(`/api/shelby/transactions/${encodeURIComponent(transactionHash)}`);
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) throw nativeError(json.error || "Unable to confirm Aptos transaction", json.code);
+        return json;
+      },
+      uploadBlob: uploadBlobViaVesselGateway
     };
   }
   async function readNativeBalances(address, deps = defaultDeps()) {
+    if (typeof deps.readBalances === "function") {
+      const balances = await deps.readBalances(address);
+      return {
+        aptOctas: Number(balances?.aptOctas || 0),
+        shelbyUsdUnits: Number(balances?.shelbyUsdUnits || 0)
+      };
+    }
     const [aptOctas, rows] = await Promise.all([
       deps.aptos.getAccountAPTAmount({ accountAddress: address }),
       deps.aptos.getCurrentFungibleAssetBalances({
@@ -35925,6 +34362,11 @@ ${String(result)}`);
     session,
     expectedFileHash,
     blobName,
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
     deps = defaultDeps()
   }) {
     const { data, hex } = await fileHashHex(file, deps.digest || sha2562);
@@ -35934,11 +34376,21 @@ ${String(result)}`);
     if (contentAddressedName(file, hex) !== blobName) {
       throw nativeError("The recovered blob name does not match the file", "file_changed");
     }
-    await deps.shelby.rpc.putBlob({
-      account: session.storageAddress,
-      blobName,
-      blobData: data
-    });
+    if (typeof deps.uploadBlob === "function") {
+      await deps.uploadBlob(data, {
+        quoteToken,
+        paidAuthorization,
+        uploadContext,
+        contractQuote,
+        contractSignature
+      });
+    } else {
+      await deps.shelby.rpc.putBlob({
+        account: session.storageAddress,
+        blobName,
+        blobData: data
+      });
+    }
     return { key: blobName, size: data.length };
   }
   async function uploadNativeAptos(file, {
@@ -35950,6 +34402,8 @@ ${String(result)}`);
     paidAuthorization,
     paymentTier,
     uploadContext,
+    contractQuote,
+    contractSignature,
     onStep,
     onCheckpoint,
     deps = defaultDeps()
@@ -35975,7 +34429,7 @@ ${String(result)}`);
       throw nativeError("A quoted expiration is required", "invalid_quote_context");
     }
     const blobName = contentAddressedName(file, computedHash);
-    if (!Number.isSafeInteger(paymentTier) || paymentTier < 0 || !quoteToken || !paidAuthorization || uploadContext?.chain !== "aptos" || String(uploadContext.sourceAddress).toLowerCase() !== String(session.sourceAddress).toLowerCase() || String(uploadContext.storageAddress).toLowerCase() !== String(session.storageAddress).toLowerCase() || uploadContext.fileHash !== expected || uploadContext.blobName !== blobName || uploadContext.expirationMicros !== expirationMicros || Number(uploadContext.sizeBytes) !== Number(file.size)) {
+    if (!Number.isSafeInteger(paymentTier) || paymentTier < 0 || !quoteToken || !paidAuthorization || !contractQuote || !contractSignature || uploadContext?.chain !== "aptos" || String(uploadContext.sourceAddress).toLowerCase() !== String(session.sourceAddress).toLowerCase() || String(uploadContext.storageAddress).toLowerCase() !== String(session.storageAddress).toLowerCase() || uploadContext.fileHash !== expected || uploadContext.blobName !== blobName || uploadContext.expirationMicros !== expirationMicros || Number(uploadContext.sizeBytes) !== Number(file.size)) {
       throw nativeError("A paid quote authorization is required", "invalid_paid_authorization");
     }
     const provider = await deps.createProvider();
@@ -35999,7 +34453,7 @@ ${String(result)}`);
     const submitted = await adapter.signAndSubmitTransaction({ data: payload });
     if (!submitted?.hash) throw nativeError("Wallet did not return a transaction hash", "submit_failed");
     onStep?.("confirming");
-    const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+    const transaction = typeof deps.waitForTransaction === "function" ? await deps.waitForTransaction(submitted.hash) : await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
     const evidence = extractShelbyTransactionEvidence(transaction);
     onCheckpoint?.("registered", {
       registerTransactionHash: evidence.transactionHash,
@@ -36008,15 +34462,25 @@ ${String(result)}`);
     });
     onStep?.("uploading");
     onCheckpoint?.("uploading", { registerTransactionHash: evidence.transactionHash });
-    await deps.shelby.rpc.putBlob({
-      account: session.storageAddress,
-      blobName,
-      blobData
-    });
+    if (typeof deps.uploadBlob === "function") {
+      await deps.uploadBlob(blobData, {
+        quoteToken,
+        paidAuthorization,
+        uploadContext,
+        contractQuote,
+        contractSignature
+      });
+    } else {
+      await deps.shelby.rpc.putBlob({
+        account: session.storageAddress,
+        blobName,
+        blobData
+      });
+    }
     onCheckpoint?.("finalizing", { registerTransactionHash: evidence.transactionHash });
     return {
       key: blobName,
-      url: `${deps.shelby.baseUrl}/v1/blobs/${session.storageAddress}/${blobName}`,
+      url: `/api/shelby/blobs/${session.storageAddress}/${blobName.split("/").map(encodeURIComponent).join("/")}`,
       account: session.storageAddress,
       size: blobData.length,
       contentType: file.type || "application/octet-stream",
@@ -38721,7 +37185,7 @@ Message: ${transactionMessage}.
     }
     return signature;
   }
-  function sleep2(ms2) {
+  function sleep(ms2) {
     return new Promise((resolve) => setTimeout(resolve, ms2));
   }
   function encodeData(type2, fields) {
@@ -39250,7 +37714,7 @@ Message: ${transactionMessage}.
         }));
         if (connection._rpcEndpoint.includes("solana.com")) {
           const REQUESTS_PER_SECOND = 4;
-          await sleep2(1e3 / REQUESTS_PER_SECOND);
+          await sleep(1e3 / REQUESTS_PER_SECOND);
         }
         offset2 += chunkSize;
         array2 = array2.slice(chunkSize);
@@ -41423,7 +39887,6 @@ Message: ${transactionMessage}.
     eventTarget: window
   });
   var adapters = /* @__PURE__ */ new Map();
-  var artifactClient = new ShelbyClient({ network: e7.TESTNET });
   var availableRegistry = {
     async scan() {
       adapters.clear();
@@ -41476,6 +39939,8 @@ Message: ${transactionMessage}.
         expectedFileHash: context.expectedFileHash,
         paymentTier: context.paymentTier,
         uploadContext: context.uploadContext,
+        contractQuote: context.contractQuote,
+        contractSignature: context.contractSignature,
         onStep: context.onStep,
         onCheckpoint: context.onCheckpoint
       });
@@ -41511,13 +39976,10 @@ Message: ${transactionMessage}.
     async listArtifacts() {
       const session = controller.getState().session;
       if (!session?.storageAddress) return [];
-      const rows = await artifactClient.coordination.getAccountBlobs({
-        account: session.storageAddress
-      });
-      return rows.map((row) => ({
-        ...row,
-        url: `${artifactClient.baseUrl}/v1/blobs/${session.storageAddress}/${row.blobNameSuffix}`
-      }));
+      const response = await fetch(`/api/shelby/artifacts?account=${encodeURIComponent(session.storageAddress)}`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(json.error || "Unable to load Shelby artifacts");
+      return Array.isArray(json.items) ? json.items : [];
     },
     reconcileArtifacts(local, remote) {
       return reconcileArtifacts(local, remote, controller.getState().session || {});
@@ -41531,12 +39993,22 @@ Message: ${transactionMessage}.
         return resumeNativeBlobWrite(file, {
           session,
           expectedFileHash: record2.context.fileHash,
-          blobName: record2.context.blobName
+          blobName: record2.context.blobName,
+          quoteToken: record2.quoteToken,
+          paidAuthorization: record2.paidAuthorization,
+          uploadContext: record2.context,
+          contractQuote: record2.contractQuote,
+          contractSignature: record2.contractSignature
         });
       }
       return window.VesselSolana.resumeBlobWrite(file, {
         expectedFileHash: record2.context.fileHash,
-        blobName: record2.context.blobName
+        blobName: record2.context.blobName,
+        quoteToken: record2.quoteToken,
+        paidAuthorization: record2.paidAuthorization,
+        uploadContext: record2.context,
+        contractQuote: record2.contractQuote,
+        contractSignature: record2.contractSignature
       });
     },
     upload(file, context = {}) {

@@ -52,6 +52,8 @@ test('native upload registers before RPC byte upload and returns the wallet name
     expectedFileHash,
     quoteToken: 'vquote.test.signed',
     paidAuthorization: 'vpaid.test.authorization',
+    contractQuote: { quoteId: 'contract-quote' },
+    contractSignature: 'contract-signature',
     paymentTier: 3,
     uploadContext: {
       chain: 'aptos',

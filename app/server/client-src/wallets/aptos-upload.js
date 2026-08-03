@@ -1,23 +1,18 @@
-import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
 import {
   ShelbyBlobClient,
-  ShelbyClient,
   SHELBYUSD_FA_METADATA_ADDRESS,
   createDefaultErasureCodingProvider,
   expectedTotalChunksets,
   generateCommitments,
 } from '@shelby-protocol/sdk/browser';
 import { extractShelbyTransactionEvidence } from './transaction-evidence.js';
+import { uploadBlobViaVesselGateway } from './shelby-browser-upload.js';
 
 const nativeError = (message, code) => Object.assign(new Error(message), { code });
 const sha256 = (data) => crypto.subtle.digest('SHA-256', data);
 
 function defaultDeps() {
-  const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
-  const shelby = new ShelbyClient({ network: Network.TESTNET });
   return {
-    aptos,
-    shelby,
     shelbyUsdAsset: SHELBYUSD_FA_METADATA_ADDRESS,
     createProvider: createDefaultErasureCodingProvider,
     generateCommitments,
@@ -25,10 +20,30 @@ function defaultDeps() {
     createRegisterPayload: (args) => ShelbyBlobClient.createRegisterBlobPayload(args),
     now: () => Date.now(),
     digest: sha256,
+    async readBalances(address) {
+      const response = await fetch(`/api/shelby/accounts/${encodeURIComponent(address)}/balances`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw nativeError(json.error || 'Unable to read Aptos balances', json.code);
+      return json;
+    },
+    async waitForTransaction(transactionHash) {
+      const response = await fetch(`/api/shelby/transactions/${encodeURIComponent(transactionHash)}`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok) throw nativeError(json.error || 'Unable to confirm Aptos transaction', json.code);
+      return json;
+    },
+    uploadBlob: uploadBlobViaVesselGateway,
   };
 }
 
 export async function readNativeBalances(address, deps = defaultDeps()) {
+  if (typeof deps.readBalances === 'function') {
+    const balances = await deps.readBalances(address);
+    return {
+      aptOctas: Number(balances?.aptOctas || 0),
+      shelbyUsdUnits: Number(balances?.shelbyUsdUnits || 0),
+    };
+  }
   const [aptOctas, rows] = await Promise.all([
     deps.aptos.getAccountAPTAmount({ accountAddress: address }),
     deps.aptos.getCurrentFungibleAssetBalances({
@@ -75,6 +90,11 @@ export async function resumeNativeBlobWrite(file, {
   session,
   expectedFileHash,
   blobName,
+  quoteToken,
+  paidAuthorization,
+  uploadContext,
+  contractQuote,
+  contractSignature,
   deps = defaultDeps(),
 }) {
   const { data, hex } = await fileHashHex(file, deps.digest || sha256);
@@ -84,11 +104,21 @@ export async function resumeNativeBlobWrite(file, {
   if (contentAddressedName(file, hex) !== blobName) {
     throw nativeError('The recovered blob name does not match the file', 'file_changed');
   }
-  await deps.shelby.rpc.putBlob({
-    account: session.storageAddress,
-    blobName,
-    blobData: data,
-  });
+  if (typeof deps.uploadBlob === 'function') {
+    await deps.uploadBlob(data, {
+      quoteToken,
+      paidAuthorization,
+      uploadContext,
+      contractQuote,
+      contractSignature,
+    });
+  } else {
+    await deps.shelby.rpc.putBlob({
+      account: session.storageAddress,
+      blobName,
+      blobData: data,
+    });
+  }
   return { key: blobName, size: data.length };
 }
 
@@ -101,6 +131,8 @@ export async function uploadNativeAptos(file, {
   paidAuthorization,
   paymentTier,
   uploadContext,
+  contractQuote,
+  contractSignature,
   onStep,
   onCheckpoint,
   deps = defaultDeps(),
@@ -132,6 +164,8 @@ export async function uploadNativeAptos(file, {
     || paymentTier < 0
     || !quoteToken
     || !paidAuthorization
+    || !contractQuote
+    || !contractSignature
     || uploadContext?.chain !== 'aptos'
     || String(uploadContext.sourceAddress).toLowerCase() !== String(session.sourceAddress).toLowerCase()
     || String(uploadContext.storageAddress).toLowerCase() !== String(session.storageAddress).toLowerCase()
@@ -166,7 +200,9 @@ export async function uploadNativeAptos(file, {
   if (!submitted?.hash) throw nativeError('Wallet did not return a transaction hash', 'submit_failed');
 
   onStep?.('confirming');
-  const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+  const transaction = typeof deps.waitForTransaction === 'function'
+    ? await deps.waitForTransaction(submitted.hash)
+    : await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
   const evidence = extractShelbyTransactionEvidence(transaction);
   onCheckpoint?.('registered', {
     registerTransactionHash: evidence.transactionHash,
@@ -176,16 +212,26 @@ export async function uploadNativeAptos(file, {
 
   onStep?.('uploading');
   onCheckpoint?.('uploading', { registerTransactionHash: evidence.transactionHash });
-  await deps.shelby.rpc.putBlob({
-    account: session.storageAddress,
-    blobName,
-    blobData,
-  });
+  if (typeof deps.uploadBlob === 'function') {
+    await deps.uploadBlob(blobData, {
+      quoteToken,
+      paidAuthorization,
+      uploadContext,
+      contractQuote,
+      contractSignature,
+    });
+  } else {
+    await deps.shelby.rpc.putBlob({
+      account: session.storageAddress,
+      blobName,
+      blobData,
+    });
+  }
   onCheckpoint?.('finalizing', { registerTransactionHash: evidence.transactionHash });
 
   return {
     key: blobName,
-    url: `${deps.shelby.baseUrl}/v1/blobs/${session.storageAddress}/${blobName}`,
+    url: `/api/shelby/blobs/${session.storageAddress}/${blobName.split('/').map(encodeURIComponent).join('/')}`,
     account: session.storageAddress,
     size: blobData.length,
     contentType: file.type || 'application/octet-stream',

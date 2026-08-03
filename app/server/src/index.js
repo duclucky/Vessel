@@ -2,9 +2,14 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
-import { expectedTotalChunksets } from '@shelby-protocol/sdk/node';
+import {
+  expectedTotalChunksets,
+  SHELBYUSD_FA_METADATA_ADDRESS,
+  ShelbyNodeClient,
+} from '@shelby-protocol/sdk/node';
 import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
@@ -13,6 +18,9 @@ import { SponsorManager } from './lib/sponsor.js';
 import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
 import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
 import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
+import { validatePaidUploadAuthorization } from './lib/paid-upload-access.js';
+import { buildSponsoredRegisterTransaction } from './lib/shelby-register-builder.js';
+import { ShelbyUploadGateway } from './lib/shelby-upload-gateway.js';
 import { targetExpirationMicros } from '../public/retention.js';
 import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
 import { createTelemetry } from './lib/telemetry.js';
@@ -37,8 +45,28 @@ let sponsor = null;
 try {
   if (config.gasStationApiKey) sponsor = new SponsorManager({ gasStationApiKey: config.gasStationApiKey, network: config.network });
 } catch (e) { console.warn('[sponsor] disabled:', String(e?.message || e)); }
-const aptos = new Aptos(new AptosConfig({ network: Network.TESTNET }));
+const aptos = new Aptos(new AptosConfig({
+  network: Network.TESTNET,
+  clientConfig: config.shelbyApiKey ? { API_KEY: config.shelbyApiKey } : undefined,
+}));
 const pricingReader = createShelbyPricingReader({ aptos });
+let shelbyClient = null;
+let shelbyGateway = null;
+try {
+  if (config.shelbyApiKey) {
+    shelbyClient = new ShelbyNodeClient({
+      network: Network.TESTNET,
+      apiKey: config.shelbyApiKey,
+    });
+    shelbyGateway = new ShelbyUploadGateway({
+      apiKey: config.shelbyApiKey,
+      rpcBaseUrl: shelbyClient.baseUrl,
+      secret: config.paySecret,
+    });
+  }
+} catch (error) {
+  console.warn('[shelby-gateway] disabled:', String(error?.message || error));
+}
 let settlementDeployments = Object.freeze({ enabled: false });
 let settlementAdapters = null;
 let contractQuoteManager = null;
@@ -146,6 +174,26 @@ function fail(res, e) {
   return send(res, status, { error: e?.message || 'Internal error', code: e?.code, retriable: !!e?.retriable });
 }
 
+function validatePaidUploadBody(body = {}) {
+  return validatePaidUploadAuthorization({
+    quoteManager,
+    paidAuthorizations,
+    settlementDeployments,
+    verifyContractQuoteSignature,
+    assertContractQuoteMatchesContext,
+    quoteToken: body.quoteToken,
+    uploadContext: body.uploadContext,
+    paidAuthorization: body.paidAuthorization,
+    contractQuote: body.contractQuote,
+    contractSignature: body.contractSignature,
+  });
+}
+
+const encodeBlobPath = (blobName) => String(blobName)
+  .split('/')
+  .map((segment) => encodeURIComponent(segment))
+  .join('/');
+
 // ---- Health ----
 app.get('/api/health', async (_req, res) => {
   const out = { status: 'ok', backend: store.name(), network: config.network };
@@ -199,6 +247,176 @@ app.get('/api/list', async (req, res) => {
     const all = await store.list('');
     const items = all.filter((i) => i.contentType !== 'application/json'); // media only, hide metadata JSON
     send(res, 200, { items, backend: store.name() });
+  } catch (e) { fail(res, e); }
+});
+
+// ---- Wallet-owned Shelby access (the private API key stays on this server) ----
+app.get('/api/shelby/artifacts', async (req, res) => {
+  try {
+    if (!shelbyClient) return send(res, 503, { error: 'Shelby API access is unavailable' });
+    const account = String(req.query.account || '').toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(account)) {
+      return send(res, 400, { error: 'valid Shelby account required', code: 'invalid_storage_address' });
+    }
+    const rows = await shelbyClient.coordination.getAccountBlobs({ account });
+    send(res, 200, {
+      items: rows.map((row) => ({
+        owner: row.owner?.toString?.() || String(row.owner || account),
+        name: row.name,
+        blobNameSuffix: row.blobNameSuffix,
+        size: row.size,
+        creationMicros: row.creationMicros,
+        expirationMicros: row.expirationMicros,
+        isWritten: !!row.isWritten,
+        isDeleted: !!row.isDeleted,
+        url: `/api/shelby/blobs/${account}/${encodeBlobPath(row.blobNameSuffix)}`,
+      })),
+    });
+  } catch (e) { fail(res, e); }
+});
+
+app.get('/api/shelby/accounts/:account/balances', async (req, res) => {
+  try {
+    if (!shelbyClient) return send(res, 503, { error: 'Shelby API access is unavailable' });
+    const account = String(req.params.account || '').toLowerCase();
+    if (!/^0x[0-9a-f]{64}$/.test(account)) {
+      return send(res, 400, { error: 'valid Shelby account required', code: 'invalid_storage_address' });
+    }
+    const [aptOctas, rows] = await Promise.all([
+      aptos.getAccountAPTAmount({ accountAddress: account }),
+      aptos.getCurrentFungibleAssetBalances({
+        options: {
+          where: {
+            owner_address: { _eq: account },
+            asset_type: { _eq: SHELBYUSD_FA_METADATA_ADDRESS },
+          },
+        },
+      }),
+    ]);
+    send(res, 200, {
+      aptOctas: Number(aptOctas || 0),
+      shelbyUsdUnits: Number(rows?.[0]?.amount || 0),
+    });
+  } catch (e) { fail(res, e); }
+});
+
+app.get('/api/shelby/transactions/:hash', async (req, res) => {
+  try {
+    if (!shelbyClient) return send(res, 503, { error: 'Shelby API access is unavailable' });
+    const hash = String(req.params.hash || '');
+    if (!/^0x[0-9a-f]{64}$/i.test(hash)) {
+      return send(res, 400, { error: 'valid Aptos transaction hash required', code: 'invalid_transaction_hash' });
+    }
+    const transaction = await aptos.waitForTransaction({ transactionHash: hash });
+    send(res, 200, transaction);
+  } catch (e) { fail(res, e); }
+});
+
+app.get('/api/shelby/blobs/:account/*', async (req, res) => {
+  try {
+    if (!shelbyClient || !config.shelbyApiKey) {
+      return send(res, 503, { error: 'Shelby API access is unavailable' });
+    }
+    const account = String(req.params.account || '').toLowerCase();
+    const blobName = String(req.params[0] || '');
+    if (!/^0x[0-9a-f]{64}$/.test(account) || !blobName || blobName.includes('..')) {
+      return send(res, 400, { error: 'invalid Shelby blob path', code: 'invalid_blob_name' });
+    }
+    const upstream = await fetch(
+      `${shelbyClient.baseUrl}/v1/blobs/${account}/${encodeBlobPath(blobName)}`,
+      { headers: { Authorization: `Bearer ${config.shelbyApiKey}` } },
+    );
+    if (!upstream.ok || !upstream.body) {
+      return send(res, upstream.status || 502, { error: 'Shelby blob is unavailable' });
+    }
+    for (const header of ['content-type', 'content-length', 'etag', 'last-modified']) {
+      const value = upstream.headers.get(header);
+      if (value) res.setHeader(header, value);
+    }
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    Readable.fromWeb(upstream.body).pipe(res);
+  } catch (e) { fail(res, e); }
+});
+
+app.post('/api/shelby/register', async (req, res) => {
+  try {
+    if (!shelbyClient || !shelbyGateway || !sponsor || !config.gasStationAccount) {
+      return send(res, 503, { error: 'Sponsored Shelby registration is unavailable' });
+    }
+    const { signedQuote } = validatePaidUploadBody(req.body);
+    const transaction = await buildSponsoredRegisterTransaction({
+      shelbyClient,
+      gasStationAccount: config.gasStationAccount,
+      signedQuote,
+      blobMerkleRoot: req.body?.blobMerkleRoot,
+    });
+    send(res, 200, {
+      transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
+    });
+  } catch (e) { fail(res, e); }
+});
+
+app.post('/api/shelby/uploads', async (req, res) => {
+  try {
+    if (!shelbyClient || !shelbyGateway) {
+      return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
+    }
+    const { signedQuote } = validatePaidUploadBody(req.body);
+    const context = signedQuote.context;
+    if (Number(req.body?.totalBytes) !== context.sizeBytes) {
+      return send(res, 409, { error: 'Upload size does not match the paid quote', code: 'paid_context_mismatch' });
+    }
+    const metadata = await shelbyClient.coordination.getBlobMetadata({
+      account: context.storageAddress,
+      name: context.blobName,
+    });
+    if (
+      !metadata
+      || Number(metadata.size) !== context.sizeBytes
+      || Number(metadata.expirationMicros) !== context.expirationMicros
+    ) {
+      return send(res, 409, {
+        error: 'Shelby registration does not match the paid upload',
+        code: 'registration_mismatch',
+      });
+    }
+    if (metadata.isWritten) {
+      return send(res, 200, { alreadyWritten: true, uploadedBytes: context.sizeBytes });
+    }
+    const started = await shelbyGateway.start({
+      account: context.storageAddress,
+      blobName: context.blobName,
+      totalBytes: context.sizeBytes,
+      partSize: 3 * 1024 * 1024,
+    });
+    send(res, 200, started);
+  } catch (e) { fail(res, e); }
+});
+
+app.put(
+  '/api/shelby/uploads/:uploadId/parts/:partIdx',
+  express.raw({ type: 'application/octet-stream', limit: '3mb' }),
+  async (req, res) => {
+    try {
+      if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
+      const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+      await shelbyGateway.putPart({
+        uploadId: req.params.uploadId,
+        partIdx: Number(req.params.partIdx),
+        data: req.body,
+        uploadToken,
+      });
+      send(res, 200, { ok: true });
+    } catch (e) { fail(res, e); }
+  },
+);
+
+app.post('/api/shelby/uploads/:uploadId/complete', async (req, res) => {
+  try {
+    if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
+    const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+    await shelbyGateway.complete({ uploadId: req.params.uploadId, uploadToken });
+    send(res, 200, { ok: true });
   } catch (e) { fail(res, e); }
 });
 
@@ -269,7 +487,7 @@ app.get('/api/config', (_req, res) => {
     network: config.network,
     domain: config.daaDomain,
     solanaRpc: config.solanaRpc,
-    shelbyApiKey: '', // never exposed; anonymous testnet reads/writes don't need it client-side
+    shelbyApiKey: '', // never exposed; authenticated Shelby requests go through this server
     usdcMint: config.usdcMint,
     gasStationAccount: config.gasStationAccount, // public fee-payer address (safe to expose)
     dynamicQuotes: !!quoteManager,
@@ -280,7 +498,10 @@ app.get('/api/config', (_req, res) => {
       aptos: settlementDeployments.aptos,
       solana: settlementDeployments.solana,
     } : { enabled: false },
-    sponsored: !!sponsor && !!paidAuthorizations && settlementDeployments.enabled,
+    sponsored: !!sponsor
+      && !!paidAuthorizations
+      && !!shelbyGateway
+      && settlementDeployments.enabled,
     walletFamilies: {
       aptos: config.walletAptosEnabled && !!paidAuthorizations && settlementDeployments.enabled,
       solana: config.walletSolanaEnabled
@@ -385,10 +606,17 @@ app.post('/api/sponsor/submit', async (req, res) => {
       quoteToken,
       paidAuthorization,
       uploadContext,
+      contractQuote,
+      contractSignature,
     } = req.body || {};
     if (!transaction || !senderAuthenticator) return send(res, 400, { error: 'transaction and senderAuthenticator required' });
-    const quote = quoteManager.validate(quoteToken, uploadContext, { allowExpired: true });
-    paidAuthorizations.validate(paidAuthorization, quote);
+    const { signedQuote: quote } = validatePaidUploadBody({
+      quoteToken,
+      paidAuthorization,
+      uploadContext,
+      contractQuote,
+      contractSignature,
+    });
     const r = await sponsor.submit(String(transaction), String(senderAuthenticator), {
       expectedSender: quote.context.storageAddress,
     });

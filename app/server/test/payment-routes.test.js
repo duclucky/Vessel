@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const server = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
+const paidUploadAccess = fs.readFileSync(new URL('../src/lib/paid-upload-access.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const solana = fs.readFileSync(new URL('../client-src/vessel-solana.js', import.meta.url), 'utf8');
 
@@ -13,7 +14,8 @@ test('contract settlement is the only route that can issue paid authorization', 
   assert.match(server, /paidAuthorizations\.issue\(\{\s*quote:\s*contractEvidence,\s*receipt/s);
   assert.match(server, /quoteManager\.validate\(quoteToken/);
   assert.match(server, /paidAuthorizations\.issue/);
-  assert.match(server, /paidAuthorizations\.validate/);
+  assert.match(server, /validatePaidUploadAuthorization/);
+  assert.match(paidUploadAccess, /paidAuthorizations\.validate/);
   assert.match(server, /expectedSender:\s*quote\.context\.storageAddress/);
   assert.doesNotMatch(server, /app\.post\('\/api\/pay\/quote'/);
   assert.doesNotMatch(server, /createIntent/);

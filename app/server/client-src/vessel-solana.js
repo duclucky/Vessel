@@ -1,12 +1,11 @@
-// Vessel — client-side Solana DAA + sponsored upload with the selected Wallet Standard provider.
-// The visitor's Solana wallet:
-//   1) derives its Aptos DAA storage account (deterministic — they own it),
-//   2) pays a small USDC fee on Solana (stablecoin — no price volatility),
-//   3) SIGNS the sponsored upload; the server co-signs via a gas station (pays APT + ShelbyUSD).
-// The gas station key NEVER reaches the browser — the only browser-side credential is the wallet
-// signature. See NOTES.md 5j for the proven recipe. Switch networks via window.VESSEL_NETWORK.
-import { Network, Hex } from '@aptos-labs/ts-sdk';
-import { ShelbyBlobClient, ShelbyClient } from '@shelby-protocol/sdk/browser';
+// Vessel — Solana DAA ownership with server-authenticated Shelby access.
+// Phantom signs the Aptos DAA registration. Vessel's backend keeps the Shelby and gas-station
+// credentials private, validates the paid contract receipt, and relays bounded blob chunks.
+import { Deserializer, MultiAgentTransaction } from '@aptos-labs/ts-sdk';
+import {
+  createDefaultErasureCodingProvider,
+  generateCommitments,
+} from '@shelby-protocol/sdk/browser';
 import {
   SolanaDerivedPublicKey,
   defaultSolanaAuthenticationFunction,
@@ -14,29 +13,22 @@ import {
 } from '@aptos-labs/derived-wallet-solana';
 import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
-import nacl from 'tweetnacl';
 import { submitSolanaContractSettlement } from './wallets/solana-contract-settlement.js';
+import { uploadBlobViaVesselGateway } from './wallets/shelby-browser-upload.js';
 
-const NETWORKS = {
-  testnet: { net: Network.TESTNET, rpc: 'https://api.testnet.shelby.xyz/shelby' },
-  // When Shelby ships mainnet: mainnet: { net: Network.MAINNET, rpc: '...' }
-};
 const NET = (typeof window !== 'undefined' && window.VESSEL_NETWORK) || 'testnet';
-const CFG = NETWORKS[NET] || NETWORKS.testnet;
 const authFn = defaultSolanaAuthenticationFunction;
 
-let provider = null;    // explicitly selected Solana provider
-let pubkey = null;      // base58 string
-let storageAddr = null; // AccountAddress
-let client = null;      // ShelbyClient (browser)
+let provider = null;
+let pubkey = null;
+let storageAddr = null;
 let DOMAIN = (typeof window !== 'undefined' && window.VESSEL_DOMAIN) || 'vessel.demo';
-let serverCfg = null;   // /api/config
+let serverCfg = null;
 
 function clearProvider() {
   provider = null;
   pubkey = null;
   storageAddr = null;
-  client = null;
 }
 
 function selectProvider(nextProvider) {
@@ -48,7 +40,7 @@ function selectProvider(nextProvider) {
 
 async function loadConfig() {
   if (serverCfg) return serverCfg;
-  serverCfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({}));
+  serverCfg = await fetch('/api/config').then((response) => response.json()).catch(() => ({}));
   if (serverCfg.domain) DOMAIN = serverCfg.domain;
   return serverCfg;
 }
@@ -56,31 +48,53 @@ async function loadConfig() {
 async function connect(nextProvider) {
   selectProvider(nextProvider);
   await loadConfig();
-  const res = await provider.connect();
-  pubkey = res.publicKey.toString();
+  const result = await provider.connect();
+  pubkey = result.publicKey.toString();
   storageAddr = deriveAddress(pubkey);
-  client = new ShelbyClient({ network: CFG.net });
   return { solana: pubkey, storageAccount: storageAddr.toString(), network: NET };
 }
 
-function deriveAddress(pubkeyStr) {
-  const dpk = new SolanaDerivedPublicKey({ domain: DOMAIN, solanaPublicKey: new PublicKey(pubkeyStr), authenticationFunction: authFn });
-  return dpk.authKey().derivedAddress();
+function deriveAddress(pubkeyString) {
+  const derivedKey = new SolanaDerivedPublicKey({
+    domain: DOMAIN,
+    solanaPublicKey: new PublicKey(pubkeyString),
+    authenticationFunction: authFn,
+  });
+  return derivedKey.authKey().derivedAddress();
 }
 
-// Wallet Standard signMessage normalized to a raw 64-byte signature.
 async function signMsgRaw(bytes) {
-  const r = await provider.signMessage(bytes, 'utf8').catch(async () => await provider.signMessage(bytes));
-  return r?.signature ?? r;
+  const result = await provider.signMessage(bytes, 'utf8')
+    .catch(async () => provider.signMessage(bytes));
+  return result?.signature ?? result;
 }
-// Solana wallet shape for signAptosTransactionWithSolana. No signIn -> uses the proven signMessage path.
+
 function solWallet() {
-  return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: provider.name || 'Solana wallet' };
+  return {
+    publicKey: new PublicKey(pubkey),
+    signMessage: signMsgRaw,
+    name: provider.name || 'Solana wallet',
+  };
 }
 
-const b64 = (u8) => btoa(String.fromCharCode(...new Uint8Array(u8)));
+const b64 = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const fromB64 = (value) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
 
-// ---- SPONSORED upload: Phantom signs, server co-signs via gas station (Cách B) ----
+async function jsonRequest(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(json.error || `Request failed (${response.status})`), {
+      code: json.code,
+    });
+  }
+  return json;
+}
+
 async function uploadSponsored(file, {
   quoteToken,
   paidAuthorization,
@@ -88,10 +102,12 @@ async function uploadSponsored(file, {
   expectedFileHash,
   paymentTier,
   uploadContext,
+  contractQuote,
+  contractSignature,
   onStep,
   onCheckpoint,
 } = {}) {
-  if (!client) await connect(provider);
+  if (!storageAddr || !pubkey) await connect(provider);
   const data = new Uint8Array(await file.arrayBuffer());
   const sha = await sha256Hex(data);
   const parts = String(file.name || '').split('.');
@@ -112,102 +128,93 @@ async function uploadSponsored(file, {
     || paymentTier < 0
     || !quoteToken
     || !paidAuthorization
+    || !contractQuote
+    || !contractSignature
   ) {
     throw new Error('Paid upload context does not match the connected wallet and file');
   }
   const cfg = await loadConfig();
   if (!cfg.gasStationAccount) throw new Error('server sponsor not configured');
-  onStep?.('signing');
 
-  // Override 1: on-chain register signing -> Phantom async sender auth + POST to server (gas station).
-  const targets = new Set([client.aptos, client.coordination?.aptos].filter(Boolean));
-  const originals = new Map([...targets].map((a) => [a, a.signAndSubmitTransaction.bind(a)]));
-  let registrationEvidence = null;
-  const phantomSubmit = async ({ transaction }) => {
-    const resp = await signAptosTransactionWithSolana({ solanaWallet: solWallet(), authenticationFunction: authFn, rawTransaction: transaction, domain: DOMAIN });
-    if (resp.status !== 'Approved' && resp.status !== 'APPROVED') throw new Error('User rejected the signature');
-    onStep?.('sponsoring');
-    const body = {
-      transaction: b64(transaction.bcsToBytes()),
-      senderAuthenticator: b64(resp.args.bcsToBytes()),
-      quoteToken,
-      paidAuthorization,
-      uploadContext,
-    };
-    const response = await fetch('/api/sponsor/submit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    const r = await response.json();
-    if (!r.hash) throw new Error(r.error || 'sponsor submit failed');
-    registrationEvidence = {
-      transactionHash: r.transactionHash || r.hash,
-      actualStorageUnits: r.actualStorageUnits,
-      actualGasUsed: r.actualGasUsed,
-    };
-    onCheckpoint?.('registered', registrationEvidence);
-    return { hash: r.hash };
-  };
-  for (const a of targets) a.signAndSubmitTransaction = phantomSubmit;
-
-  // Override 2: byte-upload challenge -> sign inside getChallenge (awaited), sync return.
-  // Phantom REFUSES signMessage on the raw challenge bytes ("cannot sign solana transactions using
-  // sign message" — its anti-phishing heuristic sees tx-shaped bytes). On testnet, byte-upload auth
-  // is not enforced (anonymous writes), so we fall back to an ephemeral key. Ownership stays genuine:
-  // the on-chain register above IS Phantom-signed. Mainnet must revisit this (see NOTES.md 5k).
-  const ephemeral = nacl.sign.keyPair();
-  const realGetChallenge = client.rpc.getChallenge.bind(client.rpc);
-  let pendingAuth = null;
-  client.rpc.getChallenge = async (account) => {
-    const { challenge } = await realGetChallenge(account);
-    const bytes = Hex.fromHexInput(challenge).toUint8Array();
-    let signature;
-    try { signature = await signMsgRaw(bytes); }
-    catch { signature = nacl.sign.detached(bytes, ephemeral.secretKey); } // Phantom blocked raw challenge -> testnet ephemeral
-    pendingAuth = { challenge, signature, publicKey: new PublicKey(pubkey).toBytes(), authScheme: 'derivable', identity: pubkey, domain: DOMAIN, authFunction: authFn };
-    return { challenge };
-  };
-  const syncSign = () => pendingAuth;
-  client.rpc.signChallenge = syncSign;
-  client.signChallenge = syncSign;
-
-  const dummySubmitter = { submitTransaction: async () => { throw new Error('unused: overridden'); } };
-  const createRegisterPayload = ShelbyBlobClient.createRegisterBlobPayload;
-  ShelbyBlobClient.createRegisterBlobPayload = (params) => {
-    const payload = createRegisterPayload(params);
-    if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
-      throw new Error('Unexpected Shelby register payload shape');
-    }
-    payload.functionArguments[5] = paymentTier;
-    return payload;
-  };
-  try {
-    onStep?.('uploading');
-    await client.upload({
-      blobData: data,
-      signer: { accountAddress: storageAddr },
-      blobName,
-      expirationMicros,
-      options: { usdSponsor: { feePayerAddress: cfg.gasStationAccount }, build: { withFeePayer: true }, submit: { transactionSubmitter: dummySubmitter } },
-    });
-    if (!registrationEvidence?.actualStorageUnits || !registrationEvidence?.actualGasUsed) {
-      throw Object.assign(new Error('Shelby registration is still finalizing'), {
-        code: 'registration_evidence_missing',
-      });
-    }
-    onCheckpoint?.('finalizing', { registerTransactionHash: registrationEvidence.transactionHash });
-    return {
-      key: blobName,
-      url: readUrl(blobName),
-      account: storageAddr.toString(),
-      size: data.length,
-      ownedByYou: true,
-      paymentMode: 'solana-usdc',
-      expirationMicros,
-      ...registrationEvidence,
-    };
-  } finally {
-    ShelbyBlobClient.createRegisterBlobPayload = createRegisterPayload;
-    for (const [a, fn] of originals) a.signAndSubmitTransaction = fn; // restore
-    client.rpc.getChallenge = realGetChallenge;
+  onStep?.('encoding');
+  const erasureProvider = await createDefaultErasureCodingProvider();
+  const commitments = await generateCommitments(erasureProvider, data);
+  const built = await jsonRequest('/api/shelby/register', {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    blobMerkleRoot: commitments.blob_merkle_root,
+  });
+  if (!built.transaction) {
+    throw new Error('Vessel did not return a Shelby registration transaction');
   }
+  const transaction = MultiAgentTransaction.deserialize(
+    new Deserializer(fromB64(built.transaction)),
+  );
+
+  onStep?.('signing');
+  const signed = await signAptosTransactionWithSolana({
+    solanaWallet: solWallet(),
+    authenticationFunction: authFn,
+    rawTransaction: transaction,
+    domain: DOMAIN,
+  });
+  if (signed.status !== 'Approved' && signed.status !== 'APPROVED') {
+    throw new Error('User rejected the signature');
+  }
+
+  onStep?.('sponsoring');
+  const registered = await jsonRequest('/api/sponsor/submit', {
+    transaction: b64(transaction.bcsToBytes()),
+    senderAuthenticator: b64(signed.args.bcsToBytes()),
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+  });
+  const registrationEvidence = {
+    transactionHash: registered.transactionHash || registered.hash,
+    actualStorageUnits: registered.actualStorageUnits,
+    actualGasUsed: registered.actualGasUsed,
+  };
+  if (
+    !registrationEvidence.transactionHash
+    || registrationEvidence.actualStorageUnits == null
+    || registrationEvidence.actualGasUsed == null
+  ) {
+    throw Object.assign(new Error('Shelby registration is still finalizing'), {
+      code: 'registration_evidence_missing',
+    });
+  }
+  onCheckpoint?.('registered', registrationEvidence);
+
+  onStep?.('uploading');
+  onCheckpoint?.('uploading', {
+    registerTransactionHash: registrationEvidence.transactionHash,
+  });
+  await uploadBlobViaVesselGateway(data, {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+  });
+  onCheckpoint?.('finalizing', {
+    registerTransactionHash: registrationEvidence.transactionHash,
+  });
+  return {
+    key: blobName,
+    url: readUrl(blobName),
+    account: storageAddr.toString(),
+    size: data.length,
+    ownedByYou: true,
+    paymentMode: 'solana-usdc',
+    expirationMicros,
+    ...registrationEvidence,
+  };
 }
 
 async function submitContractSettlement({ deployment, contractQuote, contractSignature }) {
@@ -226,37 +233,73 @@ async function submitContractSettlement({ deployment, contractQuote, contractSig
 async function usdcBalance() {
   try {
     const cfg = await loadConfig();
-    const conn = new Connection(cfg.solanaRpc || 'https://api.devnet.solana.com', 'confirmed');
-    const ata = await getAssociatedTokenAddress(new PublicKey(cfg.usdcMint), new PublicKey(pubkey));
-    const bal = await conn.getTokenAccountBalance(ata);
-    return Number(bal?.value?.uiAmount || 0);
-  } catch { return 0; }
+    const connection = new Connection(cfg.solanaRpc || 'https://api.devnet.solana.com', 'confirmed');
+    const account = await getAssociatedTokenAddress(
+      new PublicKey(cfg.usdcMint),
+      new PublicKey(pubkey),
+    );
+    const balance = await connection.getTokenAccountBalance(account);
+    return Number(balance?.value?.uiAmount || 0);
+  } catch {
+    return 0;
+  }
 }
 
-async function resumeBlobWrite(file, { expectedFileHash, blobName } = {}) {
-  if (!client || !storageAddr) throw new Error('Reconnect your Solana wallet before recovery');
+async function resumeBlobWrite(file, {
+  expectedFileHash,
+  blobName,
+  quoteToken,
+  paidAuthorization,
+  uploadContext,
+  contractQuote,
+  contractSignature,
+} = {}) {
+  if (!storageAddr) throw new Error('Reconnect your Solana wallet before recovery');
   const data = new Uint8Array(await file.arrayBuffer());
   const sha = await sha256Hex(data);
-  if (sha !== expectedFileHash) throw Object.assign(new Error('The selected file does not match this recovery record'), { code: 'file_changed' });
-  await client.rpc.putBlob({
-    account: storageAddr.toString(),
-    blobName,
-    blobData: data,
+  if (sha !== expectedFileHash) {
+    throw Object.assign(
+      new Error('The selected file does not match this recovery record'),
+      { code: 'file_changed' },
+    );
+  }
+  await uploadBlobViaVesselGateway(data, {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
   });
   return { key: blobName, size: data.length };
 }
 
-function readUrl(blobName) { return `${CFG.rpc}/v1/blobs/${storageAddr.toString()}/${blobName}`; }
+function readUrl(blobName) {
+  const path = String(blobName).split('/').map(encodeURIComponent).join('/');
+  return `/api/shelby/blobs/${storageAddr.toString()}/${path}`;
+}
 
 async function sha256Hex(bytes) {
-  const buf = await crypto.subtle.digest('SHA-256', bytes);
-  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const buffer = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(buffer)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 window.VesselSolana = {
   available: () => Boolean(provider && pubkey && storageAddr),
   network: NET,
-  connect, selectProvider, clearProvider, disconnect: clearProvider, loadConfig, deriveAddress,
-  uploadSponsored, resumeBlobWrite, submitContractSettlement, usdcBalance, readUrl,
-  get state() { return { solana: pubkey, storageAccount: storageAddr?.toString() }; },
+  connect,
+  selectProvider,
+  clearProvider,
+  disconnect: clearProvider,
+  loadConfig,
+  deriveAddress,
+  uploadSponsored,
+  resumeBlobWrite,
+  submitContractSettlement,
+  usdcBalance,
+  readUrl,
+  get state() {
+    return { solana: pubkey, storageAccount: storageAddr?.toString() };
+  },
 };

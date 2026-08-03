@@ -1,6 +1,4 @@
 import { getWallets } from '@wallet-standard/app';
-import { Network } from '@aptos-labs/ts-sdk';
-import { ShelbyClient } from '@shelby-protocol/sdk/browser';
 import { applyFamilyCapabilities, createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
@@ -22,7 +20,6 @@ const discoveredRegistry = createWalletRegistry({
   eventTarget: window,
 });
 const adapters = new Map();
-const artifactClient = new ShelbyClient({ network: Network.TESTNET });
 
 const availableRegistry = {
   async scan() {
@@ -78,6 +75,8 @@ const uploadRouter = createUploadRouter({
       expectedFileHash: context.expectedFileHash,
       paymentTier: context.paymentTier,
       uploadContext: context.uploadContext,
+      contractQuote: context.contractQuote,
+      contractSignature: context.contractSignature,
       onStep: context.onStep,
       onCheckpoint: context.onCheckpoint,
     });
@@ -114,13 +113,10 @@ window.VesselWallets = {
   async listArtifacts() {
     const session = controller.getState().session;
     if (!session?.storageAddress) return [];
-    const rows = await artifactClient.coordination.getAccountBlobs({
-      account: session.storageAddress,
-    });
-    return rows.map((row) => ({
-      ...row,
-      url: `${artifactClient.baseUrl}/v1/blobs/${session.storageAddress}/${row.blobNameSuffix}`,
-    }));
+    const response = await fetch(`/api/shelby/artifacts?account=${encodeURIComponent(session.storageAddress)}`);
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json.error || 'Unable to load Shelby artifacts');
+    return Array.isArray(json.items) ? json.items : [];
   },
   reconcileArtifacts(local, remote) {
     return reconcileArtifacts(local, remote, controller.getState().session || {});
@@ -135,11 +131,21 @@ window.VesselWallets = {
         session,
         expectedFileHash: record.context.fileHash,
         blobName: record.context.blobName,
+        quoteToken: record.quoteToken,
+        paidAuthorization: record.paidAuthorization,
+        uploadContext: record.context,
+        contractQuote: record.contractQuote,
+        contractSignature: record.contractSignature,
       });
     }
     return window.VesselSolana.resumeBlobWrite(file, {
       expectedFileHash: record.context.fileHash,
       blobName: record.context.blobName,
+      quoteToken: record.quoteToken,
+      paidAuthorization: record.paidAuthorization,
+      uploadContext: record.context,
+      contractQuote: record.contractQuote,
+      contractSignature: record.contractSignature,
     });
   },
   upload(file, context = {}) {

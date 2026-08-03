@@ -521,6 +521,9 @@ function initUpload() {
           tierId: record.paymentTier,
           totalAccountingMicro: record.quotedAccountingMicro,
           solanaAmountMicro: record.quotedAccountingMicro,
+          contractQuote: record.contractQuote,
+          contractSignature: record.contractSignature,
+          quotePublicKey: record.quotePublicKey,
         });
         const recoveredContext = Object.freeze({
           file,
@@ -678,6 +681,8 @@ function initUpload() {
           expectedFileHash: quotedContext.quote.fileHash,
           paymentTier: quotedContext.quote.tierId,
           uploadContext: quotedContext.intent,
+          contractQuote: quotedContext.quote.contractQuote,
+          contractSignature: quotedContext.quote.contractSignature,
           onStep: setStep,
           onCheckpoint,
         });
@@ -730,6 +735,8 @@ function initUpload() {
           expectedFileHash: quotedContext.quote.fileHash,
           paymentTier: quotedContext.quote.tierId,
           uploadContext: quotedContext.intent,
+          contractQuote: quotedContext.quote.contractQuote,
+          contractSignature: quotedContext.quote.contractSignature,
           onStep: setStep,
           onCheckpoint,
         });

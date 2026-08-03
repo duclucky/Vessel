@@ -26,3 +26,13 @@ test('DAA upload binds the sponsor request to quote, authorization, hash, tier, 
   assert.doesNotMatch(source, /uploadToken/);
   assert.doesNotMatch(source, /7\s*\*\s*24\s*\*\s*3600/);
 });
+
+test('DAA registration and bytes use authenticated Vessel server routes', () => {
+  assert.match(source, /\/api\/shelby\/register/);
+  assert.match(source, /uploadBlobViaVesselGateway/);
+  assert.match(source, /contractQuote/);
+  assert.match(source, /contractSignature/);
+  assert.doesNotMatch(source, /new ShelbyClient/);
+  assert.doesNotMatch(source, /anonymous writes/i);
+  assert.doesNotMatch(source, /ephemeral/);
+});
