@@ -17,7 +17,7 @@ import {
 
 export const APTOS_TESTNET_CHAIN_ID = 2;
 export const REQUIRED_THRESHOLD = 2;
-export const REQUIRED_TIMELOCK_SECONDS = 86_400;
+export const REQUIRED_TIMELOCK_SECONDS = null;
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..');
@@ -58,16 +58,15 @@ export function validateMultisigInputs({ owners, threshold, timelockSeconds }) {
 
   const normalizedThreshold = parseInteger(threshold, 'threshold');
   invariant(normalizedThreshold === REQUIRED_THRESHOLD, 'Aptos multisig threshold must be 2');
-  const normalizedTimelock = parseInteger(timelockSeconds, 'timelock');
   invariant(
-    normalizedTimelock === REQUIRED_TIMELOCK_SECONDS,
-    'Aptos multisig timelock must be exactly 86,400 seconds',
+    timelockSeconds === null,
+    'Aptos native multisig timelock is disabled on Aptos Testnet and must be null',
   );
 
   return Object.freeze({
     owners: Object.freeze(normalizedOwners),
     threshold: normalizedThreshold,
-    timelockSeconds: normalizedTimelock,
+    timelockSeconds: null,
   });
 }
 
@@ -75,15 +74,13 @@ export function buildCreatePayload(config) {
   const validated = validateMultisigInputs(config);
   return Object.freeze({
     bootstrapper: validated.owners[0],
-    function: '0x1::multisig_account::create_with_owners_and_timelock',
+    function: '0x1::multisig_account::create_with_owners',
     typeArguments: Object.freeze([]),
     functionArguments: Object.freeze([
       Object.freeze(validated.owners.slice(1)),
       validated.threshold,
       Object.freeze(['vessel_role']),
       Object.freeze([Object.freeze([...Buffer.from('settlement_admin', 'utf8')])]),
-      validated.timelockSeconds,
-      null,
     ]),
   });
 }
@@ -198,16 +195,20 @@ export async function readMultisigStatus({ client, multisigAddress }) {
     client.getAccountResource({
       accountAddress: address,
       resourceType: '0x1::multisig_account::MultisigAccountTimeLock',
+    }).catch((error) => {
+      const status = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
+      if (status === 404 || error?.data?.error_code === 'resource_not_found') return null;
+      throw error;
     }),
   ]);
   const accountData = resourceData(account);
-  const timelockData = enumV1Data(timelock);
+  const timelockData = timelock ? enumV1Data(timelock) : null;
   return Object.freeze({
     multisigAddress: address,
     owners: Object.freeze((accountData.owners || []).map((owner) => normalizeAddress(owner))),
     threshold: Number(accountData.num_signatures_required),
-    timelockSeconds: Number(timelockData.timelock_period),
-    overrideThreshold: timelockData.override_threshold?.vec?.[0] ?? null,
+    timelockSeconds: timelockData ? Number(timelockData.timelock_period) : null,
+    overrideThreshold: timelockData?.override_threshold?.vec?.[0] ?? null,
     nextSequenceNumber: String(accountData.next_sequence_number),
     lastExecutedSequenceNumber: String(accountData.last_executed_sequence_number),
   });
@@ -222,8 +223,8 @@ export async function verifyAptosDeployment({ client, deployment, expected }) {
   const status = await readMultisigStatus({ client, multisigAddress });
   invariant(status.owners.length === 3 && status.threshold === REQUIRED_THRESHOLD,
     'On-chain multisig must be 2-of-3');
-  invariant(status.timelockSeconds === REQUIRED_TIMELOCK_SECONDS && status.overrideThreshold === null,
-    'On-chain multisig must enforce the 86,400-second timelock without override');
+  invariant(status.timelockSeconds === null && status.overrideThreshold === null,
+    'On-chain Aptos Testnet multisig must not have a native timelock resource');
 
   await client.getAccountModule({ accountAddress: moduleAddress, moduleName: 'vessel_settlement' });
   const versionResult = await client.view({
@@ -262,10 +263,16 @@ export async function verifyAptosDeployment({ client, deployment, expected }) {
 
 function environmentConfig(env = process.env) {
   const owners = String(env.APTOS_MULTISIG_OWNERS || '').split(',').map((value) => value.trim()).filter(Boolean);
+  const configuredTimelock = env.APTOS_MULTISIG_TIMELOCK_SECONDS;
+  const timelockSeconds = configuredTimelock === undefined
+    || configuredTimelock === ''
+    || String(configuredTimelock).toLowerCase() === 'null'
+    ? null
+    : configuredTimelock;
   return validateMultisigInputs({
     owners,
     threshold: env.APTOS_MULTISIG_THRESHOLD ?? REQUIRED_THRESHOLD,
-    timelockSeconds: env.APTOS_MULTISIG_TIMELOCK_SECONDS ?? REQUIRED_TIMELOCK_SECONDS,
+    timelockSeconds,
   });
 }
 

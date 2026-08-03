@@ -2,20 +2,23 @@
 
 Move package for Vessel's Aptos Testnet settlement vault. It accepts only signed
 `QuoteV1` service-fee settlements and is intended to be published and governed by
-an Aptos Multisig Account with a 24-hour timelock.
+a 2-of-3 Aptos Multisig Account. Aptos Testnet has the native multisig timelock
+feature disabled, so this beta account is created without a framework timelock.
+The Move module still delays scheduled configuration changes by 24 hours.
 
 The package is testnet-only until the deployment manifest records a verified
 module, vault, multisig, accepted ShelbyUSD metadata object, and quote signer.
 
 ## Multisig deployment
 
-Deployment uses an Aptos Multisig Account with exactly three unique owners, a
-2-of-3 threshold, a 86,400-second timelock, and no early-execution override.
+Deployment uses an Aptos Multisig Account with exactly three unique owners and a
+2-of-3 threshold. Its native timelock is `null` on Testnet.
 The helper emits unsigned wallet payloads and never reads private keys:
 
 ```powershell
 $env:APTOS_MULTISIG_OWNERS='0xOWNER1,0xOWNER2,0xOWNER3'
 $env:APTOS_MULTISIG_THRESHOLD='2'
+$env:APTOS_MULTISIG_TIMELOCK_SECONDS='null'
 node app/server/scripts/aptos-multisig-payload.mjs create
 ```
 
@@ -32,7 +35,7 @@ node app/server/scripts/aptos-multisig-payload.mjs publish-payload
 ```
 
 The first owner submits the printed proposal, a second owner approves it, and an
-owner executes it only after the timelock. Initialization is a separate multisig
+owner executes it after the 2-of-3 threshold is met. Initialization is a separate multisig
 proposal because the package intentionally has no single-key initializer:
 
 ```powershell

@@ -5,6 +5,7 @@ import {
   buildCreatePayload,
   buildInitializeProposalPayload,
   buildPublishProposalPayload,
+  readMultisigStatus,
   validateMultisigInputs,
   verifyAptosDeployment,
 } from '../scripts/aptos-multisig-payload.mjs';
@@ -16,39 +17,64 @@ const owners = [
 ];
 const multisigAddress = `0x${'44'.repeat(32)}`;
 
-test('Aptos multisig create payload fixes 2-of-3 governance and a 24-hour timelock', () => {
-  const config = validateMultisigInputs({ owners, threshold: 2, timelockSeconds: 86_400 });
+test('Aptos multisig create payload fixes 2-of-3 governance without a Testnet timelock', () => {
+  const config = validateMultisigInputs({ owners, threshold: 2, timelockSeconds: null });
   const payload = buildCreatePayload(config);
 
-  assert.equal(payload.function, '0x1::multisig_account::create_with_owners_and_timelock');
+  assert.equal(payload.function, '0x1::multisig_account::create_with_owners');
   assert.deepEqual(payload.typeArguments, []);
   assert.deepEqual(payload.functionArguments, [
     owners.slice(1),
     2,
     ['vessel_role'],
     [[...Buffer.from('settlement_admin', 'utf8')]],
-    86_400,
-    null,
   ]);
 });
 
 test('Aptos multisig validation rejects unsafe governance inputs', () => {
   assert.throws(
-    () => validateMultisigInputs({ owners: [owners[0], owners[0], owners[2]], threshold: 2, timelockSeconds: 86_400 }),
+    () => validateMultisigInputs({ owners: [owners[0], owners[0], owners[2]], threshold: 2, timelockSeconds: null }),
     /unique/i,
   );
   assert.throws(
-    () => validateMultisigInputs({ owners: owners.slice(0, 2), threshold: 2, timelockSeconds: 86_400 }),
+    () => validateMultisigInputs({ owners: owners.slice(0, 2), threshold: 2, timelockSeconds: null }),
     /three/i,
   );
   assert.throws(
-    () => validateMultisigInputs({ owners, threshold: 1, timelockSeconds: 86_400 }),
+    () => validateMultisigInputs({ owners, threshold: 1, timelockSeconds: null }),
     /threshold/i,
   );
   assert.throws(
-    () => validateMultisigInputs({ owners, threshold: 2, timelockSeconds: 0 }),
-    /86,400/i,
+    () => validateMultisigInputs({ owners, threshold: 2, timelockSeconds: 86_400 }),
+    /disabled on Aptos Testnet/i,
   );
+});
+
+test('Aptos multisig status treats an absent timelock resource as the approved null policy', async () => {
+  const status = await readMultisigStatus({
+    client: {
+      getLedgerInfo: async () => ({ chain_id: 2 }),
+      getAccountResource: async ({ resourceType }) => {
+        if (resourceType === '0x1::multisig_account::MultisigAccount') {
+          return {
+            owners,
+            num_signatures_required: '2',
+            next_sequence_number: '0',
+            last_executed_sequence_number: '0',
+          };
+        }
+        const error = new Error('Resource not found');
+        error.status = 404;
+        throw error;
+      },
+    },
+    multisigAddress,
+  });
+
+  assert.equal(status.timelockSeconds, null);
+  assert.equal(status.overrideThreshold, null);
+  assert.equal(status.threshold, 2);
+  assert.deepEqual(status.owners, owners);
 });
 
 test('publish proposal wraps bytecode compiled for the created multisig address', () => {

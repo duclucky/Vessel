@@ -20,7 +20,7 @@ const validManifest = () => ({
     multisigAddress: `0x${'33'.repeat(32)}`,
     acceptedAsset: `0x${'44'.repeat(32)}`,
     deploymentTransaction: `0x${'55'.repeat(32)}`,
-    timelockSeconds: 86400,
+    timelockSeconds: null,
   },
   solana: {
     cluster: 'devnet',
@@ -52,6 +52,7 @@ test('enabled settlement registry loads and freezes complete chain deployments',
   assert.equal(result.enabled, true);
   assert.equal(result.configVersion, '1');
   assert.equal(result.aptos.chainId, 2);
+  assert.equal(result.aptos.timelockSeconds, null);
   assert.equal(result.solana.cluster, 'devnet');
   assert.equal(Object.isFrozen(result), true);
   assert.equal(Object.isFrozen(result.aptos), true);
@@ -62,7 +63,7 @@ test('enabled settlement registry rejects undeployed or inconsistent records', (
     (value) => { value.aptos.moduleAddress = '0x0'; },
     (value) => { value.solana.programId = '11111111111111111111111111111111'; },
     (value) => { value.quotePublicKey = '88'.repeat(32); },
-    (value) => { value.aptos.timelockSeconds = 60; },
+    (value) => { value.aptos.timelockSeconds = 86400; },
     (value) => { value.solana.timelockSeconds = 60; },
     (value) => { value.aptos.chainId = 1; },
     (value) => { value.solana.cluster = 'mainnet-beta'; },

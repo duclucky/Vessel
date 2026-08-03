@@ -46,6 +46,13 @@ function requireTimelock(value, field) {
   return MIN_TIMELOCK_SECONDS;
 }
 
+function requireAptosNoTimelock(value) {
+  if (value !== null) {
+    throw deploymentError('Aptos Testnet timelock must be null because the native feature is disabled');
+  }
+  return null;
+}
+
 export function loadSettlementDeployments({
   file,
   quotePublicKey,
@@ -90,7 +97,7 @@ export function loadSettlementDeployments({
       manifest.aptos.deploymentTransaction,
       'Aptos deployment transaction',
     ),
-    timelockSeconds: requireTimelock(manifest.aptos.timelockSeconds, 'Aptos timelock'),
+    timelockSeconds: requireAptosNoTimelock(manifest.aptos.timelockSeconds),
   });
   const solana = Object.freeze({
     cluster: 'devnet',
