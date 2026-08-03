@@ -11,6 +11,7 @@ const THRESHOLD = 2;
 const TIMELOCK_SECONDS = 86_400;
 const VAULT_INDEX = 0;
 const UPGRADEABLE_LOADER = new PublicKey('BPFLoaderUpgradeab1e11111111111111111111111');
+export const SQUADS_PROGRAM_TREASURY = 'HM5y4mz3Bt9JY9mr1hkyhnvqxSH4H2u2451j7Hc2dtvK';
 
 const scriptError = (message) => Object.assign(new Error(message), {
   code: 'invalid_squads_setup',
@@ -36,6 +37,9 @@ export function buildSquadsCreatePlan({ members, createKey, creator, treasury })
   const create = key(createKey, 'Squads create key');
   const creatorKey = key(creator, 'Squads creator');
   const treasuryKey = key(treasury, 'Squads treasury');
+  if (treasuryKey.toBase58() !== SQUADS_PROGRAM_TREASURY) {
+    throw scriptError('Squads treasury must match the on-chain ProgramConfig program treasury');
+  }
   const normalizedMembers = normalizeSquadsMembers(members.join(','));
   const [multisigPda] = multisig.getMultisigPda({ createKey: create });
   const [vaultPda] = multisig.getVaultPda({ multisigPda, index: VAULT_INDEX });
@@ -171,7 +175,7 @@ function envPlan() {
     members: normalizeSquadsMembers(process.env.SOLANA_SQUADS_MEMBERS),
     createKey: process.env.SOLANA_SQUADS_CREATE_KEY,
     creator: process.env.SOLANA_SQUADS_CREATOR,
-    treasury: process.env.SOLANA_SQUADS_TREASURY || process.env.SOLANA_SQUADS_CREATOR,
+    treasury: process.env.SOLANA_SQUADS_TREASURY || SQUADS_PROGRAM_TREASURY,
   });
 }
 

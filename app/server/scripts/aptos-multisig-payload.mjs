@@ -82,8 +82,8 @@ export function buildCreatePayload(config) {
       validated.threshold,
       Object.freeze(['vessel_role']),
       Object.freeze([Object.freeze([...Buffer.from('settlement_admin', 'utf8')])]),
-      Object.freeze([validated.timelockSeconds]),
-      Object.freeze([]),
+      validated.timelockSeconds,
+      null,
     ]),
   });
 }

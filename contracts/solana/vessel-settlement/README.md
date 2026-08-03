@@ -25,7 +25,9 @@ node scripts/solana-squads-setup.mjs verify
 
 Required public environment values are `SOLANA_SQUADS_MEMBERS` (three
 comma-separated keys), `SOLANA_SQUADS_CREATE_KEY`, `SOLANA_SQUADS_CREATOR`,
-and `SOLANA_PROGRAM_ID`. `SOLANA_SQUADS_TREASURY` defaults to the creator.
+and `SOLANA_PROGRAM_ID`. `SOLANA_SQUADS_TREASURY` must match the treasury in
+the Squads v4 on-chain ProgramConfig; the setup script fails closed on any
+operator-supplied recipient.
 Authority transfer additionally requires the current authority's public key in
 `SOLANA_CURRENT_UPGRADE_AUTHORITY`.
 

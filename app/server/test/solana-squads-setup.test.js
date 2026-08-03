@@ -9,6 +9,7 @@ import {
 } from '../scripts/solana-squads-setup.mjs';
 
 const keys = Array.from({ length: 6 }, () => Keypair.generate().publicKey.toBase58());
+const squadsProgramTreasury = 'HM5y4mz3Bt9JY9mr1hkyhnvqxSH4H2u2451j7Hc2dtvK';
 
 test('Squads creation is autonomous 2-of-3 with a 24-hour timelock', () => {
   const members = normalizeSquadsMembers(keys.slice(0, 3).join(','));
@@ -16,7 +17,7 @@ test('Squads creation is autonomous 2-of-3 with a 24-hour timelock', () => {
     members,
     createKey: keys[3],
     creator: keys[4],
-    treasury: keys[5],
+    treasury: squadsProgramTreasury,
   });
 
   assert.equal(plan.threshold, 2);
@@ -32,6 +33,18 @@ test('Squads creation is autonomous 2-of-3 with a 24-hour timelock', () => {
   const instruction = buildCreateInstruction(plan);
   assert.equal(instruction.programId.toBase58(), 'SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf');
   assert.ok(instruction.keys.some(({ pubkey }) => pubkey.toBase58() === plan.multisigAddress));
+});
+
+test('Squads creation rejects a treasury that differs from ProgramConfig', () => {
+  assert.throws(
+    () => buildSquadsCreatePlan({
+      members: keys.slice(0, 3),
+      createKey: keys[3],
+      creator: keys[4],
+      treasury: keys[5],
+    }),
+    /program treasury/i,
+  );
 });
 
 test('Squads setup rejects duplicate or malformed members', () => {

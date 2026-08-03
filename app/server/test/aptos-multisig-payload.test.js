@@ -27,8 +27,8 @@ test('Aptos multisig create payload fixes 2-of-3 governance and a 24-hour timelo
     2,
     ['vessel_role'],
     [[...Buffer.from('settlement_admin', 'utf8')]],
-    [86_400],
-    [],
+    86_400,
+    null,
   ]);
 });
 

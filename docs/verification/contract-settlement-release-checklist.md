@@ -55,13 +55,22 @@ placeholder:
 
 ### Governance verification
 
-- `node scripts/aptos-multisig-payload.mjs verify` fails closed because
-  `APTOS_MULTISIG_ADDRESS` is not configured.
-- `node scripts/solana-squads-setup.mjs verify` fails closed because exactly
-  three public Squads member keys are not configured.
-- Consequently, the 2-of-3 thresholds, timelocks, vault authorities, accepted
-  assets, config version, quote key, and upgrade authorities cannot yet be
-  verified against either public chain.
+- Aptos Testnet creation transaction
+  `0xd971525916652968392e97f8c309069d2b9fa0b3a65fa26fb9548d2f4ca75ae8`
+  aborted with `ETIMELOCK_NOT_ENABLED`. The framework's native multisig
+  timelock feature is not enabled on Aptos Testnet, so no Aptos multisig account
+  was created. Vessel does not silently downgrade the approved 24-hour policy.
+- Solana Squads creation transaction
+  `3uugP9Vmp88BaJJkqdPQvdyX1xKddF3rAyHxZnajLbt8CARTU65opCoLg5rxk7KSMi7i7TbHDNm6QhGhA4Uy7u6A`
+  is finalized on Devnet. The autonomous Squads multisig is
+  `2VQfFVSjR8tSCFwvPmz974XGaJQEY8CKa8krF2AM1qeH`; vault index 0 is
+  `2yHruBbf2b5P5SdHCXWBypSc1EoQe4Cxm9UbNHKmJSeE`. On-chain verification
+  confirms three members, threshold 2, null config authority, and an
+  86,400-second timelock.
+- The Solana Vessel Program is not yet deployed or transferred to the Squads
+  vault. Aptos module publication remains blocked by the governance decision
+  above. Accepted assets, quote key, config version, and upgrade authorities
+  therefore cannot yet be marked verified end to end.
 
 ### Required real-flow evidence
 
