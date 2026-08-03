@@ -1,0 +1,16 @@
+[package]
+name = "VesselSettlement"
+version = "1.0.0"
+upgrade_policy = "compatible"
+
+[addresses]
+vessel_settlement = "_"
+aptos_framework = "0x1"
+
+[dev-addresses]
+vessel_settlement = "0xcafe"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-framework.git"
+rev = "b9c6e489be6c9a51ae2266a7f3ecec5b521d2f95"
+subdir = "aptos-framework"
