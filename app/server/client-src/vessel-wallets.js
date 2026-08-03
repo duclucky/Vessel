@@ -4,6 +4,7 @@ import { ShelbyClient } from '@shelby-protocol/sdk/browser';
 import { applyFamilyCapabilities, createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
+import { submitAptosContractSettlement } from './wallets/aptos-contract-settlement.js';
 import { resumeNativeBlobWrite, uploadNativeAptos } from './wallets/aptos-upload.js';
 import { createUploadRouter } from './wallets/upload-router.js';
 import { createSolanaDaaAdapter } from './wallets/solana-adapter.js';
@@ -89,6 +90,17 @@ window.VesselWallets = {
   getActiveAptosAdapter() {
     const session = controller.getState().session;
     return session?.chain === 'aptos' ? controller.getActiveAdapter() : null;
+  },
+  getAptosSettlementClient(deployment) {
+    return {
+      submit: ({ contractQuote, contractSignature }) => submitAptosContractSettlement({
+        adapter: controller.getActiveAdapter(),
+        session: controller.getState().session,
+        deployment,
+        contractQuote,
+        contractSignature,
+      }),
+    };
   },
   async listArtifacts() {
     const session = controller.getState().session;
