@@ -4,6 +4,7 @@
 import { createLedger } from './ledger.js';
 import { walletPresentation } from './wallet-ui.js';
 import { mountWalletUi } from './wallet-modal.js';
+import { confirmAction } from './confirm-dialog.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -391,9 +392,20 @@ async function initGallery() {
   }, { once: true }));
   $$('.js-copy', grid).forEach((b) => (b.onclick = () => copy(b.dataset.url)));
   $$('.js-view', grid).forEach((b) => (b.onclick = () => window.open(b.dataset.url, '_blank')));
-  $$('.js-del', grid).forEach((b) => (b.onclick = () => {
-    if (!confirm('Remove from your gallery? (the blob stays on Shelby until it expires)')) return;
-    forgetMine(b.dataset.key); toast('Removed from gallery', 'ok'); initGallery();
+  $$('.js-del', grid).forEach((b) => (b.onclick = async () => {
+    const confirmed = await confirmAction({
+      opener: b,
+      kicker: 'GALLERY ACTION',
+      title: 'Remove artifact?',
+      message: "This removes the artifact from this browser's Gallery. The blob stays on Shelby until it expires.",
+      cancelLabel: 'CANCEL',
+      confirmLabel: 'REMOVE FROM GALLERY',
+    });
+    if (!confirmed) return;
+    forgetMine(b.dataset.key);
+    toast('Removed from gallery', 'ok');
+    await initGallery();
+    document.querySelector('#gallery-title')?.focus();
   }));
 }
 function ttl(expiresAt) {

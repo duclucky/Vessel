@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { createLedger } from '../public/ledger.js';
-import { readPage, getIds } from './html-test-utils.js';
+import { readPage, getIds, publicDir } from './html-test-utils.js';
 
 function memoryStorage() {
   const map = new Map();
@@ -47,4 +49,12 @@ test('Gallery retains its grid hook and Vault composition', () => {
   assert.equal(getIds(html).has('gallery-grid'), true);
   assert.match(html, />\s*The Vault\s*</);
   assert.match(html, /Your wallet-owned artifacts/i);
+});
+
+test('Gallery removes local state only after awaited confirmation', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const confirmation = source.indexOf('await confirmAction({');
+  const guard = source.indexOf('if (!confirmed) return;', confirmation);
+  const removal = source.indexOf('forgetMine(b.dataset.key)', guard);
+  assert.equal(confirmation >= 0 && guard > confirmation && removal > guard, true);
 });
