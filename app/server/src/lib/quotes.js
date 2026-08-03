@@ -3,6 +3,7 @@ import { normalizeRetentionDays } from '../../public/retention.js';
 
 const QUOTE_PREFIX = 'vquote';
 const QUOTE_TTL_MS = 5 * 60_000;
+const RETENTION_DAY_MS = 86_400_000;
 const HEX_64 = /^[0-9a-f]{64}$/;
 const CHAINS = new Set(['aptos', 'solana']);
 
@@ -131,7 +132,7 @@ function publicQuote({ token, payload, context }) {
     targetExpirationUtc: new Date(context.expirationMicros / 1_000).toISOString(),
     issuedAtMs: payload.iat,
     expiresAtMs: payload.exp,
-    serverTimeMs: payload.iat,
+    serverTimeMs: Math.trunc(context.expirationMicros / 1_000) - context.days * RETENTION_DAY_MS,
     settlementToken: aptos ? 'APT + ShelbyUSD' : 'Devnet USDC',
     settlementNetwork: aptos ? 'Aptos Testnet' : 'Solana Devnet',
     solanaAmountMicro: aptos ? '0' : breakdown.totalAccountingMicro,

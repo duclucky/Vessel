@@ -38,6 +38,11 @@ test('shared CSS provides keyboard, touch, disabled, and reduced-motion states',
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.match(css, /details\[open\]\s*>\s*\.vessel-nav/);
   assert.match(css, /max-height:\s*500px/);
+  assert.match(
+    css,
+    /input\.vessel-input[^\{]*\{[^}]*background:\s*rgba\(12,\s*14,\s*19,\s*0\.7\)[^}]*color:\s*#e2e2e9/s,
+  );
+  assert.doesNotMatch(css, /\.vessel-input[^}]*!important/s);
   assert.match(readPage('index.html'), /vessel-landing-hero/);
 });
 

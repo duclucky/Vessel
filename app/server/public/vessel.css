@@ -35,6 +35,7 @@ details[open] > .vessel-nav { z-index: 2; background: #090d16; border-color: rgb
 :where(button, input, textarea):disabled { cursor: not-allowed; opacity: 0.55; }
 :where(a, button, input, textarea, summary):focus-visible { outline: 2px solid #5ee6ff; outline-offset: 4px; }
 .vessel-input { width: 100%; min-height: 48px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; background: rgba(12, 14, 19, 0.7); padding: 0.85rem 1rem; color: #e2e2e9; font: 400 16px/1.5 Geist, sans-serif; transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
+input.vessel-input, textarea.vessel-input { background: rgba(12, 14, 19, 0.7); color: #e2e2e9; }
 .vessel-input::placeholder { color: #7d8785; }
 .vessel-input:hover { border-color: rgba(181, 255, 240, 0.22); }
 .vessel-input:focus { border-color: rgba(94, 230, 255, 0.65); box-shadow: 0 0 0 3px rgba(94, 230, 255, 0.12); outline: none; }

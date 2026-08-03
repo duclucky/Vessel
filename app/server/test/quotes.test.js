@@ -75,6 +75,19 @@ test('upload quote is signed, wallet-bound, and valid for five minutes', async (
   );
 });
 
+test('public quote reports the retention clock used to calculate expiration', async () => {
+  const manager = QuoteManager.forTest({
+    secret: SECRET,
+    now: () => 99_999,
+    pricing: async () => breakdown,
+  });
+
+  const quote = await manager.issueUpload(baseContext);
+
+  assert.equal(quote.issuedAtMs, 99_999);
+  assert.equal(quote.serverTimeMs, 1_000);
+});
+
 test('quote validation rejects a tampered payload before trusting its fields', async () => {
   const manager = QuoteManager.forTest({ secret: SECRET, pricing: async () => breakdown });
   const quote = await manager.issueUpload(baseContext);
