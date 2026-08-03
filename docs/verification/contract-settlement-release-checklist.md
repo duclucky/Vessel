@@ -89,6 +89,14 @@ TypeScript suite then passed 9/9. The validator was stopped after the run.
   `2yHruBbf2b5P5SdHCXWBypSc1EoQe4Cxm9UbNHKmJSeE`. Its config/vault have not
   been initialized through Squads yet, so the cross-chain deployment is not
   verified end to end.
+- Solana initialize vault transaction, proposal, and two approvals are finalized
+  as `2JQcnuYSTuAT465nQjeVUpHRGY8znSNRgH62z72Y2hfWSAn6FzbpwVV3ecBnRTHpMCrXVV7qvYVdENDv64zY5FjW`,
+  `5zbFyTPY2d8eFwxCu2g7sVwFro19N1qCSvJY624JTJHbMxU6eceF5UuKwK985xXpECYPEKxMYPEQN1zVgxiRFo5V`,
+  `2hiNHJnvrHc6BhrXecnHbMJz81GVFKno94fDhvdG4fKChtSyuYHT3vNJ2htV2rEJys5pS6zRcbZgjLWkXDf6pBPw`,
+  and `41wNBS4RwYDWvqy9YYeoSkrhBQVWUQ4r6EuH4Hf6aZ2iu5TRUs2MwKPfuruhTVXtXNkSnVeDaBVaftC3JncTFCh1`.
+  Proposal PDA `9hCkD92WLaoLxbckPVyqHy6VatbD7XFUCuQutiJcRGUV` is Approved by members 1
+  and 2. Its on-chain execute-after timestamp is `1785851172`; attempting to
+  initialize before then would violate the approved Squads policy.
 
 ### Required real-flow evidence
 
