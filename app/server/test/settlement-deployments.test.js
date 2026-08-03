@@ -105,4 +105,7 @@ test('Vercel runtime manifest stays identical to the repository deployment recor
   const repository = JSON.parse(readFileSync('../../deployments/vessel-settlement.testnet.json', 'utf8'));
   const runtime = JSON.parse(readFileSync('deployments/vessel-settlement.testnet.json', 'utf8'));
   assert.deepEqual(runtime, repository);
+  const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
+  const apiBuild = vercel.builds.find((build) => build.src === 'api/index.js');
+  assert.ok(apiBuild.config.includeFiles.includes('deployments/**'));
 });
