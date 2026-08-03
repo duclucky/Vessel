@@ -20,12 +20,14 @@ test('settlement and sponsor routes require signed quote and paid authorization 
 });
 
 test('browser payment flow creates one immutable context and reuses its expiration', () => {
-  assert.match(app, /const uploadContext = Object\.freeze\(/);
-  assert.match(app, /body:\s*uploadContext/);
-  assert.match(app, /uploadContext,/);
-  assert.match(solana, /expirationMicros = uploadContext\.expirationMicros/);
-  assert.match(solana, /\.\.\.uploadContext/);
-  assert.doesNotMatch(solana, /const expirationMicros = Date\.now\(\)/);
+  assert.match(app, /activeUploadContext = Object\.freeze\(\{ file, intent, quote \}\)/);
+  assert.match(app, /settleQuote\(\{/);
+  assert.match(app, /expirationMicros:\s*quotedContext\.quote\.expirationMicros/);
+  assert.match(solana, /uploadContext\.expirationMicros !== expirationMicros/);
+  assert.match(solana, /paidAuthorization/);
+  assert.doesNotMatch(app, /\/api\/pay\/quote/);
+  assert.doesNotMatch(app, /\/api\/pay\/verify/);
+  assert.doesNotMatch(app, /7\s*\*\s*24\s*\*\s*3600/);
 });
 
 test('HTTP helper accepts an abort signal for wallet invalidation', () => {

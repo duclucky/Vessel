@@ -41,6 +41,7 @@ test('dynamic quote configuration is explicit and contains no development signin
   }
   assert.match(config, /process\.env\.DYNAMIC_QUOTES_ENABLED === 'true'/);
   assert.match(config, /process\.env\.PAY_SECRET \|\| ''/);
+  assert.match(config, /APTOS_TREASURY_ADDRESS \|\| process\.env\.GAS_STATION_ACCOUNT/);
   assert.doesNotMatch(config, /vessel-dev-secret/);
   assert.doesNotMatch(config, /priceBaseUsdc|pricePerMbUsdc/);
 });

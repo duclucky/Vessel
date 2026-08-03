@@ -35758,6 +35758,41 @@ ${String(result)}`);
     e7.SHELBYNET
   ];
 
+  // client-src/wallets/transaction-evidence.js
+  init_process();
+  init_buffer();
+  var evidenceError = (message, code) => Object.assign(new Error(message), { code });
+  var decimalString = (value, field) => {
+    try {
+      const parsed = BigInt(value);
+      if (parsed < 0n) throw new Error();
+      return parsed.toString();
+    } catch {
+      throw evidenceError(`Invalid ${field} in Shelby transaction`, "invalid_transaction_evidence");
+    }
+  };
+  function extractShelbyTransactionEvidence(transaction) {
+    if (!transaction || transaction.success !== true) {
+      throw evidenceError("Shelby registration transaction failed", "transaction_failed");
+    }
+    const event = (transaction.events || []).find((candidate) => String(candidate?.type || "").endsWith("::blob_metadata::BlobRegisteredEvent") || String(candidate?.type || "").endsWith("::BlobRegisteredEvent"));
+    if (!event || event.data?.payment_amount == null) {
+      throw evidenceError(
+        "Shelby registration event is not available yet",
+        "registration_evidence_missing"
+      );
+    }
+    const transactionHash = String(transaction.hash || transaction.transaction_hash || "");
+    if (!transactionHash) {
+      throw evidenceError("Transaction hash is missing", "invalid_transaction_evidence");
+    }
+    return Object.freeze({
+      actualStorageUnits: decimalString(event.data.payment_amount, "storage payment"),
+      actualGasUsed: decimalString(transaction.gas_used, "gas usage"),
+      transactionHash
+    });
+  }
+
   // client-src/wallets/aptos-upload.js
   var nativeError = (message, code) => Object.assign(new Error(message), { code });
   var sha2562 = (data) => crypto.subtle.digest("SHA-256", data);
@@ -35801,9 +35836,7 @@ ${String(result)}`);
       throw nativeError("ShelbyUSD is required for storage", "insufficient_shelby_usd");
     }
   }
-  async function contentAddressedName(file, blobData, digest) {
-    const hash = await digest(blobData);
-    const sha = [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  function contentAddressedName(file, sha) {
     const parts = String(file.name || "").split(".");
     const rawExtension = parts.length > 1 ? parts.pop() : "bin";
     const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
@@ -35812,7 +35845,12 @@ ${String(result)}`);
   async function uploadNativeAptos(file, {
     session,
     adapter,
-    expiresInSec = 7 * 24 * 3600,
+    expirationMicros,
+    expectedFileHash,
+    quoteToken,
+    paidAuthorization,
+    paymentTier,
+    uploadContext,
     onStep,
     deps = defaultDeps()
   }) {
@@ -35824,11 +35862,27 @@ ${String(result)}`);
     }
     assertNativeBalances(await readNativeBalances(session.sourceAddress, deps));
     const blobData = new Uint8Array(await file.arrayBuffer());
+    const computedDigest = new Uint8Array(await (deps.digest || sha2562)(blobData));
+    const computedHash = [...computedDigest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const expected = String(expectedFileHash || "").toLowerCase();
+    let hashDifference = computedHash.length ^ expected.length;
+    const comparisonLength = Math.max(computedHash.length, expected.length);
+    for (let index = 0; index < comparisonLength; index += 1) {
+      hashDifference |= (computedHash.charCodeAt(index) || 0) ^ (expected.charCodeAt(index) || 0);
+    }
+    if (hashDifference !== 0) {
+      throw nativeError("The selected file changed after quoting", "file_changed");
+    }
+    if (!Number.isSafeInteger(expirationMicros) || expirationMicros <= 0) {
+      throw nativeError("A quoted expiration is required", "invalid_quote_context");
+    }
+    const blobName = contentAddressedName(file, computedHash);
+    if (!Number.isSafeInteger(paymentTier) || paymentTier < 0 || !quoteToken || !paidAuthorization || uploadContext?.chain !== "aptos" || String(uploadContext.sourceAddress).toLowerCase() !== String(session.sourceAddress).toLowerCase() || String(uploadContext.storageAddress).toLowerCase() !== String(session.storageAddress).toLowerCase() || uploadContext.fileHash !== expected || uploadContext.blobName !== blobName || uploadContext.expirationMicros !== expirationMicros || Number(uploadContext.sizeBytes) !== Number(file.size)) {
+      throw nativeError("A paid quote authorization is required", "invalid_paid_authorization");
+    }
     const provider = await deps.createProvider();
     onStep?.("encoding");
     const commitments = await deps.generateCommitments(provider, blobData);
-    const blobName = await contentAddressedName(file, blobData, deps.digest || sha2562);
-    const expirationMicros = (deps.now?.() ?? Date.now()) * 1e3 + expiresInSec * 1e6;
     const chunksetSize = provider.config.chunkSizeBytes * provider.config.erasure_k;
     const payload = deps.createRegisterPayload({
       account: session.storageAddress,
@@ -35839,11 +35893,16 @@ ${String(result)}`);
       blobSize: commitments.raw_data_size,
       encoding: provider.config.enumIndex
     });
+    if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
+      throw nativeError("Unexpected Shelby register payload shape", "invalid_register_payload");
+    }
+    payload.functionArguments[5] = paymentTier;
     onStep?.("signing");
     const submitted = await adapter.signAndSubmitTransaction({ data: payload });
     if (!submitted?.hash) throw nativeError("Wallet did not return a transaction hash", "submit_failed");
     onStep?.("confirming");
-    await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+    const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+    const evidence = extractShelbyTransactionEvidence(transaction);
     onStep?.("uploading");
     await deps.shelby.rpc.putBlob({
       account: session.storageAddress,
@@ -35858,7 +35917,8 @@ ${String(result)}`);
       contentType: file.type || "application/octet-stream",
       ownedByYou: true,
       paymentMode: "native-aptos",
-      transactionHash: submitted.hash
+      expirationMicros,
+      ...evidence
     };
   }
 
@@ -41249,16 +41309,24 @@ Message: ${transactionMessage}.
         throw new Error("Reconnect a supported Solana wallet before uploading");
       }
       return window.VesselSolana.uploadSponsored(file, {
-        paymentId: context.paymentId,
-        uploadToken: context.uploadToken,
+        quoteToken: context.quoteToken,
+        paidAuthorization: context.paidAuthorization,
+        expirationMicros: context.expirationMicros,
+        expectedFileHash: context.expectedFileHash,
+        paymentTier: context.paymentTier,
         uploadContext: context.uploadContext,
-        onStep: context.onStep
+        onStep: context.onStep,
+        onCheckpoint: context.onCheckpoint
       });
     }
   });
   var { getActiveAdapter: _getActiveAdapter, ...publicController } = controller;
   window.VesselWallets = {
     ...publicController,
+    getActiveAptosAdapter() {
+      const session = controller.getState().session;
+      return session?.chain === "aptos" ? controller.getActiveAdapter() : null;
+    },
     upload(file, context = {}) {
       return uploadRouter.upload(file, {
         ...context,

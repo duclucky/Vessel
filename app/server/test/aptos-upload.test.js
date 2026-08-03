@@ -38,6 +38,7 @@ test('native upload registers before RPC byte upload and returns the wallet name
     size: 3,
     arrayBuffer: async () => Uint8Array.from([1, 2, 3]).buffer,
   };
+  const expectedFileHash = 'ab'.repeat(32);
 
   const result = await uploadNativeAptos(file, {
     session: { chain: 'aptos', mode: 'native', storageAddress: '0xabc', sourceAddress: '0xabc' },
@@ -47,13 +48,37 @@ test('native upload registers before RPC byte upload and returns the wallet name
         return { hash: '0xtxn' };
       },
     },
-    expiresInSec: 60,
+    expirationMicros: 2_592_001_000_000,
+    expectedFileHash,
+    quoteToken: 'vquote.test.signed',
+    paidAuthorization: 'vpaid.test.authorization',
+    paymentTier: 3,
+    uploadContext: {
+      chain: 'aptos',
+      sourceAddress: '0xabc',
+      storageAddress: '0xabc',
+      fileHash: expectedFileHash,
+      blobName: `media/${expectedFileHash}.png`,
+      sizeBytes: 3,
+      expirationMicros: 2_592_001_000_000,
+    },
     onStep: (step) => steps.push(step),
     deps: {
       aptos: {
         getAccountAPTAmount: async () => 100,
         getCurrentFungibleAssetBalances: async () => [{ amount: '100' }],
-        waitForTransaction: async ({ transactionHash }) => calls.push(['wait', transactionHash]),
+        waitForTransaction: async ({ transactionHash }) => {
+          calls.push(['wait', transactionHash]);
+          return {
+            success: true,
+            hash: transactionHash,
+            gas_used: '718',
+            events: [{
+              type: '0x42::blob_metadata::BlobRegisteredEvent',
+              data: { payment_amount: '4200' },
+            }],
+          };
+        },
       },
       shelby: {
         baseUrl: 'https://api.testnet.shelby.xyz/shelby',
@@ -66,26 +91,81 @@ test('native upload registers before RPC byte upload and returns the wallet name
         chunksetInput = { rawSize, chunksetSize };
         return 1;
       },
-      createRegisterPayload: (args) => ({ function: 'register', ...args }),
-      now: () => 1_000,
-      digest: async () => Uint8Array.from([0xab, 0xcd]).buffer,
+      createRegisterPayload: (args) => ({
+        function: 'register',
+        functionArguments: [
+          args.blobName,
+          args.expirationMicros,
+          args.blobMerkleRoot,
+          args.numChunksets,
+          args.blobSize,
+          0,
+          args.encoding,
+        ],
+      }),
+      digest: async () => Uint8Array.from({ length: 32 }, () => 0xab).buffer,
     },
   });
 
   assert.deepEqual(calls.map(([name]) => name), ['sign', 'wait', 'put']);
   assert.deepEqual(steps, ['encoding', 'signing', 'confirming', 'uploading']);
-  assert.equal(calls[0][1].account, '0xabc');
-  assert.equal(calls[0][1].blobName, 'media/abcd.png');
-  assert.equal(calls[0][1].expirationMicros, 61_000_000);
-  assert.equal(calls[0][1].encoding, 7);
+  assert.equal(calls[0][1].functionArguments[0], `media/${expectedFileHash}.png`);
+  assert.equal(calls[0][1].functionArguments[1], 2_592_001_000_000);
+  assert.equal(calls[0][1].functionArguments[5], 3);
+  assert.equal(calls[0][1].functionArguments[6], 7);
   assert.deepEqual(chunksetInput, { rawSize: 3, chunksetSize: 6 });
   assert.equal(calls[2][1].account, '0xabc');
-  assert.equal(calls[2][1].blobName, 'media/abcd.png');
+  assert.equal(calls[2][1].blobName, `media/${expectedFileHash}.png`);
   assert.deepEqual([...calls[2][1].blobData], [1, 2, 3]);
   assert.equal(result.account, '0xabc');
-  assert.equal(result.key, 'media/abcd.png');
+  assert.equal(result.key, `media/${expectedFileHash}.png`);
   assert.equal(result.paymentMode, 'native-aptos');
   assert.equal(result.ownedByYou, true);
+  assert.equal(result.expirationMicros, 2_592_001_000_000);
+  assert.equal(result.actualStorageUnits, '4200');
+  assert.equal(result.actualGasUsed, '718');
+});
+
+test('native upload rejects a changed file before encoding or signing', async () => {
+  const calls = [];
+  await assert.rejects(
+    () => uploadNativeAptos(
+      {
+        name: 'proof.bin',
+        size: 1,
+        arrayBuffer: async () => Uint8Array.of(1).buffer,
+      },
+      {
+        session: { chain: 'aptos', mode: 'native', storageAddress: '0xabc', sourceAddress: '0xabc' },
+        adapter: { signAndSubmitTransaction: async () => calls.push('sign') },
+        expirationMicros: 2_592_001_000_000,
+        expectedFileHash: 'ff'.repeat(32),
+        quoteToken: 'vquote.test.signed',
+        paidAuthorization: 'vpaid.test.authorization',
+        paymentTier: 0,
+        uploadContext: {
+          chain: 'aptos',
+          sourceAddress: '0xabc',
+          storageAddress: '0xabc',
+          fileHash: 'ff'.repeat(32),
+          blobName: `media/${'ff'.repeat(32)}.bin`,
+          sizeBytes: 1,
+          expirationMicros: 2_592_001_000_000,
+        },
+        deps: {
+          aptos: {
+            getAccountAPTAmount: async () => 1,
+            getCurrentFungibleAssetBalances: async () => [{ amount: '1' }],
+          },
+          shelbyUsdAsset: '0xshelby',
+          digest: async () => Uint8Array.from({ length: 32 }, () => 0xab).buffer,
+          createProvider: async () => calls.push('encode'),
+        },
+      },
+    ),
+    (error) => error.code === 'file_changed',
+  );
+  assert.deepEqual(calls, []);
 });
 
 test('balance preflight reports the missing native funding asset explicitly', () => {

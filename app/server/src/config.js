@@ -26,5 +26,5 @@ export const config = {
   aptUsdReferenceMicros: BigInt(process.env.APT_USD_REFERENCE_MICROS || '5000000'),
   registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
   gasSafetyBps: BigInt(process.env.GAS_SAFETY_BPS || '12000'),
-  aptosTreasuryAddress: process.env.APTOS_TREASURY_ADDRESS || '',
+  aptosTreasuryAddress: process.env.APTOS_TREASURY_ADDRESS || process.env.GAS_STATION_ACCOUNT || '',
 };

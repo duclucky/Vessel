@@ -7,6 +7,7 @@ import { mountWalletUi } from './wallet-modal.js';
 import { confirmAction } from './confirm-dialog.js';
 import { createUploadIntent } from './retention.js';
 import { mountQuoteUi } from './quote-ui.js';
+import { settleQuote } from './settlement-client.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -362,12 +363,52 @@ function initUpload() {
     if (file.size > maxB) { toast(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`, 'error'); return; }
     if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
 
+    let settlement = quotedContext.settlement;
+    if (!settlement) {
+      if (session.chain === 'solana') {
+        const requiredUsdc = Number(quotedContext.quote.solanaAmountMicro) / 1_000_000;
+        const balance = await SOL().usdcBalance();
+        if (balance < requiredUsdc) {
+          show(vInit);
+          showPayGate(quotedContext.quote, balance, () => void confirmQuotedUpload());
+          return;
+        }
+      }
+      show(vProg);
+      setStep('paying');
+      try {
+        settlement = await settleQuote({
+          quote: quotedContext.quote,
+          session,
+          aptosAdapter: walletController().getActiveAptosAdapter?.(),
+          solanaClient: SOL(),
+        });
+        quotedContext = Object.freeze({ ...quotedContext, settlement });
+        activeUploadContext = quotedContext;
+      } catch (error) {
+        show(vInit);
+        const message = error?.code === 'user_rejected'
+          ? 'Payment approval was rejected'
+          : String(error?.message || error).slice(0, 160);
+        toast(message, 'error');
+        return;
+      }
+    }
+
     if (session.chain === 'aptos' && session.mode === 'native') {
       $('#aptos-funding-gate')?.remove();
       show(vProg);
       setStep('encoding');
       try {
-        const result = await walletController().upload(file, { onStep: setStep });
+        const result = await walletController().upload(file, {
+          quoteToken: quotedContext.quote.quoteToken,
+          paidAuthorization: settlement.paidAuthorization,
+          expirationMicros: quotedContext.quote.expirationMicros,
+          expectedFileHash: quotedContext.quote.fileHash,
+          paymentTier: quotedContext.quote.tierId,
+          uploadContext: quotedContext.intent,
+          onStep: setStep,
+        });
         if (bar) bar.style.width = '100%';
         if (pct) pct.textContent = '100%';
         setTimeout(() => renderSuccess(result), 350);
@@ -377,7 +418,7 @@ function initUpload() {
           showAptosFundingGate({
             code: error.code,
             session,
-            retry: () => void doUpload(file),
+            retry: () => void doUpload(file, activeUploadContext),
           });
         } else {
           const message = String(error?.message || error);
@@ -396,55 +437,21 @@ function initUpload() {
           throw new Error('Reconnect your Solana wallet before uploading');
         }
 
-        pendingWalletWork.abort();
-        pendingWalletWork = new AbortController();
-        const signal = pendingWalletWork.signal;
-        const uploadContext = Object.freeze({
-          chain: 'solana',
-          sourceAddress: session.sourceAddress,
-          storageAddress: session.storageAddress,
-          sizeBytes: file.size,
-          expirationMicros: Date.now() * 1000 + 7 * 24 * 3600 * 1_000_000,
-        });
-        activeUploadContext = uploadContext;
-
-        // 1) identity-bound quote (USDC)
-        const quote = await api('/api/pay/quote', {
-          method: 'POST',
-          body: uploadContext,
-          signal,
-        });
-
-        // 2) enough USDC? otherwise show the funding gate
-        const bal = await SOL().usdcBalance();
-        if (bal < quote.amountUsdc) { show(vInit); showPayGate(quote, bal); return; }
-
-        // 3) pay USDC on Solana (Phantom), 4) server verifies -> uploadToken
-        setStep('paying');
-        toast(`Paying ${quote.amountUsdc} USDC for storage…`, 'info');
-        const pay = await SOL().payUSDC({
-          treasuryAta: quote.treasuryAta,
-          amountMicro: quote.amountMicro,
-          memo: quote.memo,
-          usdcMint: quote.usdcMint,
-          expectedSourceAddress: uploadContext.sourceAddress,
-        });
-        const v = await api('/api/pay/verify', {
-          method: 'POST',
-          body: { paymentId: quote.paymentId, signature: pay.signature },
-          signal,
-        });
-        if (!v.ok) throw new Error('payment not verified: ' + (v.reason || ''));
-
-        // 5) sponsored upload (Phantom signs; server co-signs via gas station)
         const r = await walletController().upload(file, {
-          paymentId: quote.paymentId,
-          uploadToken: v.uploadToken,
-          uploadContext,
+          quoteToken: quotedContext.quote.quoteToken,
+          paidAuthorization: settlement.paidAuthorization,
+          expirationMicros: quotedContext.quote.expirationMicros,
+          expectedFileHash: quotedContext.quote.fileHash,
+          paymentTier: quotedContext.quote.tierId,
+          uploadContext: quotedContext.intent,
           onStep: setStep,
         });
         if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
-        setTimeout(() => renderSuccess({ ...r, contentType: file.type, paidUsdc: v.receivedUsdc }), 350);
+        setTimeout(() => renderSuccess({
+          ...r,
+          contentType: file.type,
+          paidUsdc: Number(quotedContext.quote.solanaAmountMicro) / 1_000_000,
+        }), 350);
         return;
       } catch (e) {
         show(vInit);
@@ -487,7 +494,7 @@ function initUpload() {
     toast('Fund your Aptos Testnet wallet, then retry', 'warn');
   }
 
-  function showPayGate(quote, have) {
+  function showPayGate(quote, have, retryUpload) {
     const host = $('#drop-zone')?.parentElement || document.body;
     let g = $('#pay-gate');
     if (!g) {
@@ -503,7 +510,8 @@ function initUpload() {
     title.textContent = 'NEED TESTNET USDC TO PAY STORAGE';
     const detail = document.createElement('p');
     detail.className = 'text-sm leading-6 text-on-surface-variant mb-4';
-    detail.textContent = `This upload costs ${quote.amountUsdc} USDC; your wallet has ${have.toFixed(4)}. Vessel sponsors Aptos gas and ShelbyUSD for the Solana DAA path.`;
+    const requiredUsdc = Number(quote.solanaAmountMicro) / 1_000_000;
+    detail.textContent = `This upload costs ${requiredUsdc} USDC; your wallet has ${have.toFixed(4)}. Vessel sponsors Aptos gas and ShelbyUSD for the Solana DAA path.`;
     const retry = document.createElement('button');
     retry.id = 'pay-retry';
     retry.type = 'button';
@@ -512,7 +520,11 @@ function initUpload() {
     g.append(title, detail, retry);
     retry.addEventListener('click', async () => {
       const b = await SOL().usdcBalance();
-      if (b >= quote.amountUsdc) { g.remove(); toast('USDC ready ✓ — drop your file again', 'ok'); } else toast(`Still ${b.toFixed(4)} USDC — add funds and retry`, 'warn');
+      if (b >= requiredUsdc) {
+        g.remove();
+        toast('USDC ready ✓', 'ok');
+        retryUpload?.();
+      } else toast(`Still ${b.toFixed(4)} USDC — add funds and retry`, 'warn');
     });
     toast('Add testnet USDC to continue (see panel)', 'warn');
   }

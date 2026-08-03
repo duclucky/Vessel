@@ -19,6 +19,7 @@ import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
 import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
 import { verifyAptosShelbyUsdTransfer } from './lib/aptos-settlement.js';
 import { targetExpirationMicros } from '../public/retention.js';
+import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -72,6 +73,21 @@ try {
   }
 } catch (e) { console.warn('[paid-auth] disabled:', String(e?.message || e)); }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes } });
+
+async function enrichSettlementQuote(quote) {
+  if (quote.chain === 'solana') {
+    return Object.freeze({
+      ...quote,
+      treasuryAta: payments ? (await payments.treasuryAta()).toString() : '',
+      usdcMint: config.usdcMint,
+    });
+  }
+  return Object.freeze({
+    ...quote,
+    aptosTreasuryAddress: config.aptosTreasuryAddress,
+    shelbyUsdAssetAddress: SHELBYUSD_FA_METADATA_ADDRESS.toString(),
+  });
+}
 
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -242,7 +258,7 @@ app.post('/api/quotes/upload', async (req, res) => {
       ...req.body,
       expirationMicros: targetExpirationMicros({ serverTimeMs, days: req.body?.days }),
     });
-    send(res, 200, await quoteManager.issueUpload(context));
+    send(res, 200, await enrichSettlementQuote(await quoteManager.issueUpload(context)));
   } catch (e) { fail(res, e); }
 });
 
@@ -259,7 +275,7 @@ app.post('/api/quotes/validate', async (req, res) => {
     if (!quoteToken) return send(res, 400, { error: 'quoteToken required', code: 'invalid_quote' });
     const context = normalizeUploadQuoteContext(input);
     const original = quoteManager.validate(quoteToken, context);
-    const quote = await quoteManager.issueUpload(context);
+    const quote = await enrichSettlementQuote(await quoteManager.issueUpload(context));
     const originalTotal = BigInt(original.breakdown.totalAccountingMicro);
     const freshTotal = BigInt(quote.totalAccountingMicro);
     const driftPercentBps = originalTotal === 0n
@@ -285,15 +301,18 @@ app.post('/api/sponsor/submit', async (req, res) => {
       senderAuthenticator,
       quoteToken,
       paidAuthorization,
+      uploadContext,
     } = req.body || {};
     if (!transaction || !senderAuthenticator) return send(res, 400, { error: 'transaction and senderAuthenticator required' });
-    const quote = quoteManager.validate(quoteToken, undefined, { allowExpired: true });
+    const quote = quoteManager.validate(quoteToken, uploadContext, { allowExpired: true });
     paidAuthorizations.validate(paidAuthorization, quote);
     const r = await sponsor.submit(String(transaction), String(senderAuthenticator), {
       expectedSender: quote.context.storageAddress,
     });
     if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
-    send(res, 200, r);
+    const completed = await aptos.waitForTransaction({ transactionHash: r.hash });
+    const evidence = extractShelbyTransactionEvidence(completed);
+    send(res, 200, { ...r, ...evidence });
   } catch (e) { fail(res, e); }
 });
 

@@ -48564,13 +48564,23 @@ Message: ${transactionMessage}.
   }
   var b64 = (u86) => btoa(String.fromCharCode(...new Uint8Array(u86)));
   async function uploadSponsored(file, {
-    paymentId,
-    uploadToken,
+    quoteToken,
+    paidAuthorization,
+    expirationMicros,
+    expectedFileHash,
+    paymentTier,
     uploadContext,
-    onStep
+    onStep,
+    onCheckpoint
   } = {}) {
     if (!client) await connect(provider);
-    if (uploadContext?.chain !== "solana" || uploadContext.sourceAddress !== pubkey || String(uploadContext.storageAddress).toLowerCase() !== storageAddr.toString().toLowerCase() || Number(uploadContext.sizeBytes) !== Number(file.size) || !Number.isSafeInteger(uploadContext.expirationMicros)) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const sha = await sha256Hex(data);
+    const parts = String(file.name || "").split(".");
+    const rawExtension = parts.length > 1 ? parts.pop() : "bin";
+    const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+    const blobName = `media/${sha}.${extension}`;
+    if (uploadContext?.chain !== "solana" || uploadContext.sourceAddress !== pubkey || String(uploadContext.storageAddress).toLowerCase() !== storageAddr.toString().toLowerCase() || Number(uploadContext.sizeBytes) !== Number(file.size) || uploadContext.fileHash !== expectedFileHash || sha !== expectedFileHash || uploadContext.blobName !== blobName || uploadContext.expirationMicros !== expirationMicros || !Number.isSafeInteger(expirationMicros) || !Number.isSafeInteger(paymentTier) || paymentTier < 0 || !quoteToken || !paidAuthorization) {
       throw new Error("Paid upload context does not match the connected wallet and file");
     }
     const cfg = await loadConfig();
@@ -48578,6 +48588,7 @@ Message: ${transactionMessage}.
     onStep?.("signing");
     const targets = new Set([client.aptos, client.coordination?.aptos].filter(Boolean));
     const originals = new Map([...targets].map((a24) => [a24, a24.signAndSubmitTransaction.bind(a24)]));
+    let registrationEvidence = null;
     const phantomSubmit = async ({ transaction }) => {
       const resp = await signAptosTransactionWithSolana({ solanaWallet: solWallet(), authenticationFunction: authFn, rawTransaction: transaction, domain: DOMAIN2 });
       if (resp.status !== "Approved" && resp.status !== "APPROVED") throw new Error("User rejected the signature");
@@ -48585,12 +48596,19 @@ Message: ${transactionMessage}.
       const body = {
         transaction: b64(transaction.bcsToBytes()),
         senderAuthenticator: b64(resp.args.bcsToBytes()),
-        paymentId,
-        uploadToken,
-        ...uploadContext
+        quoteToken,
+        paidAuthorization,
+        uploadContext
       };
-      const r14 = await fetch("/api/sponsor/submit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((x9) => x9.json());
+      const response = await fetch("/api/sponsor/submit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const r14 = await response.json();
       if (!r14.hash) throw new Error(r14.error || "sponsor submit failed");
+      registrationEvidence = {
+        transactionHash: r14.transactionHash || r14.hash,
+        actualStorageUnits: r14.actualStorageUnits,
+        actualGasUsed: r14.actualGasUsed
+      };
+      onCheckpoint?.("registered", registrationEvidence);
       return { hash: r14.hash };
     };
     for (const a24 of targets) a24.signAndSubmitTransaction = phantomSubmit;
@@ -48615,12 +48633,16 @@ Message: ${transactionMessage}.
     const dummySubmitter = { submitTransaction: async () => {
       throw new Error("unused: overridden");
     } };
+    const createRegisterPayload = ShelbyBlobClient.createRegisterBlobPayload;
+    ShelbyBlobClient.createRegisterBlobPayload = (params) => {
+      const payload = createRegisterPayload(params);
+      if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
+        throw new Error("Unexpected Shelby register payload shape");
+      }
+      payload.functionArguments[5] = paymentTier;
+      return payload;
+    };
     try {
-      const data = new Uint8Array(await file.arrayBuffer());
-      const sha = await sha256Hex(data);
-      const ext = (file.name.split(".").pop() || "bin").toLowerCase();
-      const blobName = `media/${sha}.${ext}`;
-      const expirationMicros = uploadContext.expirationMicros;
       onStep?.("uploading");
       await client.upload({
         blobData: data,
@@ -48629,15 +48651,24 @@ Message: ${transactionMessage}.
         expirationMicros,
         options: { usdSponsor: { feePayerAddress: cfg.gasStationAccount }, build: { withFeePayer: true }, submit: { transactionSubmitter: dummySubmitter } }
       });
+      if (!registrationEvidence?.actualStorageUnits || !registrationEvidence?.actualGasUsed) {
+        throw Object.assign(new Error("Shelby registration is still finalizing"), {
+          code: "registration_evidence_missing"
+        });
+      }
+      onCheckpoint?.("written", { blobName });
       return {
         key: blobName,
         url: readUrl(blobName),
         account: storageAddr.toString(),
         size: data.length,
         ownedByYou: true,
-        paymentMode: "solana-usdc"
+        paymentMode: "solana-usdc",
+        expirationMicros,
+        ...registrationEvidence
       };
     } finally {
+      ShelbyBlobClient.createRegisterBlobPayload = createRegisterPayload;
       for (const [a24, fn2] of originals) a24.signAndSubmitTransaction = fn2;
       client.rpc.getChallenge = realGetChallenge;
     }

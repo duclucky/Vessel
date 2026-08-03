@@ -7,6 +7,7 @@ import {
   expectedTotalChunksets,
   generateCommitments,
 } from '@shelby-protocol/sdk/browser';
+import { extractShelbyTransactionEvidence } from './transaction-evidence.js';
 
 const nativeError = (message, code) => Object.assign(new Error(message), { code });
 const sha256 = (data) => crypto.subtle.digest('SHA-256', data);
@@ -54,11 +55,7 @@ export function assertNativeBalances({ aptOctas, shelbyUsdUnits }) {
   }
 }
 
-async function contentAddressedName(file, blobData, digest) {
-  const hash = await digest(blobData);
-  const sha = [...new Uint8Array(hash)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+function contentAddressedName(file, sha) {
   const parts = String(file.name || '').split('.');
   const rawExtension = parts.length > 1 ? parts.pop() : 'bin';
   const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
@@ -68,7 +65,12 @@ async function contentAddressedName(file, blobData, digest) {
 export async function uploadNativeAptos(file, {
   session,
   adapter,
-  expiresInSec = 7 * 24 * 3600,
+  expirationMicros,
+  expectedFileHash,
+  quoteToken,
+  paidAuthorization,
+  paymentTier,
+  uploadContext,
   onStep,
   deps = defaultDeps(),
 }) {
@@ -81,12 +83,42 @@ export async function uploadNativeAptos(file, {
 
   assertNativeBalances(await readNativeBalances(session.sourceAddress, deps));
   const blobData = new Uint8Array(await file.arrayBuffer());
+  const computedDigest = new Uint8Array(await (deps.digest || sha256)(blobData));
+  const computedHash = [...computedDigest]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+  const expected = String(expectedFileHash || '').toLowerCase();
+  let hashDifference = computedHash.length ^ expected.length;
+  const comparisonLength = Math.max(computedHash.length, expected.length);
+  for (let index = 0; index < comparisonLength; index += 1) {
+    hashDifference |= (computedHash.charCodeAt(index) || 0) ^ (expected.charCodeAt(index) || 0);
+  }
+  if (hashDifference !== 0) {
+    throw nativeError('The selected file changed after quoting', 'file_changed');
+  }
+  if (!Number.isSafeInteger(expirationMicros) || expirationMicros <= 0) {
+    throw nativeError('A quoted expiration is required', 'invalid_quote_context');
+  }
+  const blobName = contentAddressedName(file, computedHash);
+  if (
+    !Number.isSafeInteger(paymentTier)
+    || paymentTier < 0
+    || !quoteToken
+    || !paidAuthorization
+    || uploadContext?.chain !== 'aptos'
+    || String(uploadContext.sourceAddress).toLowerCase() !== String(session.sourceAddress).toLowerCase()
+    || String(uploadContext.storageAddress).toLowerCase() !== String(session.storageAddress).toLowerCase()
+    || uploadContext.fileHash !== expected
+    || uploadContext.blobName !== blobName
+    || uploadContext.expirationMicros !== expirationMicros
+    || Number(uploadContext.sizeBytes) !== Number(file.size)
+  ) {
+    throw nativeError('A paid quote authorization is required', 'invalid_paid_authorization');
+  }
   const provider = await deps.createProvider();
 
   onStep?.('encoding');
   const commitments = await deps.generateCommitments(provider, blobData);
-  const blobName = await contentAddressedName(file, blobData, deps.digest || sha256);
-  const expirationMicros = (deps.now?.() ?? Date.now()) * 1000 + expiresInSec * 1_000_000;
   const chunksetSize = provider.config.chunkSizeBytes * provider.config.erasure_k;
   const payload = deps.createRegisterPayload({
     account: session.storageAddress,
@@ -97,13 +129,18 @@ export async function uploadNativeAptos(file, {
     blobSize: commitments.raw_data_size,
     encoding: provider.config.enumIndex,
   });
+  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
+    throw nativeError('Unexpected Shelby register payload shape', 'invalid_register_payload');
+  }
+  payload.functionArguments[5] = paymentTier;
 
   onStep?.('signing');
   const submitted = await adapter.signAndSubmitTransaction({ data: payload });
   if (!submitted?.hash) throw nativeError('Wallet did not return a transaction hash', 'submit_failed');
 
   onStep?.('confirming');
-  await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+  const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
+  const evidence = extractShelbyTransactionEvidence(transaction);
 
   onStep?.('uploading');
   await deps.shelby.rpc.putBlob({
@@ -120,6 +157,7 @@ export async function uploadNativeAptos(file, {
     contentType: file.type || 'application/octet-stream',
     ownedByYou: true,
     paymentMode: 'native-aptos',
-    transactionHash: submitted.hash,
+    expirationMicros,
+    ...evidence,
   };
 }

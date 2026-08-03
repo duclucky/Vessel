@@ -15,3 +15,14 @@ test('DAA client no longer exposes funding URLs', () => {
   assert.doesNotMatch(source, /faucet/i);
   assert.doesNotMatch(source, /faucets/);
 });
+
+test('DAA upload binds the sponsor request to quote, authorization, hash, tier, and expiration', () => {
+  assert.match(source, /quoteToken/);
+  assert.match(source, /paidAuthorization/);
+  assert.match(source, /expectedFileHash/);
+  assert.match(source, /paymentTier/);
+  assert.match(source, /uploadContext\.expirationMicros !== expirationMicros/);
+  assert.doesNotMatch(source, /paymentId/);
+  assert.doesNotMatch(source, /uploadToken/);
+  assert.doesNotMatch(source, /7\s*\*\s*24\s*\*\s*3600/);
+});

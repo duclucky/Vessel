@@ -67,10 +67,14 @@ const uploadRouter = createUploadRouter({
       throw new Error('Reconnect a supported Solana wallet before uploading');
     }
     return window.VesselSolana.uploadSponsored(file, {
-      paymentId: context.paymentId,
-      uploadToken: context.uploadToken,
+      quoteToken: context.quoteToken,
+      paidAuthorization: context.paidAuthorization,
+      expirationMicros: context.expirationMicros,
+      expectedFileHash: context.expectedFileHash,
+      paymentTier: context.paymentTier,
       uploadContext: context.uploadContext,
       onStep: context.onStep,
+      onCheckpoint: context.onCheckpoint,
     });
   },
 });
@@ -78,6 +82,10 @@ const { getActiveAdapter: _getActiveAdapter, ...publicController } = controller;
 
 window.VesselWallets = {
   ...publicController,
+  getActiveAptosAdapter() {
+    const session = controller.getState().session;
+    return session?.chain === 'aptos' ? controller.getActiveAdapter() : null;
+  },
   upload(file, context = {}) {
     return uploadRouter.upload(file, {
       ...context,
