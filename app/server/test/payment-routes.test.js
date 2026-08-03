@@ -9,6 +9,10 @@ const solana = fs.readFileSync(new URL('../client-src/vessel-solana.js', import.
 test('settlement and sponsor routes require signed quote and paid authorization context', () => {
   assert.match(server, /app\.post\('\/api\/pay\/solana\/verify'/);
   assert.match(server, /app\.post\('\/api\/pay\/aptos\/verify'/);
+  assert.match(server, /app\.post\('\/api\/settlements\/verify'/);
+  assert.match(server, /verifyContractQuoteSignature/);
+  assert.match(server, /settlementAdapters\.verify/);
+  assert.match(server, /paidAuthorizations\.issue\(\{\s*quote:\s*contractEvidence,\s*receipt/s);
   assert.match(server, /quoteManager\.validate\(quoteToken/);
   assert.match(server, /payments\.verifyQuotePayment/);
   assert.match(server, /verifyAptosShelbyUsdTransfer/);

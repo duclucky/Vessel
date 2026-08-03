@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
-import { ContractQuoteManager } from '../src/lib/settlement/contract-quotes.js';
+import {
+  ContractQuoteManager,
+  verifyContractQuoteSignature,
+} from '../src/lib/settlement/contract-quotes.js';
 
 const breakdown = Object.freeze({
   tierId: 0,
@@ -55,6 +58,7 @@ test('contract quote is signed by the configured Ed25519 key', async () => {
   assert.equal(result.contractSignature.length, 128);
   assert.equal(result.quotePublicKey.length, 64);
   assert.equal(manager.verifySignature(result), true);
+  assert.equal(verifyContractQuoteSignature(result), true);
   assert.equal(manager.verifySignature({
     ...result,
     contractQuote: { ...result.contractQuote, amount: '84101' },

@@ -12,6 +12,7 @@ import { quoteDigest } from './quote-v1.js';
 const CHAIN = Object.freeze({ aptos: 1, solana: 2 });
 const NETWORK = Object.freeze({ aptos: 2, solana: 1 });
 const HEX_32 = /^[0-9a-f]{64}$/;
+const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
 function asPublicKey(key) {
   return key?.type === 'public' ? key : createPublicKey(key);
@@ -61,6 +62,29 @@ export function privateKeyFromPkcs8Base64(value) {
   const der = Buffer.from(String(value || ''), 'base64');
   if (der.length === 0) throw new TypeError('QUOTE_SIGNER_PRIVATE_KEY_B64 is required');
   return createPrivateKey({ key: der, type: 'pkcs8', format: 'der' });
+}
+
+export function publicKeyFromRawHex(value) {
+  const raw = Buffer.from(normalizeAsset(value, 'Quote public key'), 'hex');
+  return createPublicKey({
+    key: Buffer.concat([ED25519_SPKI_PREFIX, raw]),
+    type: 'spki',
+    format: 'der',
+  });
+}
+
+export function verifyContractQuoteSignature(result) {
+  try {
+    const signature = Buffer.from(String(result?.contractSignature || ''), 'hex');
+    return signature.length === 64 && cryptoVerify(
+      null,
+      quoteDigest(result.contractQuote),
+      publicKeyFromRawHex(result.quotePublicKey),
+      signature,
+    );
+  } catch {
+    return false;
+  }
 }
 
 export class ContractQuoteManager {
