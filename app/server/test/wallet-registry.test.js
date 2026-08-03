@@ -88,3 +88,25 @@ test('EIP-6963 providers are visible but disabled Beta', async () => {
   assert.equal(rows[0].enabled, false);
   assert.equal(rows[0].status, 'beta');
 });
+
+test('Solana providers without legacy transaction support are incompatible', async () => {
+  const wallet = {
+    name: 'Versioned Only',
+    version: '1.0.0',
+    chains: ['solana:devnet'],
+    features: {
+      ...solanaFeatures,
+      'solana:signAndSendTransaction': { supportedTransactionVersions: [0] },
+    },
+  };
+  const registry = createWalletRegistry({
+    aptosSource: { get: () => [], on: () => () => {} },
+    standardSource: { get: () => [wallet], on: () => () => {} },
+    eventTarget: eventTarget(),
+  });
+
+  const [row] = await registry.scan();
+
+  assert.equal(row.enabled, false);
+  assert.equal(row.status, 'incompatible');
+});

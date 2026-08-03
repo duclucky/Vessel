@@ -15,6 +15,11 @@ const APTOS_REQUIRED = [
 ];
 
 const hasAll = (wallet, names) => names.every((name) => name in (wallet.features || {}));
+const supportsLegacy = (wallet) => {
+  const versions = wallet.features?.['solana:signAndSendTransaction']
+    ?.supportedTransactionVersions;
+  return versions != null && Array.from(versions).includes('legacy');
+};
 const idFor = (chain, wallet) => `${chain}:${wallet.name}:${wallet.version || '1'}`.toLowerCase();
 
 export function createWalletRegistry({ aptosSource, standardSource, eventTarget }) {
@@ -50,7 +55,7 @@ export function createWalletRegistry({ aptosSource, standardSource, eventTarget 
     const solana = standardSource.get()
       .filter((wallet) => wallet.chains?.some((chain) => String(chain).startsWith('solana:')))
       .map((wallet) => {
-        const enabled = hasAll(wallet, SOLANA_REQUIRED);
+        const enabled = hasAll(wallet, SOLANA_REQUIRED) && supportsLegacy(wallet);
         return {
           id: idFor('solana', wallet),
           name: wallet.name,

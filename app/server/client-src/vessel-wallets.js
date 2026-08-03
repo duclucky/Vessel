@@ -1,10 +1,10 @@
 import { getWallets } from '@wallet-standard/app';
 import { createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
-import { createPhantomCompatibilityAdapter } from './wallets/phantom-compat.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
 import { uploadNativeAptos } from './wallets/aptos-upload.js';
 import { createUploadRouter } from './wallets/upload-router.js';
+import { createSolanaAdapter } from './wallets/solana-adapter.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -27,15 +27,8 @@ const availableRegistry = {
         adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
         return wallet;
       }
-      const phantomCompatible = wallet.chain === 'solana'
-        && wallet.name.toLowerCase() === 'phantom'
-        && wallet.enabled
-        && window.VesselSolana?.available?.();
-      if (phantomCompatible) {
-        adapters.set(wallet.id, (descriptor) => createPhantomCompatibilityAdapter({
-          descriptor,
-          vesselSolana: window.VesselSolana,
-        }));
+      if (wallet.chain === 'solana' && wallet.enabled) {
+        adapters.set(wallet.id, (descriptor) => createSolanaAdapter(descriptor));
         return wallet;
       }
       if (wallet.chain === 'evm') return wallet;
