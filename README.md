@@ -1,5 +1,31 @@
 # Vessel
 
+> **Contract-settlement migration (2026-08-03): NO-GO for public release.**
+> The web app now uses receipt-bound Aptos Move and Solana Program settlement
+> paths in code, and every local application/Move/Rust/Anchor gate passes. The
+> public deployment manifest is still placeholder-only, however, and no real
+> 2-of-3 Aptos Multisig or autonomous Squads deployment has been verified.
+> `SETTLEMENT_CONTRACTS_ENABLED` must remain disabled in production. See
+> `docs/verification/contract-settlement-release-checklist.md` for exact evidence
+> and blockers.
+
+## Current contract-only payment model
+
+- Native Aptos wallets pay the Vessel service fee to the Move contract vault;
+  APT gas and Shelby protocol/storage charges are paid directly as part of the
+  registration flow.
+- Solana wallets pay the Vessel service fee to the Vessel Program vault; the DAA
+  registration sponsorship remains separate.
+- One shared Ed25519 quote key signs immutable `QuoteV1` payloads on both chains.
+  Finalized contract receipts, not ordinary wallet transfers, authorize upload.
+- Retention supports 7, 30, 90, or a custom 1-365 days. Quotes account for file
+  size and duration, network/protocol cost, sponsored gas, a 2% Vessel fee, and a
+  USD 0.01 minimum.
+- Testnet tokens have no real monetary value.
+
+The older sponsored-USDC walkthrough below documents the historical demo and is
+not the release truth for the pending contract-only beta.
+
 **Wallet-native, cross-chain media hosting on Shelby.**
 Connect an Ethereum or Solana wallet you already own — no new account, no seed phrase,
 no bridge — and host media on a decentralized *hot* storage network with sub-second

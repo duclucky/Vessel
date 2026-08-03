@@ -1,5 +1,35 @@
 # Vessel — Hand-off (2026-08-03)
 
+## Contract-settlement checkpoint (2026-08-03)
+
+**Current decision: NO-GO for public deployment.** The historical Phantom demo
+described later in this hand-off is not the new contract settlement release.
+
+Completed and committed:
+
+- Shared Ed25519 `QuoteV1` signing and receipt-bound verification for Aptos Move
+  and the Solana Vessel Program.
+- Contract-only upload/recovery UI. A saved transaction is checked again after a
+  reload without automatically asking the wallet to pay twice.
+- Removal of the direct treasury authorization routes and helpers.
+- Mocked 7-day Aptos and 30-day Solana DAA end-to-end acceptance flows.
+- Local gates: Node 152/152 plus bundles, Move 25/25, Solana Rust 6/6, Anchor
+  integration 9/9.
+
+Release blocker:
+
+- `deployments/vessel-settlement.testnet.json` still contains zero/System Program
+  placeholders.
+- Aptos verification lacks the real multisig address and three public owners.
+- Solana verification lacks three public Squads members and a finalized
+  autonomous Squads deployment.
+- There is no real public-chain settlement/upload evidence for either chain.
+
+Do not enable settlement contracts or redeploy Vercel with placeholder values.
+Continue from `docs/verification/contract-settlement-release-checklist.md`. The
+next operator step requires three real public owner/member addresses per chain,
+then the corresponding 2-of-3 approvals and 24-hour timelocks.
+
 Bàn giao trạng thái dự án **Vessel** (wallet-native hot storage trên Shelby qua DAA).
 Đọc kèm: `CLAUDE.md` (hiến pháp), `NOTES.md` (ground-truth signatures + breakthroughs), `README.md`.
 
