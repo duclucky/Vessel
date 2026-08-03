@@ -51,11 +51,37 @@
           <div id="drop-zone" class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/30 bg-surface-lowest/35 px-6 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.03]">
             <div class="flex h-24 w-24 items-center justify-center rounded-full border border-primary-container/20 bg-primary-container/5 shadow-bloom"><span class="material-symbols-outlined text-5xl text-primary-container" aria-hidden="true">cloud_upload</span></div>
             <h2 class="mt-7 font-display text-3xl font-semibold md:text-4xl">Ethereal Upload</h2>
-            <p class="mt-4 max-w-lg leading-7 text-on-surface-variant">Drag and drop an image or short demo asset here, or choose a file from your device.</p>
-            <label class="vessel-button vessel-button-primary mt-7 cursor-pointer px-7 py-4" for="file-input"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span>Select file</label>
+            <p class="mt-4 max-w-lg leading-7 text-on-surface-variant">Drag and drop images or short demo assets here, choose one file, or select an entire collection folder.</p>
+            <div class="mt-7 flex flex-col items-stretch justify-center gap-3 sm:flex-row">
+              <label class="vessel-button vessel-button-primary cursor-pointer px-7 py-4" for="file-input"><span class="material-symbols-outlined" aria-hidden="true">add_photo_alternate</span>Select file</label>
+              <label class="vessel-button vessel-button-secondary cursor-pointer px-7 py-4" for="folder-input"><span class="material-symbols-outlined" aria-hidden="true">folder_open</span>Select folder</label>
+            </div>
             <input id="file-input" class="sr-only" type="file" accept="image/*,video/*,application/json,text/plain">
-            <p class="vessel-technical mt-6 text-[11px] text-outline">Up to 25 MB · testnet artifacts expire</p>
+            <input id="folder-input" class="sr-only" type="file" webkitdirectory multiple accept="image/*,video/*,application/json,text/plain">
+            <p class="vessel-technical mt-6 text-[11px] text-outline">25 MB per file · 1 GB beta limit · testnet artifacts expire</p>
+            <p class="mt-3 max-w-lg text-xs leading-5 text-on-surface-variant">The mainnet release will support larger batches. The wallet may request approval for each file because every artifact receives its own contract receipt.</p>
           </div>
+
+          <section id="batch-summary" class="mt-6 hidden rounded-control border border-primary-container/15 bg-surface-lowest/45 p-5" aria-labelledby="batch-summary-title">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="vessel-kicker text-primary">Batch upload queue</p>
+                <h2 id="batch-summary-title" class="mt-2 font-display text-2xl font-semibold">Collection ready</h2>
+              </div>
+              <button id="batch-reset" type="button" class="vessel-button vessel-button-secondary min-h-11 px-4 py-3">Clear batch</button>
+            </div>
+            <dl class="mt-5 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+              <div class="rounded-2xl border border-white/10 p-3"><dt class="vessel-kicker text-outline">Files</dt><dd id="batch-file-count" class="vessel-technical mt-2 text-on-surface">0</dd></div>
+              <div class="rounded-2xl border border-white/10 p-3"><dt class="vessel-kicker text-outline">Total size</dt><dd id="batch-total-size" class="vessel-technical mt-2 text-on-surface">0 MB</dd></div>
+              <div class="rounded-2xl border border-white/10 p-3"><dt class="vessel-kicker text-outline">Uploaded</dt><dd id="batch-success-count" class="vessel-technical mt-2 text-primary">0</dd></div>
+              <div class="rounded-2xl border border-white/10 p-3"><dt class="vessel-kicker text-outline">Failed</dt><dd id="batch-failure-count" class="vessel-technical mt-2 text-secondary">0</dd></div>
+            </dl>
+            <p id="batch-status" class="mt-5 text-sm leading-6 text-on-surface-variant" aria-live="polite">Review the collection, choose storage duration, then start the queue.</p>
+            <p id="batch-current-file" class="vessel-technical mt-3 min-h-5 break-all text-xs text-primary-container">No file is uploading.</p>
+            <progress id="batch-progress" class="mt-4 h-2 w-full overflow-hidden rounded-full" max="100" value="0">0%</progress>
+            <ol id="batch-results" class="mt-5 max-h-64 space-y-2 overflow-y-auto pr-1" aria-label="Batch upload results"></ol>
+            <button id="batch-retry" type="button" class="vessel-button vessel-button-primary mt-5 hidden w-full px-6 py-4">Retry failed files</button>
+          </section>
 
           <section id="upload-options" class="mt-6 hidden space-y-5" aria-label="Storage duration and price quote" data-state="unavailable">
             <div class="rounded-control border border-white/10 bg-surface-lowest/40 p-5">

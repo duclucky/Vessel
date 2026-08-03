@@ -12,6 +12,16 @@ test('Upload preserves every runtime state and explains both payment paths', () 
     'upload-initial-view',
     'drop-zone',
     'file-input',
+    'folder-input',
+    'batch-summary',
+    'batch-file-count',
+    'batch-total-size',
+    'batch-status',
+    'batch-progress',
+    'batch-current-file',
+    'batch-results',
+    'batch-retry',
+    'batch-reset',
     'upload-progress-view',
     'progress-percentage',
     'progress-bar',
@@ -53,6 +63,12 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.match(html, /role="radiogroup"[^>]*aria-labelledby="retention-title"/);
   assert.match(html, /id="custom-days"[^>]*min="1"[^>]*max="365"[^>]*step="1"/);
   assert.match(html, /id="quote-status"[^>]*aria-live="polite"/);
+  assert.match(html, /id="folder-input"[^>]*type="file"[^>]*webkitdirectory[^>]*multiple/);
+  assert.match(html, /id="batch-status"[^>]*aria-live="polite"/);
+  assert.match(html, /id="batch-progress"[^>]*max="100"/);
+  assert.match(html, /1 GB beta limit/i);
+  assert.match(html, /mainnet release will support larger batches/i);
+  assert.match(html, /wallet may request approval for each file/i);
   assert.doesNotMatch(html, /faucet/i);
   assert.doesNotMatch(html, /AES|encrypted|immutable|weekly/i);
 });
