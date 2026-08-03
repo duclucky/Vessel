@@ -41480,6 +41480,15 @@ Message: ${transactionMessage}.
         })
       };
     },
+    getSolanaSettlementClient(deployment) {
+      return {
+        submit: ({ contractQuote, contractSignature }) => window.VesselSolana.submitContractSettlement({
+          deployment,
+          contractQuote,
+          contractSignature
+        })
+      };
+    },
     async listArtifacts() {
       const session = controller.getState().session;
       if (!session?.storageAddress) return [];

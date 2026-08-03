@@ -12,9 +12,10 @@ import {
   defaultSolanaAuthenticationFunction,
   signAptosTransactionWithSolana,
 } from '@aptos-labs/derived-wallet-solana';
-import { Connection, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
-import { getAssociatedTokenAddress, createTransferInstruction } from '@solana/spl-token';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { getAssociatedTokenAddress } from '@solana/spl-token';
 import nacl from 'tweetnacl';
+import { submitSolanaContractSettlement } from './wallets/solana-contract-settlement.js';
 
 const NETWORKS = {
   testnet: { net: Network.TESTNET, rpc: 'https://api.testnet.shelby.xyz/shelby' },
@@ -22,7 +23,6 @@ const NETWORKS = {
 };
 const NET = (typeof window !== 'undefined' && window.VESSEL_NETWORK) || 'testnet';
 const CFG = NETWORKS[NET] || NETWORKS.testnet;
-const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const authFn = defaultSolanaAuthenticationFunction;
 
 let provider = null;    // explicitly selected Solana provider
@@ -210,26 +210,17 @@ async function uploadSponsored(file, {
   }
 }
 
-// ---- USDC payment on Solana (Phantom pays the treasury; memo binds the payment to the intent) ----
-async function payUSDC({ treasuryAta, amountMicro, memo, usdcMint, expectedSourceAddress }) {
-  if (!provider) throw new Error('Select a Solana wallet before paying');
+async function submitContractSettlement({ deployment, contractQuote, contractSignature }) {
+  if (!provider) throw new Error('Select a Solana wallet before settling');
   if (!pubkey) await connect(provider);
-  if (expectedSourceAddress && expectedSourceAddress !== pubkey) {
-    throw new Error('Payment wallet no longer matches the quoted source address');
-  }
   const cfg = await loadConfig();
-  const conn = new Connection(cfg.solanaRpc || 'https://api.devnet.solana.com', 'confirmed');
-  const owner = new PublicKey(pubkey);
-  const fromAta = await getAssociatedTokenAddress(new PublicKey(usdcMint), owner);
-  const transferIx = createTransferInstruction(fromAta, new PublicKey(treasuryAta), owner, Number(amountMicro));
-  const memoIx = new TransactionInstruction({ keys: [], programId: new PublicKey(MEMO_PROGRAM), data: new TextEncoder().encode(memo) });
-  const tx = new Transaction().add(transferIx).add(memoIx);
-  tx.feePayer = owner;
-  tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
-  const res = await provider.signAndSendTransaction(tx);
-  const signature = res?.signature || res;
-  await conn.confirmTransaction(signature, 'confirmed').catch(() => {});
-  return { signature };
+  return submitSolanaContractSettlement({
+    provider,
+    connection: new Connection(cfg.solanaRpc || 'https://api.devnet.solana.com', 'confirmed'),
+    deployment,
+    contractQuote,
+    contractSignature,
+  });
 }
 
 async function usdcBalance() {
@@ -266,6 +257,6 @@ window.VesselSolana = {
   available: () => Boolean(provider && pubkey && storageAddr),
   network: NET,
   connect, selectProvider, clearProvider, disconnect: clearProvider, loadConfig, deriveAddress,
-  uploadSponsored, resumeBlobWrite, payUSDC, usdcBalance, readUrl,
+  uploadSponsored, resumeBlobWrite, submitContractSettlement, usdcBalance, readUrl,
   get state() { return { solana: pubkey, storageAccount: storageAddr?.toString() }; },
 };
