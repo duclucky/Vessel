@@ -3,6 +3,7 @@
 
 import { createLedger, LS } from './ledger.js';
 import { walletPresentation } from './wallet-ui.js';
+import { mountWalletUi } from './wallet-modal.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -422,7 +423,17 @@ async function initMetadata() {
 }
 
 /* ------------------------------- boot --------------------------------- */
-document.addEventListener('DOMContentLoaded', () => {
+let walletUi = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.VesselWallets) {
+    walletUi = mountWalletUi({ controller: window.VesselWallets, document });
+    window.addEventListener('vessel:wallet-open', (event) => {
+      void walletUi.open(event.detail?.opener);
+    });
+    await window.VesselWallets.restore();
+    window.VesselWallets.subscribe(() => renderWallet());
+  }
   renderWallet();
   const p = page();
   ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, latency: initLatency, metadata: initMetadata }[p] || (() => {}))();
