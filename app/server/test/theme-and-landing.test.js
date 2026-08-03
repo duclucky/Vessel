@@ -18,16 +18,27 @@ test('shared theme scripts parse and Landing uses them', () => {
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
-test('every Landing wallet entry routes to Identity without MetaMask', () => {
+test('Landing CTAs describe navigation and route to Identity', () => {
   const entries = getLinks(readPage('index.html'))
-    .filter((link) => /data-wallet-entry/.test(link.attrs));
+    .filter((link) => /data-dapp-entry/.test(link.attrs));
   assert.equal(entries.length, 2);
   assert.deepEqual(entries.map((link) => link.href), ['/identity.html', '/identity.html']);
+  const labels = entries.map((link) => link.text.toUpperCase().replace(/^(APPS|ROCKET_LAUNCH)\s+/, ''));
+  assert.deepEqual(labels, ['OPEN DAPP', 'LAUNCH STORAGE APP']);
+  assert.doesNotMatch(readPage('index.html'), /data-wallet-summary|connect wallet to start/i);
+});
+
+test('dApp wallet actions no longer use the legacy MetaMask ownership path', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.doesNotMatch(source, /window\.ethereum|connectWallet|proveOwnership/);
+  assert.match(source, /openAccountMenu/);
 });
 
 test('Landing serves crystal artwork locally and states three honest proofs', () => {
   const html = readPage('index.html');
   assert.match(html, /\/assets\/hero-crystals\.png/);
+  assert.match(html, /Aptos or Solana wallet/i);
+  assert.doesNotMatch(html, /Your Phantom wallet/i);
   assert.match(html, />\s*DAA\s*</);
   assert.match(html, />\s*Sub-second\s*</);
   assert.match(html, />\s*Ephemeral\s*</);

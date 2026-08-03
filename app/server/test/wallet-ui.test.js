@@ -38,10 +38,6 @@ test('wallet presentation describes disconnected, Aptos, and Solana DAA sessions
   assert.equal(solana.identityDisabled, true);
   assert.equal(solana.chainLabel, 'SOLANA DAA');
 
-  const legacyPhantom = walletPresentation({ address: 'LegacyPhantomAddress12345', verified: true });
-  assert.equal(legacyPhantom.connected, true, 'legacy bridge remains active until dApp wiring migrates');
-  assert.equal(legacyPhantom.chainLabel, 'SOLANA DAA');
-
   const identityHtml = readPage('identity.html');
   assert.match(identityHtml, /data-wallet-summary/);
   assert.match(identityHtml, /data-wallet-label/);

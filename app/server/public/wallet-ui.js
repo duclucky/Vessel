@@ -7,17 +7,10 @@ const shortWallet = (address) => (
 export function walletPresentation({
   status = 'disconnected',
   session = null,
-  address = '',
-  verified = false,
 } = {}) {
-  const legacySession = !session && address && verified
-    ? { sourceAddress: address, mode: 'daa' }
-    : null;
-  const currentSession = session || legacySession;
-  const currentStatus = legacySession ? 'ready' : status;
-  const connected = currentStatus === 'ready' && Boolean(currentSession?.sourceAddress);
-  const shortAddress = shortWallet(currentSession?.sourceAddress || '');
-  const chainLabel = currentSession?.mode === 'daa' ? 'SOLANA DAA' : 'APTOS';
+  const connected = status === 'ready' && Boolean(session?.sourceAddress);
+  const shortAddress = shortWallet(session?.sourceAddress || '');
+  const chainLabel = session?.mode === 'daa' ? 'SOLANA DAA' : 'APTOS';
   return {
     connected,
     headerLabel: connected ? shortAddress : 'Connect',

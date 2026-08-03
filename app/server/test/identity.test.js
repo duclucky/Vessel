@@ -17,7 +17,7 @@ test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   }
   assert.match(html, /<script src="\/theme\.js"><\/script>/);
   assert.equal(hasInlineTailwindConfig(html), false);
-  assert.match(html, /Controlling wallet/i);
-  assert.match(html, /Derived Aptos storage account/i);
+  assert.match(html, /Connected wallet/i);
+  assert.match(html, /Shelby storage account/i);
   assert.doesNotMatch(html, /Ethereum Wallet|encrypted|weekly/i);
 });

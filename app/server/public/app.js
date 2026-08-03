@@ -1,7 +1,7 @@
 // Vessel — shared frontend wiring. Vanilla ES module. Talks only to the backend REST API
 // (same origin). The only browser-side credential is the user's wallet signature.
 
-import { createLedger, LS } from './ledger.js';
+import { createLedger } from './ledger.js';
 import { walletPresentation } from './wallet-ui.js';
 import { mountWalletUi } from './wallet-modal.js';
 
@@ -9,23 +9,9 @@ const API = location.origin;
 const ledger = createLedger(localStorage);
 const { loadMine, forgetMine } = ledger;
 
-/* ------------------------------- state ------------------------------- */
-const state = {
-  get address() { return localStorage.getItem(LS.addr) || ''; },
-  get storageAccount() { return localStorage.getItem(LS.sa) || ''; },
-  get verified() { return localStorage.getItem(LS.verified) === '1'; },
-  set(o) {
-    if (o.address !== undefined) localStorage.setItem(LS.addr, o.address);
-    if (o.storageAccount !== undefined) localStorage.setItem(LS.sa, o.storageAccount || '');
-    if (o.verified !== undefined) localStorage.setItem(LS.verified, o.verified ? '1' : '0');
-  },
-  clear() { [LS.addr, LS.sa, LS.verified].forEach((k) => localStorage.removeItem(k)); },
-};
-
 /* ------------------------------- helpers ------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const shortAddr = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : '');
 const shortMid = (a, n = 6) => (a && a.length > 2 * n + 2 ? `${a.slice(0, n + 2)}…${a.slice(-n)}` : a || '');
 
 async function api(path, { method = 'GET', body, form } = {}) {
@@ -61,60 +47,22 @@ function toast(msg, kind = 'info') {
 
 function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Copied', 'ok')).catch(() => {}); }
 
-function rememberSolanaIdentity(result) {
-  state.set({ address: result.solana, storageAccount: result.storageAccount, verified: true });
-  window.__storageSolana = result.solana;
-  window.__storageAcct = result.storageAccount;
-  renderWallet();
-}
-
 /* ------------------------------- wallet ------------------------------- */
-async function connectWallet() {
-  if (!window.ethereum) { toast('No Ethereum wallet found. Install MetaMask.', 'error'); return null; }
-  try {
-    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-    const address = accounts[0];
-    state.set({ address, verified: false, storageAccount: '' });
-    // pre-derive the storage account for display (no signature needed)
-    try { const r = await api('/api/identity/challenge', { method: 'POST', body: { address } }); void r; } catch {}
-    renderWallet();
-    toast('Wallet connected', 'ok');
-    return address;
-  } catch (e) { toast('Connection rejected', 'error'); return null; }
-}
-
-async function proveOwnership() {
-  const address = state.address;
-  if (!address) { await connectWallet(); if (!state.address) return null; }
-  const { message } = await api('/api/identity/challenge', { method: 'POST', body: { address: state.address } });
-  let signature;
-  try {
-    signature = await window.ethereum.request({ method: 'personal_sign', params: [message, state.address] });
-  } catch { toast('Signature rejected', 'error'); return null; }
-  const res = await api('/api/identity/verify', { method: 'POST', body: { address: state.address, signature, message } });
-  state.set({ address: res.address, storageAccount: res.storageAccount || '', verified: true });
-  renderWallet();
-  toast('Ownership proven', 'ok');
-  return res;
-}
+const walletController = () => window.VesselWallets;
 
 function renderWallet() {
-  const label = state.address ? shortAddr(state.address) : 'Connect Wallet';
-  $$('.js-connect').forEach((btn) => {
-    const span = btn.querySelector('.js-connect-label');
-    if (span) span.textContent = label; else if (!btn.querySelector('.material-symbols-outlined') || btn.dataset.labelOnly) btn.textContent = label;
-    else {
-      // keep icon, replace trailing text node
-      const t = [...btn.childNodes].find((n) => n.nodeType === 3 && n.textContent.trim());
-      if (t) t.textContent = ' ' + label; else btn.insertadjacentText?.('beforeend', label);
-    }
-    btn.onclick = state.address ? null : (e) => { e.preventDefault(); connectWallet(); };
-  });
-  const presentation = walletPresentation({ address: state.address, verified: state.verified });
+  const controller = walletController();
+  const next = controller?.getState?.() || {};
+  const presentation = walletPresentation(next);
   $$('[data-wallet-label]').forEach((el) => { el.textContent = presentation.headerLabel; });
   $$('[data-wallet-summary]').forEach((el) => {
     el.setAttribute('aria-label', presentation.headerAria);
     el.dataset.connected = presentation.connected ? 'true' : 'false';
+    el.onclick = (event) => {
+      event.preventDefault();
+      if (next.session) walletUi?.openAccountMenu(el);
+      else void walletUi?.open(el);
+    };
   });
   const identityLabel = $('#sign-btn-label');
   if (identityLabel) identityLabel.textContent = presentation.identityLabel;
@@ -131,49 +79,34 @@ function page() {
 function initLanding() {}
 
 async function initIdentity() {
-  const originEl = $('#origin-wallet'); const derivedEl = $('#derived-account');
-  const SOL = () => window.VesselSolana;
-  const currentSolana = SOL()?.state?.solana || (state.verified ? state.address : '');
-  const currentStorageAccount = SOL()?.state?.storageAccount || (state.verified ? state.storageAccount : '');
-  // The storage identity is the VISITOR's own Phantom-derived DAA account — shown once they connect.
-  if (currentSolana) {
-    if (originEl) originEl.textContent = shortMid(currentSolana);
-    if (derivedEl) derivedEl.textContent = shortMid(currentStorageAccount);
+  const renderIdentitySession = (session) => {
+    const origin = $('#origin-wallet');
+    const storage = $('#derived-account');
+    if (origin) origin.textContent = session ? shortMid(session.sourceAddress) : '—';
+    if (storage) storage.textContent = session ? shortMid(session.storageAddress) : '(connect wallet)';
     const status = $('#auth-status');
-    if (status) status.textContent = state.verified ? 'Ownership verified · ready to upload' : 'Wallet connected · storage identity derived';
-    window.__storageSolana = currentSolana; window.__storageAcct = currentStorageAccount;
-  } else {
-    if (originEl) originEl.textContent = '—';
-    if (derivedEl) derivedEl.textContent = '—';
-  }
-  const signBtn = $('#sign-btn');
-  if (signBtn) signBtn.onclick = async (e) => {
-    e.preventDefault();
-    signBtn.disabled = true;
-    try {
-      if (SOL()?.available()) {
-        // Sovereign path: the visitor's own Solana wallet IS the storage identity.
-        const r = await SOL().connect();
-        rememberSolanaIdentity(r);
-        if (originEl) originEl.textContent = shortMid(r.solana);
-        if (derivedEl) derivedEl.textContent = shortMid(r.storageAccount);
-        const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified · ready to upload';
-        toast('Connected — your wallet owns this storage identity', 'ok');
-      } else {
-        if (!state.address) { await connectWallet(); if (!state.address) { signBtn.disabled = false; return; } }
-        const res = await proveOwnership();
-        if (res) {
-          if (derivedEl) derivedEl.textContent = shortMid(res.storageAccount || '');
-          if (originEl) originEl.textContent = shortMid(res.address);
-          const status = $('#auth-status'); if (status) status.textContent = 'Ownership verified · ready to upload';
-        }
-      }
-    } catch (err) { toast(String(err?.message || err).slice(0, 140), 'error'); }
-    renderWallet();
+    if (status) {
+      status.textContent = session
+        ? 'Wallet connected · storage identity ready'
+        : 'Choose an Aptos or Solana wallet';
+    }
+    window.__storageSolana = session?.chain === 'solana' ? session.sourceAddress : '';
+    window.__storageAcct = session?.storageAddress || '';
   };
-  // copy buttons (copy the real storage identity)
-  $$('.js-copy-origin').forEach((b) => (b.onclick = () => copy(window.__storageSolana || state.address)));
-  $$('.js-copy-derived').forEach((b) => (b.onclick = () => copy(window.__storageAcct || state.storageAccount)));
+
+  renderIdentitySession(walletController().getState().session);
+  walletController().subscribe((next) => renderIdentitySession(next.session));
+  const signBtn = $('#sign-btn');
+  if (signBtn) signBtn.onclick = (event) => {
+    event.preventDefault();
+    if (!walletController().getState().session) void walletUi.open(signBtn);
+  };
+  $$('.js-copy-origin').forEach((button) => {
+    button.onclick = () => copy(walletController().getState().session?.sourceAddress || '');
+  });
+  $$('.js-copy-derived').forEach((button) => {
+    button.onclick = () => copy(walletController().getState().session?.storageAddress || '');
+  });
 }
 
 function initUpload() {
@@ -195,6 +128,13 @@ function initUpload() {
 
   async function doUpload(file) {
     if (!file) return;
+    const session = walletController().getState().session;
+    if (!session) {
+      toast('Connect a wallet before uploading', 'warn');
+      const opener = document.querySelector('[data-wallet-summary]');
+      void walletUi.open(opener);
+      return;
+    }
     const cfg = await api('/api/config').catch(() => ({}));
     const maxB = cfg.maxUploadBytes || 25 * 1024 * 1024;
     if (file.size > maxB) { toast(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`, 'error'); return; }
@@ -202,13 +142,11 @@ function initUpload() {
 
     // Cách B (sponsored + USDC): Phantom pays a stablecoin fee & signs; the server sponsors the
     // Aptos-side storage. The blob is owned by the visitor's own DAA account. No APT/ShelbyUSD needed.
-    if (SOL()?.available() && cfg.sponsored) {
+    if (session.chain === 'solana' && SOL()?.available() && cfg.sponsored) {
       show(vProg); setStep('signing');
       try {
         if (!SOL().state.solana) {
-          const connected = await SOL().connect();
-          rememberSolanaIdentity(connected);
-          toast('Phantom connected — this upload will be owned by YOUR wallet', 'ok');
+          throw new Error('Reconnect your Solana wallet before uploading');
         }
 
         // 1) quote (USDC)
@@ -242,7 +180,7 @@ function initUpload() {
     show(vProg); if (bar) bar.style.width = '15%'; if (pct) pct.textContent = '…';
     const form = new FormData();
     form.append('file', file);
-    if (state.address) form.append('owner', state.address);
+    form.append('owner', session.sourceAddress);
     try {
       const r = await api('/api/upload', { method: 'POST', form });
       if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
@@ -424,9 +362,11 @@ async function initMetadata() {
 
 /* ------------------------------- boot --------------------------------- */
 let walletUi = null;
+const deprecatedWalletKeys = ['vessel_addr', 'vessel_sa', 'vessel_verified'];
 
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.VesselWallets) {
+    deprecatedWalletKeys.forEach((key) => localStorage.removeItem(key));
     walletUi = mountWalletUi({ controller: window.VesselWallets, document });
     window.addEventListener('vessel:wallet-open', (event) => {
       void walletUi.open(event.detail?.opener);
@@ -439,4 +379,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, latency: initLatency, metadata: initMetadata }[p] || (() => {}))();
 });
 
-window.Vessel = { connectWallet, proveOwnership, state, copy, api };
+window.Vessel = { copy, api, walletController };

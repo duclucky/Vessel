@@ -60,3 +60,12 @@ test('wallet bundle source is present and every dApp page loads it before app.js
     );
   }
 });
+
+test('every dApp page uses a real wallet-summary button', () => {
+  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html']) {
+    const html = readPage(page);
+    assert.match(html, /<button\b[^>]*data-wallet-summary[^>]*>/, `${page}: wallet button`);
+    assert.doesNotMatch(html, /<a\b[^>]*data-wallet-summary/, `${page}: wallet action must not be a link`);
+    assert.doesNotMatch(html, /href="#sign-btn"/, `${page}: no fragment proxy for wallet action`);
+  }
+});

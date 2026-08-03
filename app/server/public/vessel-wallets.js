@@ -2039,6 +2039,32 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     };
   }
 
+  // client-src/wallets/phantom-compat.js
+  function createPhantomCompatibilityAdapter({ descriptor, vesselSolana }) {
+    return {
+      async connect({ silent = false } = {}) {
+        if (silent) return null;
+        const result = await vesselSolana.connect();
+        return {
+          chain: "solana",
+          walletId: descriptor.id,
+          walletName: descriptor.name,
+          sourceAddress: result.solana,
+          sourceNetwork: result.network || vesselSolana.network,
+          storageAddress: result.storageAccount,
+          mode: "daa"
+        };
+      },
+      async disconnect() {
+        await vesselSolana.disconnect?.();
+      },
+      subscribe() {
+        return () => {
+        };
+      }
+    };
+  }
+
   // client-src/vessel-wallets.js
   var standardSource = getWallets();
   var aptosSource = {
@@ -2054,8 +2080,17 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   var adapters = /* @__PURE__ */ new Map();
   var availableRegistry = {
     async scan() {
+      adapters.clear();
       return (await discoveredRegistry.scan()).map((wallet) => {
-        if (wallet.chain === "evm" || adapters.has(wallet.id)) return wallet;
+        const phantomCompatible = wallet.chain === "solana" && wallet.name.toLowerCase() === "phantom" && wallet.enabled && window.VesselSolana?.available?.();
+        if (phantomCompatible) {
+          adapters.set(wallet.id, (descriptor) => createPhantomCompatibilityAdapter({
+            descriptor,
+            vesselSolana: window.VesselSolana
+          }));
+          return wallet;
+        }
+        if (wallet.chain === "evm") return wallet;
         return { ...wallet, enabled: false, status: "unavailable" };
       });
     },
@@ -2074,6 +2109,8 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   });
   window.VesselWallets = {
     ...controller,
-    open: () => window.dispatchEvent(new CustomEvent("vessel:wallet-open"))
+    open: (opener) => window.dispatchEvent(new CustomEvent("vessel:wallet-open", {
+      detail: { opener }
+    }))
   };
 })();
