@@ -172,6 +172,36 @@ test('instruction mutations or unsigned wallet results fail before Devnet broadc
   }
 });
 
+test('simulation failures surface the final program logs instead of truncating the RPC preamble', async () => {
+  const provider = {
+    publicKey: owner,
+    async signTransaction(transaction) {
+      transaction.partialSign(ownerKeypair);
+      return { signedTransaction: transaction.serialize() };
+    },
+  };
+  const simulationError = Object.assign(new Error('Simulation failed'), {
+    transactionLogs: [
+      'Program ComputeBudget111111111111111111111111111111 success',
+      'Program log: TransferChecked failed: TokenError::InvalidMint',
+      `Program ${programId.toBase58()} failed: custom program error: 0x2`,
+    ],
+  });
+  await assert.rejects(
+    () => submitSolanaContractSettlement({
+      provider,
+      connection: {
+        getLatestBlockhash: async () => ({ blockhash: Keypair.generate().publicKey.toBase58() }),
+        sendRawTransaction: async () => { throw simulationError; },
+      },
+      deployment,
+      contractQuote: quote,
+      contractSignature: '66'.repeat(64),
+    }),
+    /InvalidMint/,
+  );
+});
+
 test('wallets without signTransaction retain the signAndSend fallback', async () => {
   let submissions = 0;
   const result = await submitSolanaContractSettlement({

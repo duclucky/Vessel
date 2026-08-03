@@ -142,6 +142,21 @@ function preservesSettlementIntent(expected, signed) {
     ));
 }
 
+function simulationFailure(error) {
+  const logs = Array.isArray(error?.transactionLogs)
+    ? error.transactionLogs
+    : Array.isArray(error?.logs) ? error.logs : [];
+  const relevant = logs
+    .filter((line) => /Program log:|failed:/i.test(line))
+    .slice(-4)
+    .join(' | ');
+  const detail = relevant || error?.transactionMessage || error?.message || 'unknown RPC error';
+  return settlementError(
+    `Solana simulation failed: ${detail}`,
+    'settlement_submission_failed',
+  );
+}
+
 async function quoteDigest(quote) {
   const bytes = concatBytes([
     Uint8Array.from([quote.version, quote.chain]),
@@ -292,10 +307,14 @@ export async function submitSolanaContractSettlement({
         'settlement_submission_failed',
       );
     }
-    rawSignature = await connection.sendRawTransaction(signedBytes, {
-      skipPreflight: false,
-      preflightCommitment: 'confirmed',
-    });
+    try {
+      rawSignature = await connection.sendRawTransaction(signedBytes, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+      });
+    } catch (error) {
+      throw simulationFailure(error);
+    }
   } else {
     const submitted = await provider.signAndSendTransaction(transaction);
     rawSignature = submitted?.signature || submitted;
