@@ -1,0 +1,79 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createRecoveryLedger, normalizeWalletIdentity } from '../public/recovery-ledger.js';
+
+function memoryStorage() {
+  const map = new Map();
+  return {
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => map.set(key, String(value)),
+    removeItem: (key) => map.delete(key),
+    dump: () => JSON.stringify([...map]),
+  };
+}
+
+const identity = {
+  chain: 'aptos',
+  sourceAddress: '0xABC',
+  storageAddress: '0xABC',
+};
+
+test('recovery ledger advances allowlisted upload stages without storing file or key material', () => {
+  const storage = memoryStorage();
+  let current = 1_000;
+  const ledger = createRecoveryLedger(storage, () => current);
+  const record = ledger.save({
+    id: 'quote-1',
+    stage: 'quoted',
+    walletIdentity: identity,
+    quoteId: 'quote-1',
+    quoteToken: 'vquote.signed',
+    context: {
+      operation: 'upload', chain: 'aptos', sourceAddress: '0xABC', storageAddress: '0xABC',
+      fileHash: 'ab'.repeat(32), blobName: 'media/proof.png', sizeBytes: 3,
+      expirationMicros: 2_592_001_000_000, days: 30, encoding: 0,
+    },
+    file: new Uint8Array([1, 2, 3]),
+    seedPhrase: 'never store this',
+    privateKey: 'never store this either',
+  });
+
+  for (const stage of ['paid', 'registered', 'uploading', 'finalizing', 'active', 'recovery_required']) {
+    current += 1_000;
+    ledger.advance(record.id, stage, {
+      paidAuthorization: 'vpaid.signed',
+      settlementHash: '0xsettled',
+      registerTransactionHash: '0xregistered',
+      fileBytes: [9, 9, 9],
+      privateKey: 'secret',
+    });
+    assert.equal(ledger.loadForWallet(identity)[0].stage, stage);
+  }
+
+  const serialized = storage.dump();
+  assert.equal(serialized.includes('never store this'), false);
+  assert.equal(serialized.includes('fileBytes'), false);
+  assert.equal(serialized.includes('privateKey'), false);
+  assert.equal(ledger.loadForWallet(identity)[0].paidAuthorization, 'vpaid.signed');
+  assert.equal(ledger.loadForWallet(identity)[0].registerTransactionHash, '0xregistered');
+  assert.equal(normalizeWalletIdentity(identity), 'aptos:0xabc:0xabc');
+});
+
+test('recovery ledger is capped, wallet scoped, and complete removes a record', () => {
+  const storage = memoryStorage();
+  const ledger = createRecoveryLedger(storage, () => 1_000);
+  for (let index = 0; index < 35; index += 1) {
+    ledger.save({
+      id: `quote-${index}`,
+      stage: 'quoted',
+      walletIdentity: identity,
+      quoteId: `quote-${index}`,
+      context: { operation: 'upload', chain: 'aptos' },
+    });
+  }
+  assert.equal(ledger.loadForWallet(identity).length, 30);
+  assert.deepEqual(ledger.loadForWallet({ ...identity, sourceAddress: '0xother' }), []);
+  const id = ledger.loadForWallet(identity)[0].id;
+  ledger.complete(id);
+  assert.equal(ledger.loadForWallet(identity).some((item) => item.id === id), false);
+});

@@ -10631,367 +10631,6 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   };
   _AppReadyEvent_detail = /* @__PURE__ */ new WeakMap();
 
-  // client-src/wallets/registry.js
-  init_process();
-  init_buffer();
-  var SOLANA_REQUIRED = [
-    "standard:connect",
-    "standard:events",
-    "solana:signMessage",
-    "solana:signAndSendTransaction"
-  ];
-  var APTOS_REQUIRED = [
-    "aptos:connect",
-    "aptos:disconnect",
-    "aptos:network",
-    "aptos:onAccountChange",
-    "aptos:onNetworkChange",
-    "aptos:signAndSubmitTransaction"
-  ];
-  var hasAll = (wallet, names) => names.every((name) => name in (wallet.features || {}));
-  var supportsLegacy = (wallet) => {
-    const versions2 = wallet.features?.["solana:signAndSendTransaction"]?.supportedTransactionVersions;
-    return versions2 != null && Array.from(versions2).includes("legacy");
-  };
-  var idFor = (chain2, wallet) => `${chain2}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
-  function applyFamilyCapabilities(wallets2, families = {}) {
-    return wallets2.map((wallet) => {
-      if (wallet.chain === "evm") return wallet;
-      if (!families[wallet.chain]) {
-        return { ...wallet, enabled: false, status: "unavailable" };
-      }
-      return wallet;
-    });
-  }
-  function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
-    const evm = /* @__PURE__ */ new Map();
-    const listeners2 = /* @__PURE__ */ new Set();
-    const notify = () => listeners2.forEach((listener) => listener());
-    const announce = (event) => {
-      const { info, provider } = event.detail || {};
-      if (!info?.uuid || !provider) return;
-      evm.set(info.uuid, { info, provider });
-      notify();
-    };
-    eventTarget.addEventListener("eip6963:announceProvider", announce);
-    eventTarget.dispatchEvent(new Event("eip6963:requestProvider"));
-    const scan = async () => {
-      const aptos = aptosSource2.get().filter((wallet) => hasAll(wallet, APTOS_REQUIRED)).map((wallet) => ({
-        id: idFor("aptos", wallet),
-        name: wallet.name,
-        icon: wallet.icon,
-        chain: "aptos",
-        installed: true,
-        enabled: true,
-        status: "ready",
-        capabilities: [...APTOS_REQUIRED],
-        provider: wallet
-      }));
-      const solana = standardSource2.get().filter((wallet) => wallet.chains?.some((chain2) => String(chain2).startsWith("solana:"))).map((wallet) => {
-        const enabled = hasAll(wallet, SOLANA_REQUIRED) && supportsLegacy(wallet);
-        return {
-          id: idFor("solana", wallet),
-          name: wallet.name,
-          icon: wallet.icon,
-          chain: "solana",
-          installed: true,
-          enabled,
-          status: enabled ? "ready" : "incompatible",
-          capabilities: SOLANA_REQUIRED.filter((name) => name in (wallet.features || {})),
-          provider: wallet
-        };
-      });
-      const ethereum = [...evm.values()].map(({ info, provider }) => ({
-        id: `evm:${info.uuid}`,
-        name: info.name,
-        icon: info.icon,
-        chain: "evm",
-        installed: true,
-        enabled: false,
-        status: "beta",
-        capabilities: [],
-        provider
-      }));
-      return [...aptos, ...solana, ...ethereum].filter(
-        (row, index, all) => all.findIndex((item) => item.id === row.id) === index
-      );
-    };
-    const offAptos = aptosSource2.on("register", notify);
-    const offStandard = standardSource2.on("register", notify);
-    return {
-      scan,
-      subscribe(listener) {
-        listeners2.add(listener);
-        return () => listeners2.delete(listener);
-      },
-      destroy() {
-        offAptos?.();
-        offStandard?.();
-        eventTarget.removeEventListener("eip6963:announceProvider", announce);
-        listeners2.clear();
-      }
-    };
-  }
-
-  // client-src/wallets/session.js
-  init_process();
-  init_buffer();
-  var KEYS = {
-    id: "vessel.wallet.id",
-    chain: "vessel.wallet.chain"
-  };
-  function createWalletController({ registry, resolveAdapter, storage }) {
-    let state = { status: "disconnected", wallets: [], session: null, error: "" };
-    let activeAdapter = null;
-    let offAdapter = null;
-    const listeners2 = /* @__PURE__ */ new Set();
-    const publish = (patch) => {
-      state = { ...state, ...patch };
-      listeners2.forEach((listener) => listener(state));
-    };
-    const scan = async () => {
-      const statusBeforeScan = state.status;
-      publish({ status: "scanning" });
-      const wallets2 = await registry.scan();
-      const status = ["network_required", "identity_required"].includes(statusBeforeScan) ? statusBeforeScan : state.session ? "ready" : "disconnected";
-      publish({ wallets: wallets2, status });
-      return wallets2;
-    };
-    const disconnect = async () => {
-      offAdapter?.();
-      offAdapter = null;
-      const adapter = activeAdapter;
-      activeAdapter = null;
-      try {
-        await adapter?.disconnect?.();
-      } catch {
-      } finally {
-        storage.removeItem(KEYS.id);
-        storage.removeItem(KEYS.chain);
-        publish({ status: "disconnected", session: null, error: "" });
-      }
-    };
-    const attachAdapter = (descriptor, session) => {
-      storage.setItem(KEYS.id, descriptor.id);
-      storage.setItem(KEYS.chain, descriptor.chain);
-      offAdapter?.();
-      offAdapter = activeAdapter.subscribe((event) => {
-        if (["network_required", "identity_required"].includes(event?.status)) {
-          publish({
-            status: event.status,
-            session: event.session || state.session,
-            error: event.error || ""
-          });
-          return;
-        }
-        if (event?.session) {
-          publish({ session: event.session, status: "ready", error: "" });
-          return;
-        }
-        void disconnect();
-      });
-    };
-    const connect = async (walletId, { silent = false } = {}) => {
-      const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
-      if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
-      if (state.session && state.session.walletId !== walletId) await disconnect();
-      publish({ status: "connecting", error: "" });
-      try {
-        activeAdapter = resolveAdapter(descriptor);
-        const session = await activeAdapter.connect({ silent });
-        if (!session) {
-          publish({ status: "disconnected", session: null });
-          return null;
-        }
-        attachAdapter(descriptor, session);
-        publish({ session, status: "ready", error: "" });
-        return session;
-      } catch (error) {
-        const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
-        if (networkRequired && error.session) attachAdapter(descriptor, error.session);
-        publish({
-          status: networkRequired ? "network_required" : "error",
-          session: networkRequired ? error.session || null : null,
-          error: error?.message || String(error)
-        });
-        throw error;
-      }
-    };
-    const ensureNetwork = async () => {
-      if (!activeAdapter?.ensureNetwork || !state.session) {
-        throw new Error("Connect an Aptos wallet before switching network");
-      }
-      publish({ status: "connecting", error: "" });
-      try {
-        await activeAdapter.ensureNetwork();
-        publish({ status: "ready", error: "" });
-        return state.session;
-      } catch (error) {
-        publish({
-          status: ["wrong_network", "switch_unsupported"].includes(error?.code) ? "network_required" : "error",
-          error: error?.message || String(error)
-        });
-        throw error;
-      }
-    };
-    const restore = async () => {
-      await scan();
-      const id = storage.getItem(KEYS.id);
-      if (!id) return null;
-      try {
-        return await connect(id, { silent: true });
-      } catch {
-        if (state.status !== "network_required") {
-          publish({ status: "disconnected", session: null, error: "" });
-        }
-        return null;
-      }
-    };
-    return {
-      scan,
-      connect,
-      restore,
-      disconnect,
-      ensureNetwork,
-      getState: () => state,
-      getActiveAdapter: () => activeAdapter,
-      subscribe(listener) {
-        listeners2.add(listener);
-        return () => listeners2.delete(listener);
-      }
-    };
-  }
-
-  // client-src/wallets/aptos-adapter.js
-  init_process();
-  init_buffer();
-  var TESTNET = { name: "testnet", chainId: 2 };
-  var walletError = (message, code) => Object.assign(new Error(message), { code });
-  function normalizeAptosError(error, walletName = "Aptos wallet") {
-    const raw = String(error?.message || error || "");
-    if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
-    if (error?.session) {
-      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
-    }
-    if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
-      return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
-    }
-    if (/reject|declin|cancel/i.test(raw)) {
-      return walletError("Wallet request was rejected", "user_rejected");
-    }
-    return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
-  }
-  var approvedArgs = (response, code = "user_rejected") => {
-    if (response?.status !== "Approved") {
-      throw walletError("Wallet request was rejected", code);
-    }
-    return response.args;
-  };
-  var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
-  var isTestnet = (network) => String(network?.name || "").toLowerCase() === TESTNET.name && Number(network?.chainId) === TESTNET.chainId;
-  function createAptosAdapter(descriptor) {
-    const wallet = descriptor.provider;
-    const listeners2 = /* @__PURE__ */ new Set();
-    let session = null;
-    let eventsBound = false;
-    const feature = (name, method, { optional: optional2 = false } = {}) => {
-      const implementation = wallet?.features?.[name];
-      if (implementation?.[method]) return implementation;
-      if (optional2) return null;
-      throw walletError(`${descriptor.name} does not provide ${name}`, "provider_unavailable");
-    };
-    const emit2 = (event) => listeners2.forEach((listener) => listener(event));
-    const buildSession = (account) => {
-      const address = addressOf(account);
-      if (!address) throw walletError("Aptos wallet did not return an account", "provider_unavailable");
-      return {
-        chain: "aptos",
-        walletId: descriptor.id,
-        walletName: descriptor.name,
-        sourceAddress: address,
-        sourceNetwork: "testnet",
-        storageAddress: address,
-        mode: "native"
-      };
-    };
-    const ensureNetwork = async () => {
-      const current = await feature("aptos:network", "network").network();
-      if (isTestnet(current)) return current;
-      const changer = feature("aptos:changeNetwork", "changeNetwork", { optional: true });
-      if (!changer) {
-        throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
-      }
-      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
-      if (!changed?.success) {
-        throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
-      }
-      return TESTNET;
-    };
-    const bindEvents = () => {
-      if (eventsBound) return;
-      eventsBound = true;
-      const accountEvents = feature("aptos:onAccountChange", "onAccountChange");
-      const networkEvents = feature("aptos:onNetworkChange", "onNetworkChange");
-      void accountEvents.onAccountChange((account) => {
-        try {
-          session = buildSession(account);
-          emit2({ session, status: "ready" });
-        } catch (error) {
-          session = null;
-          emit2({ session: null, status: "disconnected", error: error.message });
-        }
-      });
-      void networkEvents.onNetworkChange((network) => {
-        if (!isTestnet(network)) {
-          emit2({ session, status: "network_required", error: "Switch your wallet to Aptos Testnet" });
-          return;
-        }
-        emit2({ session, status: session ? "ready" : "disconnected", error: "" });
-      });
-    };
-    return {
-      async connect({ silent = false } = {}) {
-        try {
-          const connector = feature("aptos:connect", "connect");
-          const account = approvedArgs(
-            await (silent ? connector.connect(true) : connector.connect())
-          );
-          session = buildSession(account);
-          try {
-            await ensureNetwork();
-          } catch (error) {
-            error.session = session;
-            throw error;
-          }
-          return session;
-        } catch (error) {
-          const normalized = normalizeAptosError(error, descriptor.name);
-          if (error?.session) normalized.session = error.session;
-          throw normalized;
-        }
-      },
-      ensureNetwork,
-      async signAndSubmitTransaction({ data }) {
-        return approvedArgs(
-          await feature("aptos:signAndSubmitTransaction", "signAndSubmitTransaction").signAndSubmitTransaction({ payload: data })
-        );
-      },
-      subscribe(listener) {
-        listeners2.add(listener);
-        bindEvents();
-        return () => listeners2.delete(listener);
-      },
-      async disconnect() {
-        await feature("aptos:disconnect", "disconnect").disconnect();
-        session = null;
-      }
-    };
-  }
-
-  // client-src/wallets/aptos-upload.js
-  init_process();
-  init_buffer();
-
   // node_modules/@aptos-labs/ts-sdk/dist/esm/index.mjs
   init_process();
   init_buffer();
@@ -35758,6 +35397,367 @@ ${String(result)}`);
     e7.SHELBYNET
   ];
 
+  // client-src/wallets/registry.js
+  init_process();
+  init_buffer();
+  var SOLANA_REQUIRED = [
+    "standard:connect",
+    "standard:events",
+    "solana:signMessage",
+    "solana:signAndSendTransaction"
+  ];
+  var APTOS_REQUIRED = [
+    "aptos:connect",
+    "aptos:disconnect",
+    "aptos:network",
+    "aptos:onAccountChange",
+    "aptos:onNetworkChange",
+    "aptos:signAndSubmitTransaction"
+  ];
+  var hasAll = (wallet, names) => names.every((name) => name in (wallet.features || {}));
+  var supportsLegacy = (wallet) => {
+    const versions2 = wallet.features?.["solana:signAndSendTransaction"]?.supportedTransactionVersions;
+    return versions2 != null && Array.from(versions2).includes("legacy");
+  };
+  var idFor = (chain2, wallet) => `${chain2}:${wallet.name}:${wallet.version || "1"}`.toLowerCase();
+  function applyFamilyCapabilities(wallets2, families = {}) {
+    return wallets2.map((wallet) => {
+      if (wallet.chain === "evm") return wallet;
+      if (!families[wallet.chain]) {
+        return { ...wallet, enabled: false, status: "unavailable" };
+      }
+      return wallet;
+    });
+  }
+  function createWalletRegistry({ aptosSource: aptosSource2, standardSource: standardSource2, eventTarget }) {
+    const evm = /* @__PURE__ */ new Map();
+    const listeners2 = /* @__PURE__ */ new Set();
+    const notify = () => listeners2.forEach((listener) => listener());
+    const announce = (event) => {
+      const { info, provider } = event.detail || {};
+      if (!info?.uuid || !provider) return;
+      evm.set(info.uuid, { info, provider });
+      notify();
+    };
+    eventTarget.addEventListener("eip6963:announceProvider", announce);
+    eventTarget.dispatchEvent(new Event("eip6963:requestProvider"));
+    const scan = async () => {
+      const aptos = aptosSource2.get().filter((wallet) => hasAll(wallet, APTOS_REQUIRED)).map((wallet) => ({
+        id: idFor("aptos", wallet),
+        name: wallet.name,
+        icon: wallet.icon,
+        chain: "aptos",
+        installed: true,
+        enabled: true,
+        status: "ready",
+        capabilities: [...APTOS_REQUIRED],
+        provider: wallet
+      }));
+      const solana = standardSource2.get().filter((wallet) => wallet.chains?.some((chain2) => String(chain2).startsWith("solana:"))).map((wallet) => {
+        const enabled = hasAll(wallet, SOLANA_REQUIRED) && supportsLegacy(wallet);
+        return {
+          id: idFor("solana", wallet),
+          name: wallet.name,
+          icon: wallet.icon,
+          chain: "solana",
+          installed: true,
+          enabled,
+          status: enabled ? "ready" : "incompatible",
+          capabilities: SOLANA_REQUIRED.filter((name) => name in (wallet.features || {})),
+          provider: wallet
+        };
+      });
+      const ethereum = [...evm.values()].map(({ info, provider }) => ({
+        id: `evm:${info.uuid}`,
+        name: info.name,
+        icon: info.icon,
+        chain: "evm",
+        installed: true,
+        enabled: false,
+        status: "beta",
+        capabilities: [],
+        provider
+      }));
+      return [...aptos, ...solana, ...ethereum].filter(
+        (row, index, all) => all.findIndex((item) => item.id === row.id) === index
+      );
+    };
+    const offAptos = aptosSource2.on("register", notify);
+    const offStandard = standardSource2.on("register", notify);
+    return {
+      scan,
+      subscribe(listener) {
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
+      },
+      destroy() {
+        offAptos?.();
+        offStandard?.();
+        eventTarget.removeEventListener("eip6963:announceProvider", announce);
+        listeners2.clear();
+      }
+    };
+  }
+
+  // client-src/wallets/session.js
+  init_process();
+  init_buffer();
+  var KEYS = {
+    id: "vessel.wallet.id",
+    chain: "vessel.wallet.chain"
+  };
+  function createWalletController({ registry, resolveAdapter, storage }) {
+    let state = { status: "disconnected", wallets: [], session: null, error: "" };
+    let activeAdapter = null;
+    let offAdapter = null;
+    const listeners2 = /* @__PURE__ */ new Set();
+    const publish = (patch) => {
+      state = { ...state, ...patch };
+      listeners2.forEach((listener) => listener(state));
+    };
+    const scan = async () => {
+      const statusBeforeScan = state.status;
+      publish({ status: "scanning" });
+      const wallets2 = await registry.scan();
+      const status = ["network_required", "identity_required"].includes(statusBeforeScan) ? statusBeforeScan : state.session ? "ready" : "disconnected";
+      publish({ wallets: wallets2, status });
+      return wallets2;
+    };
+    const disconnect = async () => {
+      offAdapter?.();
+      offAdapter = null;
+      const adapter = activeAdapter;
+      activeAdapter = null;
+      try {
+        await adapter?.disconnect?.();
+      } catch {
+      } finally {
+        storage.removeItem(KEYS.id);
+        storage.removeItem(KEYS.chain);
+        publish({ status: "disconnected", session: null, error: "" });
+      }
+    };
+    const attachAdapter = (descriptor, session) => {
+      storage.setItem(KEYS.id, descriptor.id);
+      storage.setItem(KEYS.chain, descriptor.chain);
+      offAdapter?.();
+      offAdapter = activeAdapter.subscribe((event) => {
+        if (["network_required", "identity_required"].includes(event?.status)) {
+          publish({
+            status: event.status,
+            session: event.session || state.session,
+            error: event.error || ""
+          });
+          return;
+        }
+        if (event?.session) {
+          publish({ session: event.session, status: "ready", error: "" });
+          return;
+        }
+        void disconnect();
+      });
+    };
+    const connect = async (walletId, { silent = false } = {}) => {
+      const descriptor = state.wallets.find((wallet) => wallet.id === walletId);
+      if (!descriptor?.enabled) throw new Error("Wallet is not available for connection");
+      if (state.session && state.session.walletId !== walletId) await disconnect();
+      publish({ status: "connecting", error: "" });
+      try {
+        activeAdapter = resolveAdapter(descriptor);
+        const session = await activeAdapter.connect({ silent });
+        if (!session) {
+          publish({ status: "disconnected", session: null });
+          return null;
+        }
+        attachAdapter(descriptor, session);
+        publish({ session, status: "ready", error: "" });
+        return session;
+      } catch (error) {
+        const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
+        if (networkRequired && error.session) attachAdapter(descriptor, error.session);
+        publish({
+          status: networkRequired ? "network_required" : "error",
+          session: networkRequired ? error.session || null : null,
+          error: error?.message || String(error)
+        });
+        throw error;
+      }
+    };
+    const ensureNetwork = async () => {
+      if (!activeAdapter?.ensureNetwork || !state.session) {
+        throw new Error("Connect an Aptos wallet before switching network");
+      }
+      publish({ status: "connecting", error: "" });
+      try {
+        await activeAdapter.ensureNetwork();
+        publish({ status: "ready", error: "" });
+        return state.session;
+      } catch (error) {
+        publish({
+          status: ["wrong_network", "switch_unsupported"].includes(error?.code) ? "network_required" : "error",
+          error: error?.message || String(error)
+        });
+        throw error;
+      }
+    };
+    const restore = async () => {
+      await scan();
+      const id = storage.getItem(KEYS.id);
+      if (!id) return null;
+      try {
+        return await connect(id, { silent: true });
+      } catch {
+        if (state.status !== "network_required") {
+          publish({ status: "disconnected", session: null, error: "" });
+        }
+        return null;
+      }
+    };
+    return {
+      scan,
+      connect,
+      restore,
+      disconnect,
+      ensureNetwork,
+      getState: () => state,
+      getActiveAdapter: () => activeAdapter,
+      subscribe(listener) {
+        listeners2.add(listener);
+        return () => listeners2.delete(listener);
+      }
+    };
+  }
+
+  // client-src/wallets/aptos-adapter.js
+  init_process();
+  init_buffer();
+  var TESTNET = { name: "testnet", chainId: 2 };
+  var walletError = (message, code) => Object.assign(new Error(message), { code });
+  function normalizeAptosError(error, walletName = "Aptos wallet") {
+    const raw = String(error?.message || error || "");
+    if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
+    if (error?.session) {
+      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
+    }
+    if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
+      return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
+    }
+    if (/reject|declin|cancel/i.test(raw)) {
+      return walletError("Wallet request was rejected", "user_rejected");
+    }
+    return walletError(raw.trim() || `${walletName} could not connect`, "provider_unavailable");
+  }
+  var approvedArgs = (response, code = "user_rejected") => {
+    if (response?.status !== "Approved") {
+      throw walletError("Wallet request was rejected", code);
+    }
+    return response.args;
+  };
+  var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
+  var isTestnet = (network) => String(network?.name || "").toLowerCase() === TESTNET.name && Number(network?.chainId) === TESTNET.chainId;
+  function createAptosAdapter(descriptor) {
+    const wallet = descriptor.provider;
+    const listeners2 = /* @__PURE__ */ new Set();
+    let session = null;
+    let eventsBound = false;
+    const feature = (name, method, { optional: optional2 = false } = {}) => {
+      const implementation = wallet?.features?.[name];
+      if (implementation?.[method]) return implementation;
+      if (optional2) return null;
+      throw walletError(`${descriptor.name} does not provide ${name}`, "provider_unavailable");
+    };
+    const emit2 = (event) => listeners2.forEach((listener) => listener(event));
+    const buildSession = (account) => {
+      const address = addressOf(account);
+      if (!address) throw walletError("Aptos wallet did not return an account", "provider_unavailable");
+      return {
+        chain: "aptos",
+        walletId: descriptor.id,
+        walletName: descriptor.name,
+        sourceAddress: address,
+        sourceNetwork: "testnet",
+        storageAddress: address,
+        mode: "native"
+      };
+    };
+    const ensureNetwork = async () => {
+      const current = await feature("aptos:network", "network").network();
+      if (isTestnet(current)) return current;
+      const changer = feature("aptos:changeNetwork", "changeNetwork", { optional: true });
+      if (!changer) {
+        throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
+      }
+      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
+      if (!changed?.success) {
+        throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
+      }
+      return TESTNET;
+    };
+    const bindEvents = () => {
+      if (eventsBound) return;
+      eventsBound = true;
+      const accountEvents = feature("aptos:onAccountChange", "onAccountChange");
+      const networkEvents = feature("aptos:onNetworkChange", "onNetworkChange");
+      void accountEvents.onAccountChange((account) => {
+        try {
+          session = buildSession(account);
+          emit2({ session, status: "ready" });
+        } catch (error) {
+          session = null;
+          emit2({ session: null, status: "disconnected", error: error.message });
+        }
+      });
+      void networkEvents.onNetworkChange((network) => {
+        if (!isTestnet(network)) {
+          emit2({ session, status: "network_required", error: "Switch your wallet to Aptos Testnet" });
+          return;
+        }
+        emit2({ session, status: session ? "ready" : "disconnected", error: "" });
+      });
+    };
+    return {
+      async connect({ silent = false } = {}) {
+        try {
+          const connector = feature("aptos:connect", "connect");
+          const account = approvedArgs(
+            await (silent ? connector.connect(true) : connector.connect())
+          );
+          session = buildSession(account);
+          try {
+            await ensureNetwork();
+          } catch (error) {
+            error.session = session;
+            throw error;
+          }
+          return session;
+        } catch (error) {
+          const normalized = normalizeAptosError(error, descriptor.name);
+          if (error?.session) normalized.session = error.session;
+          throw normalized;
+        }
+      },
+      ensureNetwork,
+      async signAndSubmitTransaction({ data }) {
+        return approvedArgs(
+          await feature("aptos:signAndSubmitTransaction", "signAndSubmitTransaction").signAndSubmitTransaction({ payload: data })
+        );
+      },
+      subscribe(listener) {
+        listeners2.add(listener);
+        bindEvents();
+        return () => listeners2.delete(listener);
+      },
+      async disconnect() {
+        await feature("aptos:disconnect", "disconnect").disconnect();
+        session = null;
+      }
+    };
+  }
+
+  // client-src/wallets/aptos-upload.js
+  init_process();
+  init_buffer();
+
   // client-src/wallets/transaction-evidence.js
   init_process();
   init_buffer();
@@ -35842,6 +35842,34 @@ ${String(result)}`);
     const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
     return `media/${sha}.${extension}`;
   }
+  async function fileHashHex(file, digest) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const hash = new Uint8Array(await digest(data));
+    return {
+      data,
+      hex: [...hash].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+    };
+  }
+  async function resumeNativeBlobWrite(file, {
+    session,
+    expectedFileHash,
+    blobName,
+    deps = defaultDeps()
+  }) {
+    const { data, hex } = await fileHashHex(file, deps.digest || sha2562);
+    if (hex !== String(expectedFileHash || "").toLowerCase()) {
+      throw nativeError("The selected file does not match this recovery record", "file_changed");
+    }
+    if (contentAddressedName(file, hex) !== blobName) {
+      throw nativeError("The recovered blob name does not match the file", "file_changed");
+    }
+    await deps.shelby.rpc.putBlob({
+      account: session.storageAddress,
+      blobName,
+      blobData: data
+    });
+    return { key: blobName, size: data.length };
+  }
   async function uploadNativeAptos(file, {
     session,
     adapter,
@@ -35852,6 +35880,7 @@ ${String(result)}`);
     paymentTier,
     uploadContext,
     onStep,
+    onCheckpoint,
     deps = defaultDeps()
   }) {
     if (session?.chain && (session.chain !== "aptos" || session.mode !== "native")) {
@@ -35861,9 +35890,7 @@ ${String(result)}`);
       throw nativeError("Aptos wallet and storage addresses must match", "invalid_session");
     }
     assertNativeBalances(await readNativeBalances(session.sourceAddress, deps));
-    const blobData = new Uint8Array(await file.arrayBuffer());
-    const computedDigest = new Uint8Array(await (deps.digest || sha2562)(blobData));
-    const computedHash = [...computedDigest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const { data: blobData, hex: computedHash } = await fileHashHex(file, deps.digest || sha2562);
     const expected = String(expectedFileHash || "").toLowerCase();
     let hashDifference = computedHash.length ^ expected.length;
     const comparisonLength = Math.max(computedHash.length, expected.length);
@@ -35903,12 +35930,19 @@ ${String(result)}`);
     onStep?.("confirming");
     const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
     const evidence = extractShelbyTransactionEvidence(transaction);
+    onCheckpoint?.("registered", {
+      registerTransactionHash: evidence.transactionHash,
+      actualStorageUnits: evidence.actualStorageUnits,
+      actualGasUsed: evidence.actualGasUsed
+    });
     onStep?.("uploading");
+    onCheckpoint?.("uploading", { registerTransactionHash: evidence.transactionHash });
     await deps.shelby.rpc.putBlob({
       account: session.storageAddress,
       blobName,
       blobData
     });
+    onCheckpoint?.("finalizing", { registerTransactionHash: evidence.transactionHash });
     return {
       key: blobName,
       url: `${deps.shelby.baseUrl}/v1/blobs/${session.storageAddress}/${blobName}`,
@@ -41250,6 +41284,42 @@ Message: ${transactionMessage}.
     };
   }
 
+  // client-src/wallets/artifact-reconciler.js
+  init_process();
+  init_buffer();
+  var canonicalAddress = (value) => {
+    const text = String(value?.toString?.() ?? value ?? "").toLowerCase();
+    if (!/^0x[0-9a-f]+$/.test(text)) return text;
+    return `0x${text.slice(2).replace(/^0+/, "") || "0"}`;
+  };
+  var remoteKey = (item) => String(item.blobNameSuffix || item.name || "");
+  function reconcileArtifacts(local = [], remote = [], walletIdentity = {}) {
+    const storageAddress = canonicalAddress(walletIdentity.storageAddress);
+    const scopedLocal = local.filter((item) => canonicalAddress(item.storageAddress || item.account) === storageAddress);
+    const localByKey = new Map(scopedLocal.map((item) => [item.key, item]));
+    return remote.filter((item) => canonicalAddress(item.owner) === storageAddress).map((item) => {
+      const key = remoteKey(item);
+      const cached = localByKey.get(key) || {};
+      return Object.freeze({
+        ...cached,
+        key,
+        name: item.name || key,
+        url: item.url || cached.url || "",
+        storageAddress: String(item.owner?.toString?.() ?? item.owner),
+        account: String(item.owner?.toString?.() ?? item.owner),
+        size: Number(item.size || 0),
+        encoding: item.encoding,
+        createdAt: Number(item.creationMicros) / 1e3,
+        expiresAt: Number(item.expirationMicros) / 1e3,
+        expirationMicros: Number(item.expirationMicros),
+        isWritten: Boolean(item.isWritten),
+        isDeleted: Boolean(item.isDeleted),
+        state: item.isDeleted ? "deleted" : item.isWritten ? "active" : "finalizing",
+        lastReconciledAt: Date.now()
+      });
+    });
+  }
+
   // client-src/vessel-wallets.js
   var standardSource = getWallets();
   var aptosSource = {
@@ -41263,6 +41333,7 @@ Message: ${transactionMessage}.
     eventTarget: window
   });
   var adapters = /* @__PURE__ */ new Map();
+  var artifactClient = new ShelbyClient({ network: e7.TESTNET });
   var availableRegistry = {
     async scan() {
       adapters.clear();
@@ -41326,6 +41397,37 @@ Message: ${transactionMessage}.
     getActiveAptosAdapter() {
       const session = controller.getState().session;
       return session?.chain === "aptos" ? controller.getActiveAdapter() : null;
+    },
+    async listArtifacts() {
+      const session = controller.getState().session;
+      if (!session?.storageAddress) return [];
+      const rows = await artifactClient.coordination.getAccountBlobs({
+        account: session.storageAddress
+      });
+      return rows.map((row) => ({
+        ...row,
+        url: `${artifactClient.baseUrl}/v1/blobs/${session.storageAddress}/${row.blobNameSuffix}`
+      }));
+    },
+    reconcileArtifacts(local, remote) {
+      return reconcileArtifacts(local, remote, controller.getState().session || {});
+    },
+    async resumeBlobWrite(file, record2) {
+      const session = controller.getState().session;
+      if (!session || session.storageAddress.toLowerCase() !== record2.context.storageAddress.toLowerCase()) {
+        throw new Error("Reconnect the wallet that owns this recovery record");
+      }
+      if (session.chain === "aptos") {
+        return resumeNativeBlobWrite(file, {
+          session,
+          expectedFileHash: record2.context.fileHash,
+          blobName: record2.context.blobName
+        });
+      }
+      return window.VesselSolana.resumeBlobWrite(file, {
+        expectedFileHash: record2.context.fileHash,
+        blobName: record2.context.blobName
+      });
     },
     upload(file, context = {}) {
       return uploadRouter.upload(file, {

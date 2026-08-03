@@ -62,6 +62,36 @@ function contentAddressedName(file, sha) {
   return `media/${sha}.${extension}`;
 }
 
+async function fileHashHex(file, digest) {
+  const data = new Uint8Array(await file.arrayBuffer());
+  const hash = new Uint8Array(await digest(data));
+  return {
+    data,
+    hex: [...hash].map((byte) => byte.toString(16).padStart(2, '0')).join(''),
+  };
+}
+
+export async function resumeNativeBlobWrite(file, {
+  session,
+  expectedFileHash,
+  blobName,
+  deps = defaultDeps(),
+}) {
+  const { data, hex } = await fileHashHex(file, deps.digest || sha256);
+  if (hex !== String(expectedFileHash || '').toLowerCase()) {
+    throw nativeError('The selected file does not match this recovery record', 'file_changed');
+  }
+  if (contentAddressedName(file, hex) !== blobName) {
+    throw nativeError('The recovered blob name does not match the file', 'file_changed');
+  }
+  await deps.shelby.rpc.putBlob({
+    account: session.storageAddress,
+    blobName,
+    blobData: data,
+  });
+  return { key: blobName, size: data.length };
+}
+
 export async function uploadNativeAptos(file, {
   session,
   adapter,
@@ -72,6 +102,7 @@ export async function uploadNativeAptos(file, {
   paymentTier,
   uploadContext,
   onStep,
+  onCheckpoint,
   deps = defaultDeps(),
 }) {
   if (session?.chain && (session.chain !== 'aptos' || session.mode !== 'native')) {
@@ -82,11 +113,7 @@ export async function uploadNativeAptos(file, {
   }
 
   assertNativeBalances(await readNativeBalances(session.sourceAddress, deps));
-  const blobData = new Uint8Array(await file.arrayBuffer());
-  const computedDigest = new Uint8Array(await (deps.digest || sha256)(blobData));
-  const computedHash = [...computedDigest]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
+  const { data: blobData, hex: computedHash } = await fileHashHex(file, deps.digest || sha256);
   const expected = String(expectedFileHash || '').toLowerCase();
   let hashDifference = computedHash.length ^ expected.length;
   const comparisonLength = Math.max(computedHash.length, expected.length);
@@ -141,13 +168,20 @@ export async function uploadNativeAptos(file, {
   onStep?.('confirming');
   const transaction = await deps.aptos.waitForTransaction({ transactionHash: submitted.hash });
   const evidence = extractShelbyTransactionEvidence(transaction);
+  onCheckpoint?.('registered', {
+    registerTransactionHash: evidence.transactionHash,
+    actualStorageUnits: evidence.actualStorageUnits,
+    actualGasUsed: evidence.actualGasUsed,
+  });
 
   onStep?.('uploading');
+  onCheckpoint?.('uploading', { registerTransactionHash: evidence.transactionHash });
   await deps.shelby.rpc.putBlob({
     account: session.storageAddress,
     blobName,
     blobData,
   });
+  onCheckpoint?.('finalizing', { registerTransactionHash: evidence.transactionHash });
 
   return {
     key: blobName,

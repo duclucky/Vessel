@@ -14,8 +14,8 @@ function memoryStorage() {
   };
 }
 
-test('successful owned upload records selection and wallet-owned gallery item', () => {
-  const ledger = createLedger(memoryStorage(), () => 1_000);
+test('successful owned upload records authoritative expiration, cost, and transaction evidence', () => {
+  const ledger = createLedger(memoryStorage());
   ledger.commitUpload({
     key: 'media/a.png',
     url: 'https://shelby.example/a.png',
@@ -23,13 +23,23 @@ test('successful owned upload records selection and wallet-owned gallery item', 
     contentType: 'image/png',
     ownedByYou: true,
     account: '0xabc',
+    expirationMicros: 2_592_001_000_000,
+    transactionHash: '0xregister',
+    acknowledgementHash: '0xack',
+    settlementHash: '0xpayment',
+    actualStorageUnits: '4200',
+    actualGasUsed: '718',
   });
   assert.deepEqual(ledger.selected(), {
     key: 'media/a.png',
     url: 'https://shelby.example/a.png',
   });
-  assert.equal(ledger.loadMine()[0].expiresAt, 604_801_000);
+  assert.equal(ledger.loadMine()[0].expiresAt, 2_592_001_000);
   assert.equal(ledger.loadMine()[0].account, '0xabc');
+  assert.equal(ledger.loadMine()[0].registerTransactionHash, '0xregister');
+  assert.equal(ledger.loadMine()[0].acknowledgementHash, '0xack');
+  assert.equal(ledger.loadMine()[0].paymentSignature, '0xpayment');
+  assert.equal(ledger.loadMine()[0].actualStorageUnits, '4200');
 });
 
 test('server-managed result is selected but not represented as wallet-owned', () => {

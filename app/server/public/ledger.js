@@ -29,6 +29,10 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     );
   }
 
+  function replaceMine(items) {
+    storage.setItem(LS.mine, JSON.stringify((Array.isArray(items) ? items : []).slice(0, 60)));
+  }
+
   function selected() {
     return {
       key: storage.getItem(LS.sel) || '',
@@ -40,16 +44,29 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     storage.setItem(LS.sel, result.key);
     storage.setItem(`${LS.sel}_url`, result.url);
     if (result.ownedByYou) {
+      if (!Number.isSafeInteger(result.expirationMicros) || result.expirationMicros <= 0) {
+        throw new TypeError('Authoritative Shelby expiration is required');
+      }
       rememberMine({
         key: result.key,
         url: result.url,
         size: result.size,
         contentType: result.contentType || '',
-        expiresAt: now() + 7 * 24 * 3600 * 1000,
+        expiresAt: result.expirationMicros / 1_000,
+        expirationMicros: result.expirationMicros,
         account: result.account,
+        storageAddress: result.account,
+        state: 'active',
+        registerTransactionHash: result.registerTransactionHash || result.transactionHash,
+        acknowledgementHash: result.acknowledgementHash,
+        paymentSignature: result.paymentSignature || result.settlementHash,
+        quotedAccountingMicro: result.quotedAccountingMicro,
+        actualStorageUnits: result.actualStorageUnits,
+        actualGasUsed: result.actualGasUsed,
+        lastReconciledAt: result.lastReconciledAt || now(),
       });
     }
   }
 
-  return { loadMine, rememberMine, forgetMine, selected, commitUpload };
+  return { loadMine, rememberMine, replaceMine, forgetMine, selected, commitUpload };
 }

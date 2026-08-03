@@ -48656,7 +48656,7 @@ Message: ${transactionMessage}.
           code: "registration_evidence_missing"
         });
       }
-      onCheckpoint?.("written", { blobName });
+      onCheckpoint?.("finalizing", { registerTransactionHash: registrationEvidence.transactionHash });
       return {
         key: blobName,
         url: readUrl(blobName),
@@ -48705,6 +48705,18 @@ Message: ${transactionMessage}.
       return 0;
     }
   }
+  async function resumeBlobWrite(file, { expectedFileHash, blobName } = {}) {
+    if (!client || !storageAddr) throw new Error("Reconnect your Solana wallet before recovery");
+    const data = new Uint8Array(await file.arrayBuffer());
+    const sha = await sha256Hex(data);
+    if (sha !== expectedFileHash) throw Object.assign(new Error("The selected file does not match this recovery record"), { code: "file_changed" });
+    await client.rpc.putBlob({
+      account: storageAddr.toString(),
+      blobName,
+      blobData: data
+    });
+    return { key: blobName, size: data.length };
+  }
   function readUrl(blobName) {
     return `${CFG.rpc}/v1/blobs/${storageAddr.toString()}/${blobName}`;
   }
@@ -48722,6 +48734,7 @@ Message: ${transactionMessage}.
     loadConfig,
     deriveAddress,
     uploadSponsored,
+    resumeBlobWrite,
     payUSDC,
     usdcBalance,
     readUrl,

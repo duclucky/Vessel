@@ -1,10 +1,13 @@
 import { getWallets } from '@wallet-standard/app';
+import { Network } from '@aptos-labs/ts-sdk';
+import { ShelbyClient } from '@shelby-protocol/sdk/browser';
 import { applyFamilyCapabilities, createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
-import { uploadNativeAptos } from './wallets/aptos-upload.js';
+import { resumeNativeBlobWrite, uploadNativeAptos } from './wallets/aptos-upload.js';
 import { createUploadRouter } from './wallets/upload-router.js';
 import { createSolanaDaaAdapter } from './wallets/solana-adapter.js';
+import { reconcileArtifacts } from './wallets/artifact-reconciler.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -18,6 +21,7 @@ const discoveredRegistry = createWalletRegistry({
   eventTarget: window,
 });
 const adapters = new Map();
+const artifactClient = new ShelbyClient({ network: Network.TESTNET });
 
 const availableRegistry = {
   async scan() {
@@ -85,6 +89,37 @@ window.VesselWallets = {
   getActiveAptosAdapter() {
     const session = controller.getState().session;
     return session?.chain === 'aptos' ? controller.getActiveAdapter() : null;
+  },
+  async listArtifacts() {
+    const session = controller.getState().session;
+    if (!session?.storageAddress) return [];
+    const rows = await artifactClient.coordination.getAccountBlobs({
+      account: session.storageAddress,
+    });
+    return rows.map((row) => ({
+      ...row,
+      url: `${artifactClient.baseUrl}/v1/blobs/${session.storageAddress}/${row.blobNameSuffix}`,
+    }));
+  },
+  reconcileArtifacts(local, remote) {
+    return reconcileArtifacts(local, remote, controller.getState().session || {});
+  },
+  async resumeBlobWrite(file, record) {
+    const session = controller.getState().session;
+    if (!session || session.storageAddress.toLowerCase() !== record.context.storageAddress.toLowerCase()) {
+      throw new Error('Reconnect the wallet that owns this recovery record');
+    }
+    if (session.chain === 'aptos') {
+      return resumeNativeBlobWrite(file, {
+        session,
+        expectedFileHash: record.context.fileHash,
+        blobName: record.context.blobName,
+      });
+    }
+    return window.VesselSolana.resumeBlobWrite(file, {
+      expectedFileHash: record.context.fileHash,
+      blobName: record.context.blobName,
+    });
   },
   upload(file, context = {}) {
     return uploadRouter.upload(file, {

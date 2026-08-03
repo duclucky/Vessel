@@ -8,10 +8,12 @@ import { confirmAction } from './confirm-dialog.js';
 import { createUploadIntent } from './retention.js';
 import { mountQuoteUi } from './quote-ui.js';
 import { settleQuote } from './settlement-client.js';
+import { createRecoveryLedger } from './recovery-ledger.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
-const { loadMine, forgetMine } = ledger;
+const recovery = createRecoveryLedger(localStorage);
+const { loadMine, replaceMine, forgetMine } = ledger;
 
 /* ------------------------------- helpers ------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -269,6 +271,16 @@ function initUpload() {
         throw new Error('Quote expiration did not match the selected retention');
       }
       activeUploadContext = Object.freeze({ file, intent, quote });
+      recovery.save({
+        id: quote.quoteId,
+        stage: 'quoted',
+        walletIdentity: session,
+        quoteId: quote.quoteId,
+        quoteToken: quote.quoteToken,
+        context: intent,
+        paymentTier: quote.tierId,
+        quotedAccountingMicro: quote.totalAccountingMicro,
+      });
       quoteUi.render({ kind: 'ready', quote });
     } catch (error) {
       if (error?.name === 'AbortError') return;
@@ -340,6 +352,93 @@ function initUpload() {
   });
   quoteConfirm?.addEventListener('click', () => void confirmQuotedUpload());
 
+  async function renderRecoveryPanel() {
+    $('#upload-recovery')?.remove();
+    const session = walletController().getState().session;
+    if (!session) return;
+    const record = recovery.loadForWallet(session)
+      .find((item) => item.stage !== 'quoted' && item.stage !== 'active');
+    if (!record) return;
+    const panel = document.createElement('section');
+    panel.id = 'upload-recovery';
+    panel.className = 'mt-6 rounded-control border border-secondary/20 bg-secondary/5 p-5';
+    panel.setAttribute('aria-labelledby', 'upload-recovery-title');
+    const kicker = document.createElement('p');
+    kicker.className = 'vessel-kicker text-secondary';
+    kicker.textContent = 'RECOVERY AVAILABLE';
+    const title = document.createElement('h2');
+    title.id = 'upload-recovery-title';
+    title.className = 'mt-2 font-display text-xl font-semibold';
+    title.textContent = record.stage === 'paid'
+      ? 'Payment verified — finish this upload'
+      : 'Finish writing the registered artifact';
+    const copyText = document.createElement('p');
+    copyText.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
+    copyText.textContent = `Reselect ${record.context.blobName}. Vessel will verify its SHA-256 before any irreversible action.`;
+    const label = document.createElement('label');
+    label.className = 'vessel-button vessel-button-secondary mt-4 px-5 py-3';
+    label.textContent = 'RESELECT FILE TO RESUME';
+    const recoveryInput = document.createElement('input');
+    recoveryInput.type = 'file';
+    recoveryInput.className = 'sr-only';
+    label.appendChild(recoveryInput);
+    panel.append(kicker, title, copyText, label);
+    quoteRoot?.parentElement?.appendChild(panel);
+
+    recoveryInput.addEventListener('change', async () => {
+      const file = recoveryInput.files?.[0];
+      if (!file) return;
+      const hash = await sha256Hex(file);
+      if (hash !== record.context.fileHash) {
+        toast('Selected file does not match the recovery SHA-256', 'error');
+        return;
+      }
+      panel.remove();
+      if (record.stage === 'paid') {
+        const quote = Object.freeze({
+          ...record.context,
+          quoteId: record.quoteId,
+          quoteToken: record.quoteToken,
+          tierId: record.paymentTier,
+          totalAccountingMicro: record.quotedAccountingMicro,
+          solanaAmountMicro: record.quotedAccountingMicro,
+        });
+        const recoveredContext = Object.freeze({
+          file,
+          intent: Object.freeze({ ...record.context }),
+          quote,
+          settlement: Object.freeze({
+            paidAuthorization: record.paidAuthorization,
+            settlementHash: record.settlementHash,
+          }),
+        });
+        selectedFile = file;
+        activeUploadContext = recoveredContext;
+        await doUpload(file, recoveredContext);
+        return;
+      }
+      try {
+        recovery.advance(record.id, 'uploading');
+        await walletController().resumeBlobWrite(file, record);
+        recovery.advance(record.id, 'finalizing');
+        const remote = await walletController().listArtifacts();
+        const matched = remote.find((item) => item.blobNameSuffix === record.context.blobName);
+        if (matched?.isWritten) {
+          recovery.complete(record.id);
+          toast('Recovered upload is active on Shelby', 'ok');
+        } else {
+          recovery.advance(record.id, 'recovery_required', { errorCode: 'acknowledgement_timeout' });
+          toast('Bytes were resent; Shelby acknowledgement is still pending', 'warn');
+        }
+      } catch (error) {
+        recovery.advance(record.id, 'recovery_required', { errorCode: error.code || 'resume_failed' });
+        toast(String(error?.message || error).slice(0, 160), 'error');
+      }
+    });
+  }
+
+  void renderRecoveryPanel();
+
   async function doUpload(file, quotedContext = activeUploadContext) {
     if (!file) return;
     if (!quotedContext?.quote || !quotedContext?.intent) {
@@ -385,6 +484,11 @@ function initUpload() {
         });
         quotedContext = Object.freeze({ ...quotedContext, settlement });
         activeUploadContext = quotedContext;
+        recovery.advance(quotedContext.quote.quoteId, 'paid', {
+          paidAuthorization: settlement.paidAuthorization,
+          settlementHash: settlement.settlementHash,
+          paymentSignature: settlement.settlementHash,
+        });
       } catch (error) {
         show(vInit);
         const message = error?.code === 'user_rejected'
@@ -394,6 +498,9 @@ function initUpload() {
         return;
       }
     }
+    const onCheckpoint = (stage, evidence = {}) => {
+      recovery.advance(quotedContext.quote.quoteId, stage, evidence);
+    };
 
     if (session.chain === 'aptos' && session.mode === 'native') {
       $('#aptos-funding-gate')?.remove();
@@ -408,10 +515,22 @@ function initUpload() {
           paymentTier: quotedContext.quote.tierId,
           uploadContext: quotedContext.intent,
           onStep: setStep,
+          onCheckpoint,
         });
+        onCheckpoint('active', {
+          registerTransactionHash: result.transactionHash,
+          actualStorageUnits: result.actualStorageUnits,
+          actualGasUsed: result.actualGasUsed,
+        });
+        recovery.complete(quotedContext.quote.quoteId);
         if (bar) bar.style.width = '100%';
         if (pct) pct.textContent = '100%';
-        setTimeout(() => renderSuccess(result), 350);
+        setTimeout(() => renderSuccess({
+          ...result,
+          settlementHash: settlement.settlementHash,
+          quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
+          lastReconciledAt: Date.now(),
+        }), 350);
       } catch (error) {
         show(vInit);
         if (['insufficient_apt', 'insufficient_shelby_usd'].includes(error?.code)) {
@@ -421,6 +540,9 @@ function initUpload() {
             retry: () => void doUpload(file, activeUploadContext),
           });
         } else {
+          if (error?.code === 'registration_evidence_missing') {
+            onCheckpoint('recovery_required', { errorCode: error.code });
+          }
           const message = String(error?.message || error);
           toast(message.toLowerCase().includes('reject') ? 'Signature rejected' : message.slice(0, 160), 'error');
         }
@@ -445,17 +567,30 @@ function initUpload() {
           paymentTier: quotedContext.quote.tierId,
           uploadContext: quotedContext.intent,
           onStep: setStep,
+          onCheckpoint,
         });
+        onCheckpoint('active', {
+          registerTransactionHash: r.transactionHash,
+          actualStorageUnits: r.actualStorageUnits,
+          actualGasUsed: r.actualGasUsed,
+        });
+        recovery.complete(quotedContext.quote.quoteId);
         if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
         setTimeout(() => renderSuccess({
           ...r,
           contentType: file.type,
           paidUsdc: Number(quotedContext.quote.solanaAmountMicro) / 1_000_000,
+          settlementHash: settlement.settlementHash,
+          quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
+          lastReconciledAt: Date.now(),
         }), 350);
         return;
       } catch (e) {
         show(vInit);
         if (e?.name === 'AbortError') return;
+        if (e?.code === 'registration_evidence_missing') {
+          onCheckpoint('recovery_required', { errorCode: e.code });
+        }
         const m = String(e?.message || e);
         toast(m.includes('reject') ? 'Signature rejected' : m.slice(0, 160), 'error');
         return;
@@ -566,7 +701,17 @@ async function initGallery() {
   const grid = $('#gallery-grid');
   if (!grid) return;
   // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
-  const items = loadMine();
+  let items = loadMine();
+  const walletState = walletController().getState();
+  if (walletState.status === 'ready' && walletState.session) {
+    try {
+      const remote = await walletController().listArtifacts();
+      items = walletController().reconcileArtifacts(items, remote);
+      replaceMine(items);
+    } catch (error) {
+      toast(`Using cached Gallery: ${String(error?.message || error).slice(0, 100)}`, 'warn');
+    }
+  }
   const count = $('#artifact-count');
   if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
   if (!items.length) {
