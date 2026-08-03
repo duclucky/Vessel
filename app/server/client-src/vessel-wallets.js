@@ -2,6 +2,7 @@ import { getWallets } from '@wallet-standard/app';
 import { createWalletRegistry } from './wallets/registry.js';
 import { createWalletController } from './wallets/session.js';
 import { createPhantomCompatibilityAdapter } from './wallets/phantom-compat.js';
+import { createAptosAdapter } from './wallets/aptos-adapter.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -20,6 +21,10 @@ const availableRegistry = {
   async scan() {
     adapters.clear();
     return (await discoveredRegistry.scan()).map((wallet) => {
+      if (wallet.chain === 'aptos' && wallet.enabled) {
+        adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
+        return wallet;
+      }
       const phantomCompatible = wallet.chain === 'solana'
         && wallet.name.toLowerCase() === 'phantom'
         && wallet.enabled
