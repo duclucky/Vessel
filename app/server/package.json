@@ -21,6 +21,7 @@
     "@shelby-protocol/ethereum-kit": "0.1.9",
     "@shelby-protocol/sdk": "0.3.1",
     "@shelby-protocol/solana-kit": "0.2.8",
+    "@sqds/multisig": "2.1.4",
     "@solana/spl-token": "0.4.15",
     "@solana/wallet-standard-features": "1.4.0",
     "@solana/web3.js": "1.98.4",

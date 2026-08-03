@@ -1,0 +1,34 @@
+# Vessel Solana settlement
+
+Anchor program for quote-verified Devnet USDC settlement into a PDA-controlled
+vault. A receipt PDA at `['receipt', quote_id]` makes every quote single-use.
+
+## Governance and deployment
+
+Production-like beta deployment is intentionally fail-closed:
+
+- Squads v4 must be autonomous (`configAuthority = null`).
+- Exactly three distinct members have initiate, vote, and execute permissions.
+- Threshold is 2 and timelock is 86,400 seconds.
+- `Config.authority` and the Program upgrade authority must both resolve to the
+  verified Squads vault PDA before the webapp is enabled.
+- No member private key is read by repository scripts.
+
+Generate and inspect public payloads from `app/server`:
+
+```text
+node scripts/solana-squads-setup.mjs derive
+node scripts/solana-squads-setup.mjs create-payload
+node scripts/solana-squads-setup.mjs program-authority-payload
+node scripts/solana-squads-setup.mjs verify
+```
+
+Required public environment values are `SOLANA_SQUADS_MEMBERS` (three
+comma-separated keys), `SOLANA_SQUADS_CREATE_KEY`, `SOLANA_SQUADS_CREATOR`,
+and `SOLANA_PROGRAM_ID`. `SOLANA_SQUADS_TREASURY` defaults to the creator.
+Authority transfer additionally requires the current authority's public key in
+`SOLANA_CURRENT_UPGRADE_AUTHORITY`.
+
+Do not write deployment addresses to
+`deployments/vessel-settlement.testnet.json` until both the Squads account and
+Program authority pass `verify` at finalized commitment.
