@@ -75,7 +75,7 @@ export async function verifyAptosShelbyUsdTransfer({
   const args = payload.arguments || payload.functionArguments || [];
   if (
     payload.function !== '0x1::primary_fungible_store::transfer'
-    || canonicalAddress(args[0]) !== asset
+    || canonicalAddress(args[0]?.inner ?? args[0]) !== asset
     || canonicalAddress(args[1]) !== treasuryAddress
     || BigInt(args[2] || 0) < amount
   ) {

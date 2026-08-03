@@ -39,7 +39,8 @@ function transaction({
     vm_status: success ? 'Executed successfully' : 'Move abort',
     payload: {
       function: '0x1::primary_fungible_store::transfer',
-      arguments: [asset, treasury, amount],
+      type_arguments: ['0x1::fungible_asset::Metadata'],
+      arguments: [{ inner: asset }, treasury, amount],
     },
     changes: [
       ...storeChanges(sourceStore, sender),
