@@ -4,7 +4,7 @@ import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
 import { uploadNativeAptos } from './wallets/aptos-upload.js';
 import { createUploadRouter } from './wallets/upload-router.js';
-import { createSolanaAdapter } from './wallets/solana-adapter.js';
+import { createSolanaDaaAdapter } from './wallets/solana-adapter.js';
 
 const standardSource = getWallets();
 const aptosSource = {
@@ -28,7 +28,10 @@ const availableRegistry = {
         return wallet;
       }
       if (wallet.chain === 'solana' && wallet.enabled) {
-        adapters.set(wallet.id, (descriptor) => createSolanaAdapter(descriptor));
+        adapters.set(wallet.id, (descriptor) => createSolanaDaaAdapter({
+          descriptor,
+          daaClient: window.VesselSolana,
+        }));
         return wallet;
       }
       if (wallet.chain === 'evm') return wallet;

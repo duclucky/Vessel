@@ -48524,10 +48524,17 @@ Message: ${transactionMessage}.
   var client = null;
   var DOMAIN2 = typeof window !== "undefined" && window.VESSEL_DOMAIN || "vessel.demo";
   var serverCfg = null;
-  function getPhantom() {
-    const p8 = typeof window !== "undefined" && (window.phantom?.solana || window.solana);
-    if (!p8 || !p8.isPhantom) return null;
-    return p8;
+  function clearProvider() {
+    provider = null;
+    pubkey = null;
+    storageAddr = null;
+    client = null;
+  }
+  function selectProvider(nextProvider) {
+    if (!nextProvider) throw new Error("Select a Solana wallet before connecting");
+    if (provider !== nextProvider) clearProvider();
+    provider = nextProvider;
+    return provider;
   }
   async function loadConfig() {
     if (serverCfg) return serverCfg;
@@ -48535,9 +48542,8 @@ Message: ${transactionMessage}.
     if (serverCfg.domain) DOMAIN2 = serverCfg.domain;
     return serverCfg;
   }
-  async function connect() {
-    provider = getPhantom();
-    if (!provider) throw new Error("Phantom wallet not found. Install the Phantom extension.");
+  async function connect(nextProvider) {
+    selectProvider(nextProvider);
     await loadConfig();
     const res = await provider.connect();
     pubkey = res.publicKey.toString();
@@ -48554,11 +48560,11 @@ Message: ${transactionMessage}.
     return r14?.signature ?? r14;
   }
   function solWallet() {
-    return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: "Phantom" };
+    return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: provider.name || "Solana wallet" };
   }
   var b64 = (u86) => btoa(String.fromCharCode(...new Uint8Array(u86)));
   async function uploadSponsored(file, { paymentId, uploadToken, expiresInSec = 7 * 24 * 3600, onStep } = {}) {
-    if (!client) await connect();
+    if (!client) await connect(provider);
     const cfg = await loadConfig();
     if (!cfg.gasStationAccount) throw new Error("server sponsor not configured");
     onStep?.("signing");
@@ -48616,7 +48622,8 @@ Message: ${transactionMessage}.
     }
   }
   async function payUSDC({ treasuryAta, amountMicro, memo, usdcMint }) {
-    if (!provider) await connect();
+    if (!provider) throw new Error("Select a Solana wallet before paying");
+    if (!pubkey) await connect(provider);
     const cfg = await loadConfig();
     const conn = new Connection(cfg.solanaRpc || "https://api.devnet.solana.com", "confirmed");
     const owner = new PublicKey(pubkey);
@@ -48650,21 +48657,19 @@ Message: ${transactionMessage}.
     const buf = await crypto.subtle.digest("SHA-256", bytes);
     return [...new Uint8Array(buf)].map((b8) => b8.toString(16).padStart(2, "0")).join("");
   }
-  var faucets = {
-    sol: "https://faucet.solana.com",
-    usdc: "https://faucet.circle.com"
-  };
   window.VesselSolana = {
-    available: () => !!getPhantom(),
+    available: () => Boolean(provider && pubkey && storageAddr),
     network: NET,
     connect,
+    selectProvider,
+    clearProvider,
+    disconnect: clearProvider,
     loadConfig,
     deriveAddress,
     uploadSponsored,
     payUSDC,
     usdcBalance,
     readUrl,
-    faucets,
     get state() {
       return { solana: pubkey, storageAccount: storageAddr?.toString() };
     }

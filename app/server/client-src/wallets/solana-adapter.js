@@ -55,7 +55,7 @@ export function createSolanaAdapter(descriptor) {
       return account ? new PublicKey(account.publicKey) : null;
     },
     async connect(options = {}) {
-      const selected = await connectStandard({ silent: Boolean(options.onlyIfTrusted) });
+      const selected = account || await connectStandard({ silent: Boolean(options.onlyIfTrusted) });
       return { publicKey: new PublicKey(selected.publicKey) };
     },
     async signMessage(message) {
@@ -128,6 +128,57 @@ export function createSolanaAdapter(descriptor) {
       await wallet.features?.['standard:disconnect']?.disconnect?.();
       account = null;
       storageAddress = '';
+    },
+  };
+}
+
+export function createSolanaDaaAdapter({ descriptor, daaClient }) {
+  const standard = createSolanaAdapter(descriptor);
+  let derivation = 0;
+
+  const deriveSession = async (session) => {
+    const result = await daaClient.connect(standard.daaProvider());
+    if (result.solana !== session.sourceAddress || !result.storageAccount) {
+      throw adapterError('Derived storage identity does not match the selected wallet', 'identity_mismatch');
+    }
+    standard.setStorageAddress(result.storageAccount);
+    return {
+      ...session,
+      sourceNetwork: 'devnet',
+      storageAddress: result.storageAccount,
+    };
+  };
+
+  return {
+    daaProvider: standard.daaProvider,
+    async connect(options = {}) {
+      const session = await standard.connect(options);
+      return deriveSession(session);
+    },
+    subscribe(listener) {
+      return standard.subscribe((event) => {
+        if (!event.session) {
+          derivation += 1;
+          daaClient.clearProvider();
+          listener(event);
+          return;
+        }
+        const current = ++derivation;
+        daaClient.clearProvider();
+        listener({ ...event, status: 'identity_required' });
+        void deriveSession(event.session).then((session) => {
+          if (current === derivation) listener({ session, status: 'ready', error: '' });
+        }).catch((error) => {
+          if (current === derivation) {
+            listener({ session: null, status: 'disconnected', error: error.message });
+          }
+        });
+      });
+    },
+    async disconnect() {
+      derivation += 1;
+      await standard.disconnect();
+      daaClient.clearProvider();
     },
   };
 }

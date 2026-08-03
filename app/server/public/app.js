@@ -60,6 +60,9 @@ function renderWallet() {
     el.dataset.connected = presentation.connected ? 'true' : 'false';
     el.onclick = (event) => {
       event.preventDefault();
+      if (next.status === 'identity_required') {
+        return;
+      }
       if (next.status === 'network_required') {
         void controller.ensureNetwork().catch((error) => toast(error.message, 'error'));
       } else if (next.session) walletUi?.openAccountMenu(el);
@@ -101,7 +104,9 @@ async function initIdentity() {
     }
     const status = $('#auth-status');
     if (status) {
-      status.textContent = walletStatus === 'network_required'
+      status.textContent = walletStatus === 'identity_required'
+        ? 'Updating the derived Aptos storage identity'
+        : walletStatus === 'network_required'
         ? 'Switch your wallet to Aptos Testnet'
         : session
         ? 'Wallet connected · storage identity ready'

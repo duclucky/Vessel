@@ -18,6 +18,16 @@ export function walletPresentation({
       chainLabel: 'APTOS',
     };
   }
+  if (status === 'identity_required') {
+    return {
+      connected: false,
+      headerLabel: 'Updating identity',
+      headerAria: 'Updating derived Aptos storage identity',
+      identityLabel: 'DERIVING STORAGE IDENTITY',
+      identityDisabled: true,
+      chainLabel: 'SOLANA DAA',
+    };
+  }
   const connected = status === 'ready' && Boolean(session?.sourceAddress);
   const shortAddress = shortWallet(session?.sourceAddress || '');
   const chainLabel = session?.mode === 'daa' ? 'SOLANA DAA' : 'APTOS';

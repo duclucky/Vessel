@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PublicKey, SystemProgram, Transaction } from '@solana/web3.js';
-import { createSolanaAdapter } from '../client-src/wallets/solana-adapter.js';
+import {
+  createSolanaAdapter,
+  createSolanaDaaAdapter,
+} from '../client-src/wallets/solana-adapter.js';
 
 const key = new PublicKey('EUrhHCRueCGE39yvNM1zV15fyCcizY2P8xLzDNdc418s');
 
@@ -124,4 +127,41 @@ test('provider without legacy transaction support is rejected', () => {
     }),
     (error) => error.code === 'provider_incompatible',
   );
+});
+
+test('DAA adapter publishes ready only after the derived storage address exists', async () => {
+  const wallet = standardWallet();
+  let derivation = 0;
+  const daaClient = {
+    connect: async (selectedProvider) => {
+      const { publicKey } = await selectedProvider.connect();
+      derivation += 1;
+      return {
+        solana: publicKey.toBase58(),
+        storageAccount: derivation === 1 ? '0xdaa' : '0xdaa2',
+        network: 'testnet',
+      };
+    },
+    clearProvider: () => {},
+  };
+  const adapter = createSolanaDaaAdapter({
+    descriptor: { id: 'solana:standard:1', name: 'Standard Wallet', provider: wallet },
+    daaClient,
+  });
+  const session = await adapter.connect({ silent: false });
+  const events = [];
+  adapter.subscribe((event) => events.push(event));
+
+  wallet.emitAccounts([{
+    address: key.toBase58(),
+    publicKey: key.toBytes(),
+    chains: ['solana:devnet'],
+  }]);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(session.storageAddress, '0xdaa');
+  assert.equal(events[0].status, 'identity_required');
+  assert.equal(events[0].session.storageAddress, '');
+  assert.equal(events[1].status, 'ready');
+  assert.equal(events[1].session.storageAddress, '0xdaa2');
 });

@@ -141,6 +141,40 @@ test('wrong-network connection keeps the Aptos account and can retry the active 
   assert.equal(controller.getState().session, session);
 });
 
+test('identity re-derivation blocks upload readiness until the new DAA arrives', async () => {
+  const descriptor = { id: 'solana:standard:1', chain: 'solana', enabled: true };
+  let onAdapterEvent;
+  const readySession = {
+    chain: 'solana', walletId: descriptor.id, walletName: 'Standard', sourceAddress: 'SOL',
+    sourceNetwork: 'devnet', storageAddress: '0xdaa', mode: 'daa',
+  };
+  const controller = createWalletController({
+    registry: { scan: async () => [descriptor], subscribe: () => () => {} },
+    storage: storage(),
+    resolveAdapter: () => ({
+      connect: async () => readySession,
+      disconnect: async () => {},
+      subscribe: (listener) => { onAdapterEvent = listener; return () => {}; },
+    }),
+  });
+  await controller.scan();
+  await controller.connect(descriptor.id);
+
+  onAdapterEvent({
+    status: 'identity_required',
+    session: { ...readySession, storageAddress: '' },
+  });
+  assert.equal(controller.getState().status, 'identity_required');
+  assert.equal(controller.getState().session.storageAddress, '');
+
+  onAdapterEvent({
+    status: 'ready',
+    session: { ...readySession, storageAddress: '0xdaa2' },
+  });
+  assert.equal(controller.getState().status, 'ready');
+  assert.equal(controller.getState().session.storageAddress, '0xdaa2');
+});
+
 test('disconnect clears app state even when the provider disconnect fails', async () => {
   const store = storage();
   const descriptor = { id: 'solana:phantom:1', chain: 'solana', enabled: true };

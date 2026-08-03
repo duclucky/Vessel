@@ -50,6 +50,18 @@ test('wallet presentation describes disconnected, Aptos, and Solana DAA sessions
     chainLabel: 'APTOS',
   });
 
+  assert.deepEqual(walletPresentation({
+    status: 'identity_required',
+    session: { sourceAddress: 'EUrh1234', mode: 'daa' },
+  }), {
+    connected: false,
+    headerLabel: 'Updating identity',
+    headerAria: 'Updating derived Aptos storage identity',
+    identityLabel: 'DERIVING STORAGE IDENTITY',
+    identityDisabled: true,
+    chainLabel: 'SOLANA DAA',
+  });
+
   const identityHtml = readPage('identity.html');
   assert.match(identityHtml, /data-wallet-summary/);
   assert.match(identityHtml, /data-wallet-label/);

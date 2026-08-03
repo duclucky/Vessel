@@ -1,5 +1,5 @@
-// Vessel — client-side Solana DAA + SPONSORED upload (Cách B) with the visitor's own Phantom.
-// The visitor's Phantom wallet:
+// Vessel — client-side Solana DAA + sponsored upload with the selected Wallet Standard provider.
+// The visitor's Solana wallet:
 //   1) derives its Aptos DAA storage account (deterministic — they own it),
 //   2) pays a small USDC fee on Solana (stablecoin — no price volatility),
 //   3) SIGNS the sponsored upload; the server co-signs via a gas station (pays APT + ShelbyUSD).
@@ -25,17 +25,25 @@ const CFG = NETWORKS[NET] || NETWORKS.testnet;
 const MEMO_PROGRAM = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
 const authFn = defaultSolanaAuthenticationFunction;
 
-let provider = null;    // Phantom provider
+let provider = null;    // explicitly selected Solana provider
 let pubkey = null;      // base58 string
 let storageAddr = null; // AccountAddress
 let client = null;      // ShelbyClient (browser)
 let DOMAIN = (typeof window !== 'undefined' && window.VESSEL_DOMAIN) || 'vessel.demo';
 let serverCfg = null;   // /api/config
 
-function getPhantom() {
-  const p = (typeof window !== 'undefined') && (window.phantom?.solana || window.solana);
-  if (!p || !p.isPhantom) return null;
-  return p;
+function clearProvider() {
+  provider = null;
+  pubkey = null;
+  storageAddr = null;
+  client = null;
+}
+
+function selectProvider(nextProvider) {
+  if (!nextProvider) throw new Error('Select a Solana wallet before connecting');
+  if (provider !== nextProvider) clearProvider();
+  provider = nextProvider;
+  return provider;
 }
 
 async function loadConfig() {
@@ -45,9 +53,8 @@ async function loadConfig() {
   return serverCfg;
 }
 
-async function connect() {
-  provider = getPhantom();
-  if (!provider) throw new Error('Phantom wallet not found. Install the Phantom extension.');
+async function connect(nextProvider) {
+  selectProvider(nextProvider);
   await loadConfig();
   const res = await provider.connect();
   pubkey = res.publicKey.toString();
@@ -61,21 +68,21 @@ function deriveAddress(pubkeyStr) {
   return dpk.authKey().derivedAddress();
 }
 
-// Phantom signMessage normalized to raw 64-byte signature (Phantom returns {signature}; adapters raw).
+// Wallet Standard signMessage normalized to a raw 64-byte signature.
 async function signMsgRaw(bytes) {
   const r = await provider.signMessage(bytes, 'utf8').catch(async () => await provider.signMessage(bytes));
   return r?.signature ?? r;
 }
 // Solana wallet shape for signAptosTransactionWithSolana. No signIn -> uses the proven signMessage path.
 function solWallet() {
-  return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: 'Phantom' };
+  return { publicKey: new PublicKey(pubkey), signMessage: signMsgRaw, name: provider.name || 'Solana wallet' };
 }
 
 const b64 = (u8) => btoa(String.fromCharCode(...new Uint8Array(u8)));
 
 // ---- SPONSORED upload: Phantom signs, server co-signs via gas station (Cách B) ----
 async function uploadSponsored(file, { paymentId, uploadToken, expiresInSec = 7 * 24 * 3600, onStep } = {}) {
-  if (!client) await connect();
+  if (!client) await connect(provider);
   const cfg = await loadConfig();
   if (!cfg.gasStationAccount) throw new Error('server sponsor not configured');
   onStep?.('signing');
@@ -139,7 +146,8 @@ async function uploadSponsored(file, { paymentId, uploadToken, expiresInSec = 7 
 
 // ---- USDC payment on Solana (Phantom pays the treasury; memo binds the payment to the intent) ----
 async function payUSDC({ treasuryAta, amountMicro, memo, usdcMint }) {
-  if (!provider) await connect();
+  if (!provider) throw new Error('Select a Solana wallet before paying');
+  if (!pubkey) await connect(provider);
   const cfg = await loadConfig();
   const conn = new Connection(cfg.solanaRpc || 'https://api.devnet.solana.com', 'confirmed');
   const owner = new PublicKey(pubkey);
@@ -172,15 +180,10 @@ async function sha256Hex(bytes) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-const faucets = {
-  sol: 'https://faucet.solana.com',
-  usdc: 'https://faucet.circle.com',
-};
-
 window.VesselSolana = {
-  available: () => !!getPhantom(),
+  available: () => Boolean(provider && pubkey && storageAddr),
   network: NET,
-  connect, loadConfig, deriveAddress,
-  uploadSponsored, payUSDC, usdcBalance, readUrl, faucets,
+  connect, selectProvider, clearProvider, disconnect: clearProvider, loadConfig, deriveAddress,
+  uploadSponsored, payUSDC, usdcBalance, readUrl,
   get state() { return { solana: pubkey, storageAccount: storageAddr?.toString() }; },
 };

@@ -10744,7 +10744,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
       const statusBeforeScan = state.status;
       publish({ status: "scanning" });
       const wallets2 = await registry.scan();
-      const status = statusBeforeScan === "network_required" ? "network_required" : state.session ? "ready" : "disconnected";
+      const status = ["network_required", "identity_required"].includes(statusBeforeScan) ? statusBeforeScan : state.session ? "ready" : "disconnected";
       publish({ wallets: wallets2, status });
       return wallets2;
     };
@@ -10767,9 +10767,9 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
       storage.setItem(KEYS.chain, descriptor.chain);
       offAdapter?.();
       offAdapter = activeAdapter.subscribe((event) => {
-        if (event?.status === "network_required") {
+        if (["network_required", "identity_required"].includes(event?.status)) {
           publish({
-            status: "network_required",
+            status: event.status,
             session: event.session || state.session,
             error: event.error || ""
           });
@@ -41036,7 +41036,7 @@ Message: ${transactionMessage}.
         return account ? new PublicKey(account.publicKey) : null;
       },
       async connect(options = {}) {
-        const selected = await connectStandard({ silent: Boolean(options.onlyIfTrusted) });
+        const selected = account || await connectStandard({ silent: Boolean(options.onlyIfTrusted) });
         return { publicKey: new PublicKey(selected.publicKey) };
       },
       async signMessage(message) {
@@ -41110,6 +41110,54 @@ Message: ${transactionMessage}.
       }
     };
   }
+  function createSolanaDaaAdapter({ descriptor, daaClient }) {
+    const standard = createSolanaAdapter(descriptor);
+    let derivation = 0;
+    const deriveSession = async (session) => {
+      const result = await daaClient.connect(standard.daaProvider());
+      if (result.solana !== session.sourceAddress || !result.storageAccount) {
+        throw adapterError("Derived storage identity does not match the selected wallet", "identity_mismatch");
+      }
+      standard.setStorageAddress(result.storageAccount);
+      return {
+        ...session,
+        sourceNetwork: "devnet",
+        storageAddress: result.storageAccount
+      };
+    };
+    return {
+      daaProvider: standard.daaProvider,
+      async connect(options = {}) {
+        const session = await standard.connect(options);
+        return deriveSession(session);
+      },
+      subscribe(listener) {
+        return standard.subscribe((event) => {
+          if (!event.session) {
+            derivation += 1;
+            daaClient.clearProvider();
+            listener(event);
+            return;
+          }
+          const current = ++derivation;
+          daaClient.clearProvider();
+          listener({ ...event, status: "identity_required" });
+          void deriveSession(event.session).then((session) => {
+            if (current === derivation) listener({ session, status: "ready", error: "" });
+          }).catch((error) => {
+            if (current === derivation) {
+              listener({ session: null, status: "disconnected", error: error.message });
+            }
+          });
+        });
+      },
+      async disconnect() {
+        derivation += 1;
+        await standard.disconnect();
+        daaClient.clearProvider();
+      }
+    };
+  }
 
   // client-src/vessel-wallets.js
   var standardSource = getWallets();
@@ -41133,7 +41181,10 @@ Message: ${transactionMessage}.
           return wallet;
         }
         if (wallet.chain === "solana" && wallet.enabled) {
-          adapters.set(wallet.id, (descriptor) => createSolanaAdapter(descriptor));
+          adapters.set(wallet.id, (descriptor) => createSolanaDaaAdapter({
+            descriptor,
+            daaClient: window.VesselSolana
+          }));
           return wallet;
         }
         if (wallet.chain === "evm") return wallet;

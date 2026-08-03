@@ -18,8 +18,8 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
     const statusBeforeScan = state.status;
     publish({ status: 'scanning' });
     const wallets = await registry.scan();
-    const status = statusBeforeScan === 'network_required'
-      ? 'network_required'
+    const status = ['network_required', 'identity_required'].includes(statusBeforeScan)
+      ? statusBeforeScan
       : state.session ? 'ready' : 'disconnected';
     publish({ wallets, status });
     return wallets;
@@ -46,9 +46,9 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
     storage.setItem(KEYS.chain, descriptor.chain);
     offAdapter?.();
     offAdapter = activeAdapter.subscribe((event) => {
-      if (event?.status === 'network_required') {
+      if (['network_required', 'identity_required'].includes(event?.status)) {
         publish({
-          status: 'network_required',
+          status: event.status,
           session: event.session || state.session,
           error: event.error || '',
         });
