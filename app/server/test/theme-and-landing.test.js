@@ -18,14 +18,16 @@ test('shared theme scripts parse and Landing uses them', () => {
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
-test('Landing CTAs describe navigation and route to Identity', () => {
-  const entries = getLinks(readPage('index.html'))
-    .filter((link) => /data-dapp-entry/.test(link.attrs));
-  assert.equal(entries.length, 2);
-  assert.deepEqual(entries.map((link) => link.href), ['/identity.html', '/identity.html']);
-  const labels = entries.map((link) => link.text.toUpperCase().replace(/^(APPS|ROCKET_LAUNCH)\s+/, ''));
-  assert.deepEqual(labels, ['OPEN DAPP', 'LAUNCH STORAGE APP']);
-  assert.doesNotMatch(readPage('index.html'), /data-wallet-summary|connect wallet to start/i);
+test('Landing CTAs route users into the app and the workflow explanation', () => {
+  const html = readPage('index.html');
+  const appEntries = getLinks(html).filter((link) => /data-dapp-entry/.test(link.attrs));
+  assert.equal(appEntries.length, 3);
+  assert.deepEqual(appEntries.map((link) => link.href), [
+    '/identity.html', '/identity.html', '/identity.html',
+  ]);
+  const workflowEntry = getLinks(html).find((link) => link.href === '#how-it-works');
+  assert.equal(workflowEntry?.text.toUpperCase().replace(/^SOUTH\s+/, ''), 'EXPLORE HOW IT WORKS');
+  assert.doesNotMatch(html, /data-wallet-summary|connect wallet to start/i);
 });
 
 test('dApp wallet actions no longer use the legacy MetaMask ownership path', () => {
@@ -34,13 +36,43 @@ test('dApp wallet actions no longer use the legacy MetaMask ownership path', () 
   assert.match(source, /openAccountMenu/);
 });
 
-test('Landing serves crystal artwork locally and states three honest proofs', () => {
+test('Landing presents the implemented platform scale and workflow', () => {
+  const html = readPage('index.html');
+  assert.match(html, /Wallet-owned hot storage for NFT media/i);
+  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Wallet ecosystems/i);
+  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Settlement contracts/i);
+  assert.match(html, />\s*1\s*<[^>]*>[\s\S]*Canonical NFT schema/i);
+  assert.match(html, /id="how-it-works"/);
+  for (const label of ['Connect', 'Store', 'Publish']) {
+    assert.match(html, new RegExp(`>\\s*${label}\\s*<`, 'i'));
+  }
+});
+
+test('Landing names current storage, metadata, and proof capabilities', () => {
+  const html = readPage('index.html');
+  for (const claim of [
+    'Wallet-native identity',
+    'Single and batch upload',
+    'Wallet-scoped Vault',
+    'NFT metadata',
+    'Collection JSON export',
+    'Latency proof',
+    'Flexible retention',
+    'Contract receipts',
+  ]) {
+    assert.match(html, new RegExp(claim, 'i'));
+  }
+});
+
+test('Landing explains both chain paths and honest beta safeguards', () => {
   const html = readPage('index.html');
   assert.match(html, /\/assets\/hero-crystals\.png/);
-  assert.match(html, /Aptos or Solana wallet/i);
-  assert.doesNotMatch(html, /Your Phantom wallet/i);
-  assert.match(html, />\s*DAA\s*</);
-  assert.match(html, />\s*Sub-second\s*</);
-  assert.match(html, />\s*Ephemeral\s*</);
-  assert.doesNotMatch(html, /encrypted|immutable|wiped weekly/i);
+  assert.match(html, /Aptos native/i);
+  assert.match(html, /Solana DAA/i);
+  assert.match(html, /Ed25519-signed quotes/i);
+  assert.match(html, /Aptos Multisig Account/i);
+  assert.match(html, /Squads/i);
+  assert.match(html, /testnet beta/i);
+  assert.doesNotMatch(html, /API is paused|public API is not available/i);
+  assert.doesNotMatch(html, /permanent storage|production SLA|guaranteed availability|encrypted|immutable blobs/i);
 });

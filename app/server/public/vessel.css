@@ -131,7 +131,36 @@ input.vessel-input, textarea.vessel-input { background: rgba(12, 14, 19, 0.7); c
 .vessel-dialog-actions .vessel-button { min-width: 0; padding-inline: 20px; }
 .vessel-button-danger { border: 1px solid rgb(255 180 171 / 0.28); color: #ffb4ab; background: rgb(255 180 171 / 0.08); }
 .vessel-button-danger:hover { background: rgb(255 180 171 / 0.14); box-shadow: 0 0 30px rgb(255 180 171 / 0.1); }
+.vessel-landing-section { padding-block: clamp(5rem, 9vw, 8rem); }
+.vessel-landing-heading { max-width: 52rem; font: 700 clamp(2.3rem, 5vw, 4.75rem)/1.04 Space Grotesk, sans-serif; letter-spacing: -0.045em; }
+.vessel-landing-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 2rem; background: rgba(12, 14, 19, 0.72); box-shadow: 0 30px 90px rgba(0, 0, 0, 0.22); }
+.vessel-landing-metrics div { display: grid; gap: 0.45rem; min-width: 0; padding: 2rem; }
+.vessel-landing-metrics div + div { border-left: 1px solid rgba(255, 255, 255, 0.08); }
+.vessel-landing-metrics strong { color: #b5fff0; font: 700 clamp(2.75rem, 6vw, 5rem)/1 Space Grotesk, sans-serif; }
+.vessel-landing-metrics span { color: #e2e2e9; font-weight: 650; }
+.vessel-landing-metrics small { color: #9eaba8; font: 500 11px/1.5 JetBrains Mono, monospace; text-transform: uppercase; }
+.vessel-landing-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 1rem; }
+.vessel-landing-card { grid-column: span 3; min-height: 15rem; padding: 1.75rem; }
+.vessel-landing-card-wide { grid-column: span 6; }
+.vessel-landing-step { position: relative; min-height: 19rem; overflow: hidden; }
+.vessel-landing-step-number { position: absolute; top: 1.5rem; right: 1.75rem; color: rgba(94, 230, 255, 0.2); font: 700 4rem/1 Space Grotesk, sans-serif; letter-spacing: -0.06em; }
+.vessel-architecture-card { border-top-color: rgba(94, 234, 212, 0.35); }
+.vessel-trust-list { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.vessel-trust-list li { display: grid; grid-template-columns: minmax(12rem, 0.7fr) 1fr; gap: 2rem; padding: 1.4rem 0; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.vessel-trust-list strong { color: #e2e2e9; font-weight: 650; }
+.vessel-trust-list span { color: #a8b3b0; line-height: 1.65; }
+.vessel-landing-beta { padding: clamp(2rem, 5vw, 4rem); }
+.vessel-landing-cta { padding-block: clamp(6rem, 11vw, 10rem); }
 @media (min-width: 768px) { .vessel-page { width: min(100% - 5rem, 92rem); } }
+@media (min-width: 768px) and (max-width: 1099px) {
+  .vessel-landing-card, .vessel-landing-card-wide { grid-column: span 6; }
+}
+@media (max-width: 767px) {
+  .vessel-landing-metrics { grid-template-columns: 1fr; }
+  .vessel-landing-metrics div + div { border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 0; }
+  .vessel-landing-card, .vessel-landing-card-wide { grid-column: 1 / -1; min-height: auto; }
+  .vessel-trust-list li { grid-template-columns: 1fr; gap: 0.5rem; }
+}
 @media (max-width: 639px) {
   .metadata-tab { gap: 0.35rem; padding-inline: 0.65rem; font-size: 9px; letter-spacing: 0.08em; }
   .metadata-trait-row { grid-template-columns: minmax(0, 1fr) 44px; }

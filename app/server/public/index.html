@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Wallet-owned decentralized hot storage on Shelby testnet.">
-  <title>VESSEL | Decentralized Hot Storage</title>
+  <meta name="description" content="Wallet-owned hot storage, batch media workflows, and canonical NFT metadata for Aptos and Solana, powered by Shelby.">
+  <title>VESSEL | Wallet-Owned Hot Storage for NFT Media</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap" rel="stylesheet">
@@ -39,20 +39,118 @@
       <div class="absolute inset-0 bg-gradient-to-b from-background/60 via-background/30 to-background"></div>
       <div class="vessel-bloom left-1/4 top-1/3 h-40 w-40 bg-secondary-container/25"></div><div class="vessel-bloom bottom-1/4 right-1/4 h-40 w-40 bg-primary-container/20"></div>
       <div class="relative z-10 mx-auto max-w-5xl">
-        <p class="vessel-kicker text-primary-container">Wallet-native · Cross-chain · Hot storage</p>
-        <h1 class="mt-6 font-display text-5xl font-bold leading-[1.03] tracking-[-0.045em] text-on-surface sm:text-6xl md:text-8xl">Decentralized Hot Storage for the NFT Era</h1>
-        <p class="mx-auto mt-7 max-w-2xl text-base leading-7 text-on-surface-variant sm:text-lg md:text-xl">Your Aptos or Solana wallet controls fast, decentralized media storage on Shelby—without a new account, bridge, or seed phrase.</p>
-        <a class="vessel-button vessel-button-primary mt-10 px-7 py-4 sm:px-9" data-dapp-entry href="/identity.html"><span class="material-symbols-outlined text-xl" aria-hidden="true">rocket_launch</span>LAUNCH STORAGE APP</a>
+        <p class="vessel-kicker text-primary-container">Wallet-native · Cross-chain · Powered by Shelby</p>
+        <h1 class="mt-6 font-display text-5xl font-bold leading-[1.03] tracking-[-0.045em] text-on-surface sm:text-6xl md:text-8xl">Wallet-owned hot storage for NFT media</h1>
+        <p class="mx-auto mt-7 max-w-3xl text-base leading-7 text-on-surface-variant sm:text-lg md:text-xl">Connect Aptos or Solana, store individual assets or complete collections, and prepare canonical NFT metadata from one wallet-native workspace.</p>
+        <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <a class="vessel-button vessel-button-primary px-7 py-4 sm:px-9" data-dapp-entry href="/identity.html"><span class="material-symbols-outlined text-xl" aria-hidden="true">rocket_launch</span>LAUNCH APP</a>
+          <a class="vessel-button vessel-button-secondary px-7 py-4 sm:px-9" href="#how-it-works"><span class="material-symbols-outlined text-xl" aria-hidden="true">south</span>EXPLORE HOW IT WORKS</a>
+        </div>
       </div>
     </section>
-    <section class="vessel-page relative z-10 grid gap-5 md:grid-cols-3" aria-label="Vessel proof points">
-      <article class="vessel-glass rounded-vessel p-7 text-center md:p-9"><span class="material-symbols-outlined text-3xl text-primary-container" aria-hidden="true">fingerprint</span><h2 class="mt-5 font-display text-xl font-semibold">DAA</h2><p class="mt-3 text-sm leading-6 text-on-surface-variant">Aptos connects natively; Solana authorizes a derived Aptos identity for your Shelby blob namespace.</p></article>
-      <article class="vessel-glass rounded-vessel p-7 text-center md:p-9"><span class="material-symbols-outlined text-3xl text-tertiary-container" aria-hidden="true">speed</span><h2 class="mt-5 font-display text-xl font-semibold">Sub-second</h2><p class="mt-3 text-sm leading-6 text-on-surface-variant">Hot reads are built for media and responsive applications—not cold archival retrieval.</p></article>
-      <article class="vessel-glass rounded-vessel p-7 text-center md:p-9"><span class="material-symbols-outlined text-3xl text-secondary" aria-hidden="true">hourglass_top</span><h2 class="mt-5 font-display text-xl font-semibold">Ephemeral</h2><p class="mt-3 text-sm leading-6 text-on-surface-variant">This capability demo runs on testnet; uploaded artifacts expire and are not permanent.</p></article>
+
+    <section class="vessel-page vessel-landing-metrics relative z-10" aria-label="Platform scale">
+      <div><strong>2</strong><span>Wallet ecosystems</span><small>Aptos + Solana</small></div>
+      <div><strong>2</strong><span>Settlement contracts</span><small>Move + Solana Program</small></div>
+      <div><strong>1</strong><span>Canonical NFT schema</span><small>Single + collection</small></div>
+    </section>
+
+    <section id="how-it-works" class="vessel-page vessel-landing-section scroll-mt-36" aria-labelledby="workflow-heading">
+      <p class="vessel-kicker text-primary-container">HOW IT WORKS</p>
+      <h2 id="workflow-heading" class="vessel-landing-heading mt-5 text-on-surface">One wallet. Three steps. Collection-ready.</h2>
+      <p class="mt-6 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Vessel turns a connected wallet into a complete media and metadata workspace without forcing users into another account system.</p>
+      <div class="mt-12 grid gap-4 lg:grid-cols-3">
+        <article class="vessel-landing-step vessel-glass rounded-vessel p-7 md:p-9">
+          <span class="vessel-landing-step-number" aria-hidden="true">01</span>
+          <span class="material-symbols-outlined mt-8 text-3xl text-primary-container" aria-hidden="true">account_balance_wallet</span>
+          <h3 class="mt-6 font-display text-2xl font-semibold">Connect</h3>
+          <p class="mt-4 leading-7 text-on-surface-variant">Use an Aptos wallet directly, or let your Solana wallet authorize a deterministic Aptos storage identity through DAA.</p>
+        </article>
+        <article class="vessel-landing-step vessel-glass rounded-vessel p-7 md:p-9">
+          <span class="vessel-landing-step-number" aria-hidden="true">02</span>
+          <span class="material-symbols-outlined mt-8 text-3xl text-tertiary-container" aria-hidden="true">cloud_upload</span>
+          <h3 class="mt-6 font-display text-2xl font-semibold">Store</h3>
+          <p class="mt-4 leading-7 text-on-surface-variant">Upload one asset or a complete folder, choose 1 to 365 days of retention, and review the quote before signing.</p>
+        </article>
+        <article class="vessel-landing-step vessel-glass rounded-vessel p-7 md:p-9">
+          <span class="vessel-landing-step-number" aria-hidden="true">03</span>
+          <span class="material-symbols-outlined mt-8 text-3xl text-secondary" aria-hidden="true">token</span>
+          <h3 class="mt-6 font-display text-2xl font-semibold">Publish</h3>
+          <p class="mt-4 leading-7 text-on-surface-variant">Copy media URLs, generate canonical NFT JSON, or export collection metadata as a ready-to-use ZIP.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="capabilities" class="vessel-page vessel-landing-section" aria-labelledby="capabilities-heading">
+      <div class="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="vessel-kicker text-tertiary-container">ONE CONNECTED WORKSPACE</p>
+          <h2 id="capabilities-heading" class="vessel-landing-heading mt-5 text-on-surface">Built beyond the first upload.</h2>
+        </div>
+        <p class="max-w-xl text-base leading-7 text-on-surface-variant">Identity, storage, metadata, evidence, and settlement stay connected to the same wallet journey.</p>
+      </div>
+      <div class="vessel-landing-grid mt-12">
+        <article class="vessel-landing-card vessel-landing-card-wide vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-primary-container" aria-hidden="true">fingerprint</span><h3 class="mt-8 font-display text-xl font-semibold">Wallet-native identity</h3><p class="mt-3 leading-6 text-on-surface-variant">Aptos connects natively while Solana controls a deterministic Aptos storage identity through DAA.</p></article>
+        <article class="vessel-landing-card vessel-landing-card-wide vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-tertiary-container" aria-hidden="true">drive_folder_upload</span><h3 class="mt-8 font-display text-xl font-semibold">Single and batch upload</h3><p class="mt-3 leading-6 text-on-surface-variant">Prepare one media asset or select a complete collection folder when Shelby writes are available.</p></article>
+        <article class="vessel-landing-card vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-secondary" aria-hidden="true">deployed_code</span><h3 class="mt-8 font-display text-xl font-semibold">Wallet-scoped Vault</h3><p class="mt-3 leading-6 text-on-surface-variant">Browse active artifacts and the upload history recorded for the connected wallet in this browser.</p></article>
+        <article class="vessel-landing-card vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-primary-container" aria-hidden="true">data_object</span><h3 class="mt-8 font-display text-xl font-semibold">NFT metadata</h3><p class="mt-3 leading-6 text-on-surface-variant">Build canonical cross-chain JSON for a single NFT with traits, media, and collection fields.</p></article>
+        <article class="vessel-landing-card vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-tertiary-container" aria-hidden="true">folder_zip</span><h3 class="mt-8 font-display text-xl font-semibold">Collection JSON export</h3><p class="mt-3 leading-6 text-on-surface-variant">Reuse existing Shelby media URLs and export collection metadata as a deterministic ZIP.</p></article>
+        <article class="vessel-landing-card vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-secondary" aria-hidden="true">speed</span><h3 class="mt-8 font-display text-xl font-semibold">Latency proof</h3><p class="mt-3 leading-6 text-on-surface-variant">Compare real Shelby reads with a public IPFS gateway without inventing unavailable results.</p></article>
+        <article class="vessel-landing-card vessel-landing-card-wide vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-primary-container" aria-hidden="true">calendar_month</span><h3 class="mt-8 font-display text-xl font-semibold">Flexible retention</h3><p class="mt-3 leading-6 text-on-surface-variant">Choose 1 to 365 days and review size-duration pricing, network costs, sponsored gas, and service fee before approval.</p></article>
+        <article class="vessel-landing-card vessel-landing-card-wide vessel-glass rounded-vessel"><span class="material-symbols-outlined text-3xl text-tertiary-container" aria-hidden="true">receipt_long</span><h3 class="mt-8 font-display text-xl font-semibold">Contract receipts</h3><p class="mt-3 leading-6 text-on-surface-variant">A finalized Aptos Move or Solana Program receipt authorizes the Vessel service flow.</p></article>
+      </div>
+    </section>
+
+    <section id="architecture" class="vessel-page vessel-landing-section" aria-labelledby="architecture-heading">
+      <p class="vessel-kicker text-primary-container">CROSS-CHAIN BY DESIGN</p>
+      <h2 id="architecture-heading" class="vessel-landing-heading mt-5 text-on-surface">Two wallet paths. One storage and metadata layer.</h2>
+      <div class="mt-12 grid gap-4 lg:grid-cols-2">
+        <article class="vessel-architecture-card vessel-glass rounded-vessel p-7 md:p-10">
+          <p class="vessel-kicker text-primary-container">PATH 01</p>
+          <div class="mt-10 flex items-center gap-4"><span class="material-symbols-outlined text-4xl text-primary-container" aria-hidden="true">account_balance</span><h3 class="font-display text-3xl font-semibold">Aptos native</h3></div>
+          <p class="mt-6 text-lg leading-8 text-on-surface-variant">Your connected Aptos account is the storage identity and settlement sender.</p>
+          <p class="vessel-technical mt-8 text-xs text-outline">APTOS WALLET → MOVE RECEIPT → SHELBY</p>
+        </article>
+        <article class="vessel-architecture-card vessel-glass rounded-vessel p-7 md:p-10">
+          <p class="vessel-kicker text-tertiary-container">PATH 02</p>
+          <div class="mt-10 flex items-center gap-4"><span class="material-symbols-outlined text-4xl text-tertiary-container" aria-hidden="true">conversion_path</span><h3 class="font-display text-3xl font-semibold">Solana DAA</h3></div>
+          <p class="mt-6 text-lg leading-8 text-on-surface-variant">Your Solana wallet authorizes a deterministic Aptos storage identity while Vessel service settlement runs through the Solana Program.</p>
+          <p class="vessel-technical mt-8 text-xs text-outline">SOLANA WALLET → DAA + PROGRAM RECEIPT → SHELBY</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="trust" class="vessel-page vessel-landing-section" aria-labelledby="trust-heading">
+      <div class="grid gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:gap-20">
+        <div>
+          <p class="vessel-kicker text-tertiary-container">TRUST THE RECEIPT</p>
+          <h2 id="trust-heading" class="vessel-landing-heading mt-5 text-on-surface">Settlement belongs in contracts.</h2>
+          <p class="mt-6 max-w-xl leading-7 text-on-surface-variant">Vessel does not route service payments to an ordinary receiving wallet. Each supported chain has its own governed contract vault.</p>
+        </div>
+        <ul class="vessel-trust-list">
+          <li><strong>Ed25519-signed quotes</strong><span>Wallet, file, retention, price, and expiry are locked before approval.</span></li>
+          <li><strong>Contract-issued receipts</strong><span>Aptos Move or the Solana Program authorizes the Vessel service flow.</span></li>
+          <li><strong>Multisig-controlled vaults</strong><span>An Aptos Multisig Account and Squads govern the two service-fee vaults.</span></li>
+          <li><strong>Separated protocol costs</strong><span>Shelby storage charges and network gas remain distinct from the Vessel service fee.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="vessel-page vessel-landing-beta vessel-glass rounded-vessel">
+      <p class="vessel-kicker text-tertiary-container">TESTNET BETA</p>
+      <h2 class="mt-5 max-w-3xl font-display text-3xl font-semibold tracking-[-0.035em] text-on-surface md:text-5xl">Built to prove the full wallet-owned storage flow.</h2>
+      <p class="mt-6 max-w-3xl text-base leading-7 text-on-surface-variant md:text-lg">Vessel currently runs on public test networks. Retention is temporary, testnet assets have no real monetary value, and this beta makes no production availability commitment.</p>
+    </section>
+
+    <section class="vessel-page vessel-landing-cta text-center">
+      <p class="vessel-kicker text-primary-container">FROM WALLET TO TOKEN URI</p>
+      <h2 class="mx-auto mt-5 max-w-3xl font-display text-4xl font-bold tracking-[-0.045em] text-on-surface md:text-6xl">Prepare your next NFT media workflow.</h2>
+      <p class="mx-auto mt-6 max-w-2xl leading-7 text-on-surface-variant">Connect a supported wallet to explore identity, storage, Vault history, metadata, and latency evidence in one application.</p>
+      <a class="vessel-button vessel-button-primary mt-8 px-8 py-4" data-dapp-entry href="/identity.html"><span class="material-symbols-outlined text-xl" aria-hidden="true">rocket_launch</span>LAUNCH APP</a>
     </section>
   </main>
   <footer class="border-t border-white/5 bg-surface-lowest/60 py-10">
-    <div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · Shelby testnet · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div>
+    <div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Wallet-owned storage · Cross-chain settlement · Testnet beta</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div>
   </footer>
   <script type="module" src="/app.js"></script>
 </body>
