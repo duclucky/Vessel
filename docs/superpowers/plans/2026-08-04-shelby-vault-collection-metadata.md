@@ -17,6 +17,7 @@
 - Optional CSV remains a metadata override only.
 - Single NFT metadata and the canonical cross-chain schema remain unchanged.
 - Local JSON and ZIP export work while Shelby writes are paused; hosting remains gated by `SHELBY_WRITES_ENABLED`.
+- While `SHELBY_WRITES_ENABLED=false`, use unexpired collection records from the connected wallet's local Vault history and label them `vault-cache`; do not call the unavailable Shelby indexer.
 - Existing unrelated worktree changes must not be staged or modified.
 
 ---

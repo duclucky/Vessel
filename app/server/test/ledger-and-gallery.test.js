@@ -154,4 +154,6 @@ test('Metadata loader reconciles local collection paths with remote Shelby artif
   assert.match(metadata, /reconcileArtifacts\(loadMine\(\), remote\)/);
   assert.match(metadata, /groupVaultCollections/);
   assert.match(metadata, /loadCollections/);
+  assert.match(metadata, /cfg\.shelbyWritesEnabled === false/);
+  assert.match(metadata, /verification: 'vault-cache'/);
 });

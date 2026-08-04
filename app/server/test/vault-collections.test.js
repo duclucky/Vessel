@@ -84,3 +84,11 @@ test('adapts a Shelby collection to metadata files without hashing or re-uploadi
   });
   assert.equal('arrayBuffer' in file, false);
 });
+
+test('labels collections that come from paused Shelby Vault history', () => {
+  const [collection] = groupVaultCollections([
+    image('genesis/1.png'),
+  ], { storageAddress: ADDRESS, now: 10_000, verification: 'vault-cache' });
+
+  assert.equal(collection.verification, 'vault-cache');
+});

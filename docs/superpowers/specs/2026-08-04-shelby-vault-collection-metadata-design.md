@@ -21,6 +21,8 @@ The Batch Collection source is therefore the intersection of:
 
 Remote reconciliation proves that the blob still exists on Shelby. The local `sourcePath` restores the collection name, original filename, and relative order needed for deterministic metadata generation.
 
+When the public Shelby API/indexer is explicitly paused and `SHELBY_WRITES_ENABLED=false`, remote reconciliation is unavailable by design. In that state Vessel uses only unexpired records from the connected wallet's local Vault history, labels the source as browser-local history, and keeps JSON/ZIP generation available. It does not claim that the source blobs were freshly verified. Remote reconciliation resumes automatically when the write gate is enabled again.
+
 ## Collection Grouping
 
 - The first segment of `sourcePath` is the collection identifier and display name.
@@ -69,7 +71,8 @@ Generated single and batch JSON continue to use the canonical cross-chain NFT sc
 
 ## Failure Handling
 
-- Remote listing failure: show a retryable in-page error without falling back to the computer directory picker.
+- Remote listing failure while Shelby is enabled: show a retryable in-page error without falling back to the computer directory picker.
+- Explicit Shelby pause: show browser-local Vault collections with a visible paused/unverified notice and keep hosting disabled.
 - No matching local path metadata: explain that older raw blobs cannot be reconstructed into a folder automatically.
 - Expired, deleted, or unwritten blob: exclude it and report the skipped count.
 - Collection becomes incomplete during refresh: stop hosting and require the user to review the rebuilt plan.

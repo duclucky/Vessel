@@ -19,6 +19,7 @@ function safeSourcePath(value) {
 export function groupVaultCollections(artifacts, {
   storageAddress,
   now = Date.now(),
+  verification = 'shelby',
 } = {}) {
   const owner = canonicalAddress(storageAddress);
   if (!owner) return Object.freeze([]);
@@ -52,6 +53,7 @@ export function groupVaultCollections(artifacts, {
       itemCount: group.items.length,
       totalBytes: group.items.reduce((sum, item) => sum + Number(item.size || 0), 0),
       earliestExpiry: Math.min(...group.items.map((item) => Number(item.expiresAt))),
+      verification: verification === 'vault-cache' ? 'vault-cache' : 'shelby',
     });
   });
 

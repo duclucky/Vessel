@@ -228,12 +228,19 @@ export function initMetadataPage({
   function renderCollections(error = null) {
     if (!element.collectionList || !element.collectionStatus) return;
     const selected = selectedCollection();
+    const usingVaultCache = collections.some((collection) => collection.verification === 'vault-cache') || !canHost;
     const messages = {
       wallet: 'Connect your wallet to load Shelby collections.',
-      loading: 'Checking your wallet-owned collections on Shelby...',
-      ready: collections.length
-        ? `${collections.length} active Shelby collection${collections.length === 1 ? '' : 's'} found.${selected ? ` Selected ${selected.name}.` : ''}`
-        : 'No eligible folder collection was found. Upload a folder as a batch first.',
+      loading: usingVaultCache
+        ? "Loading this browser's Vault history while the Shelby API is paused..."
+        : 'Checking your wallet-owned collections on Shelby...',
+      ready: usingVaultCache
+        ? collections.length
+          ? `Shelby API is paused. Showing ${collections.length} collection${collections.length === 1 ? '' : 's'} recorded in this browser's Vault.${selected ? ` Selected ${selected.name}.` : ''}`
+          : "Shelby API is paused. No active batch collection is recorded in this browser's Vault."
+        : collections.length
+          ? `${collections.length} active Shelby collection${collections.length === 1 ? '' : 's'} found.${selected ? ` Selected ${selected.name}.` : ''}`
+          : 'No eligible folder collection was found. Upload a folder as a batch first.',
       error: `Unable to load Shelby collections: ${String(error?.message || 'Unknown error')}`,
     };
     element.collectionStatus.dataset.state = collectionState;
@@ -247,9 +254,11 @@ export function initMetadataPage({
       empty.append(document.createTextNode(
         collectionState === 'error'
           ? 'Shelby could not verify this Vault. Refresh to try again.'
+          : usingVaultCache
+            ? 'Only collections previously uploaded from this browser can be reconstructed while the API is paused.'
           : 'Upload a folder as a batch to make it available here. ',
       ));
-      if (collectionState !== 'error') {
+      if (collectionState !== 'error' && !usingVaultCache) {
         const link = document.createElement('a');
         link.className = 'text-primary underline decoration-primary/30 underline-offset-4';
         link.href = '/upload.html';

@@ -41,6 +41,8 @@ test('metadata controller delegates schema, batch, export, and Shelby collection
   assert.match(source, /file\.url/);
   assert.match(source, /previousAddress.*nextAddress/s);
   assert.match(source, /selectedCollectionId = ''/);
+  assert.match(source, /Shelby API is paused/);
+  assert.match(source, /vault-cache/);
   assert.doesNotMatch(source, /collectDirectoryFiles|showDirectoryPicker|metadata-folder-input/);
   assert.match(source, /ArrowLeft|ArrowRight/);
   assert.match(source, /clearTimeout\(pendingBatchRebuild\).*setTimeout\([^)]*rebuildBatch/s);

@@ -958,6 +958,13 @@ async function initMetadata() {
     const controller = walletController();
     const state = controller?.getState?.();
     if (state?.status !== 'ready' || !state.session?.storageAddress) return [];
+    if (cfg.shelbyWritesEnabled === false) {
+      return groupVaultCollections(loadMine(), {
+        storageAddress: state.session.storageAddress,
+        now: Date.now(),
+        verification: 'vault-cache',
+      });
+    }
     const remote = await controller.listArtifacts();
     const reconciled = controller.reconcileArtifacts(loadMine(), remote);
     replaceMine(reconciled);
