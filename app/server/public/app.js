@@ -1187,6 +1187,33 @@ async function initMetadata() {
       const file = files[index];
       const path = sourcePaths?.[index] || sourcePath || file.name;
       onUpdate?.({ phase: 'quoting', index, total: files.length, path });
+      const fileHash = await sha256FileHex(file);
+      const blobName = contentAddressedBlobName(file, fileHash);
+      const session = walletController()?.getState?.().session;
+      const existing = loadMine().find((item) => (
+        item.account === session?.storageAddress
+        && item.key === blobName
+        && Number(item.expiresAt || 0) > Date.now()
+      ));
+      if (existing) {
+        results.push(Object.freeze({ ...existing, sourcePath: path, reused: true }));
+        onUpdate?.({ phase: 'succeeded', index, total: files.length, path, result: existing });
+        continue;
+      }
+      const recoveryRecord = session && recovery.loadForWallet(session).find((record) => (
+        record.context?.fileHash === fileHash && !['quoted', 'active'].includes(record.stage)
+      ));
+      if (recoveryRecord) {
+        onUpdate?.({ phase: 'resuming', index, total: files.length, path });
+        const resumed = await walletOwnedUpload.resume(file, recoveryRecord, {
+          onStep: (step) => onUpdate?.({ phase: step, index, total: files.length, path }),
+        });
+        const result = Object.freeze({ ...resumed, sourcePath: path });
+        ledger.commitUpload(result);
+        results.push(result);
+        onUpdate?.({ phase: 'succeeded', index, total: files.length, path, result });
+        continue;
+      }
       let quoted = await walletOwnedUpload.quote(file, { days });
       const total = formatAccountingMicro(quoted.quote.totalAccountingMicro);
       const approved = await confirmAction({

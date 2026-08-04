@@ -17,6 +17,7 @@ import {
   vesselBlobUrl,
 } from './content-address.js';
 import { collectDirectoryFiles } from './directory-picker.js';
+import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 
 const MIME_BY_EXTENSION = Object.freeze({
   avif: 'image/avif',
@@ -143,6 +144,12 @@ export function initMetadataPage({
     batchPreview: byId('batch-json-preview'),
     batchDownload: byId('batch-download-zip'),
     batchHost: byId('batch-host-shelby'),
+    batchHostResults: byId('batch-host-results'),
+    batchHostProgress: byId('batch-host-progress'),
+    batchHostStatus: byId('batch-host-status'),
+    batchHostCurrent: byId('batch-host-current'),
+    batchHostCounts: byId('batch-host-counts'),
+    batchHostRetry: byId('batch-host-retry'),
     hostingStatus: byId('metadata-hosting-status'),
   };
 
@@ -158,6 +165,7 @@ export function initMetadataPage({
   let batchGeneration = 0;
   let pendingBatchRebuild = 0;
   let isHosting = false;
+  let batchHostQueue = null;
   const hashFile = createFileHashCache();
 
   const artifactKey = String(selectedArtifact.key || '');
@@ -387,8 +395,47 @@ export function initMetadataPage({
     renderHostingState();
   }
 
+  function renderBatchHosting({ phase = 'ready', item = null, error = null } = {}) {
+    if (!batchHostQueue || !element.batchHostResults) return;
+    const summary = batchHostQueue.summary();
+    element.batchHostResults.classList.remove('hidden');
+    if (element.batchHostProgress) {
+      element.batchHostProgress.value = summary.progressPercent;
+      element.batchHostProgress.textContent = `${summary.progressPercent}%`;
+    }
+    if (element.batchHostCounts) {
+      element.batchHostCounts.textContent = `${summary.succeeded} hosted · ${summary.failed} failed · ${summary.total} total`;
+    }
+    if (element.batchHostCurrent) {
+      element.batchHostCurrent.textContent = item?.relativePath || 'No JSON is uploading.';
+    }
+    if (element.batchHostStatus && phase !== 'controls') {
+      const activePhase = !['ready', 'complete', 'failed'].includes(phase);
+      element.batchHostStatus.textContent = phase === 'uploading' || activePhase
+        ? `Approve item ${summary.completed + 1} of ${summary.total}. Each JSON receives its own Vessel settlement receipt.`
+        : phase === 'complete'
+          ? `${summary.succeeded} TokenURI file${summary.succeeded === 1 ? '' : 's'} hosted successfully.`
+          : phase === 'failed' && error?.code === 'receipt_pending'
+            ? 'Paused while the current contract receipt reaches finality. No second settlement will be requested.'
+            : phase === 'failed'
+              ? `Paused after ${summary.succeeded} success${summary.succeeded === 1 ? '' : 'es'}: ${String(error?.message || error).slice(0, 140)}`
+              : `${summary.total} wallet approvals expected. Pricing is estimated until each live quote is validated; the minimum service charge is $0.01.`;
+    }
+    const retryable = batchHostQueue.items.some(
+      (entry) => entry.status === 'failed' && entry.error?.retryable !== false,
+    );
+    element.batchHostRetry?.classList.toggle('hidden', !retryable || isHosting);
+    const completed = batchHostQueue.items.filter((entry) => entry.status === 'succeeded');
+    if (phase === 'complete' && completed.length) {
+      const lastUrl = completed.at(-1)?.result?.url;
+      if (lastUrl && element.resultUri) element.resultUri.value = lastUrl;
+    }
+  }
+
   async function rebuildBatch() {
     const generation = ++batchGeneration;
+    batchHostQueue = null;
+    element.batchHostResults?.classList.add('hidden');
     if (!batchFiles.length) {
       batchPlan = null;
       renderBatch();
@@ -492,15 +539,54 @@ export function initMetadataPage({
     if (!batchPlan?.items.length || batchPlan.errors.length) {
       throw metadataPageError('Resolve all collection errors before hosting', 'metadata_batch_invalid');
     }
-    const files = batchPlan.items.map((item) => new File(
-      [item.serialized],
-      item.outputPath.split('/').pop(),
-      { type: 'application/json' },
-    ));
-    return hostFiles(files, {
-      days: Number(element.batchDays?.value || 30),
-      sourcePaths: batchPlan.items.map((item) => item.outputPath),
-    });
+    if (!batchHostQueue) {
+      const files = batchPlan.items.map((item) => {
+        const file = new File(
+          [item.serialized],
+          item.outputPath.split('/').pop(),
+          { type: 'application/json' },
+        );
+        Object.defineProperty(file, 'vesselRelativePath', { value: item.outputPath });
+        return file;
+      });
+      batchHostQueue = createBatchQueue(files);
+    }
+    isHosting = true;
+    renderHostingState();
+    renderBatchHosting({ phase: 'uploading', item: batchHostQueue.next() });
+    try {
+      const outcome = await runBatchQueue(batchHostQueue, async (item) => {
+        const [result] = await hostFiles([item.file], {
+          days: Number(element.batchDays?.value || 30),
+          sourcePath: item.relativePath,
+          onUpdate: (update) => renderBatchHosting({ phase: update.phase, item }),
+        });
+        return result;
+      }, { onUpdate: renderBatchHosting });
+      renderBatchHosting({
+        phase: outcome.status === 'complete' ? 'complete' : 'failed',
+        item: outcome.item,
+        error: outcome.error,
+      });
+      if (outcome.status === 'complete') notify(`${outcome.summary.succeeded} collection TokenURI files hosted`, 'ok');
+      return outcome;
+    } finally {
+      isHosting = false;
+      renderHostingState();
+      renderBatchHosting({ phase: 'controls' });
+    }
+  }
+
+  async function retryFailedBatch() {
+    if (!batchHostQueue) throw metadataPageError('No failed collection hosting job exists', 'metadata_batch_retry_unavailable');
+    if (!batchHostQueue.retryFailed()) {
+      const pending = batchHostQueue.items.some((entry) => entry.error?.code === 'receipt_pending');
+      throw metadataPageError(
+        pending ? 'The submitted receipt is still pending and cannot be charged again' : 'No retryable metadata files remain',
+        pending ? 'receipt_pending' : 'metadata_batch_retry_unavailable',
+      );
+    }
+    return hostBatch();
   }
 
   function wireEvents() {
@@ -553,6 +639,7 @@ export function initMetadataPage({
       downloadBlob(zip, `${fileNameStem(element.batchName?.value, 'collection')}-metadata.zip`, document);
     });
     element.batchHost?.addEventListener('click', () => hostBatch().catch((error) => notify(error.message, 'error')));
+    element.batchHostRetry?.addEventListener('click', () => retryFailedBatch().catch((error) => notify(error.message, 'error')));
   }
 
   function initializeSource() {
@@ -606,5 +693,6 @@ export function initMetadataPage({
     refreshHosting,
     hostSingle,
     hostBatch,
+    retryFailedBatch,
   });
 }

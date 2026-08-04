@@ -31,7 +31,9 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
     'batch-description', 'batch-external-url', 'batch-uri-vessel',
     'batch-uri-custom', 'batch-base-uri', 'batch-csv-input',
     'batch-summary', 'batch-item-table', 'batch-json-preview',
-    'batch-download-zip', 'batch-host-shelby', 'metadata-hosting-status',
+    'batch-download-zip', 'batch-host-shelby', 'batch-host-progress',
+    'batch-host-status', 'batch-host-current', 'batch-host-results',
+    'batch-host-retry', 'metadata-hosting-status',
   ]) assert.equal(ids.has(id), true, `missing #${id}`);
   assert.match(html, /Metadata Atelier/);
   assert.match(html, /ephemeral/i);
@@ -46,6 +48,8 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
   assert.match(html, /id="metadata-batch-panel"[^>]*role="tabpanel"[^>]*aria-labelledby="metadata-batch-tab"[^>]*hidden/);
   assert.match(html, /id="single-validation"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(html, /id="metadata-hosting-status"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(html, /id="batch-host-progress"[^>]*max="100"/);
+  assert.match(html, /id="batch-host-status"[^>]*aria-live="polite"/);
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 

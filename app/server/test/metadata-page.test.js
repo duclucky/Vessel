@@ -64,3 +64,16 @@ test('single hosting keeps local download enabled while writes are paused', () =
   assert.match(source, /singleDownload\.disabled = !ready/);
   assert.match(source, /Shelby testnet hosting is temporarily paused/);
 });
+
+test('batch metadata hosting uses the retryable sequential queue and preserves successful items', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  assert.match(source, /createBatchQueue/);
+  assert.match(source, /runBatchQueue/);
+  assert.match(source, /vesselRelativePath/);
+  assert.match(source, /batchHostQueue\.retryFailed\(\)/);
+  assert.match(source, /entry\.status === 'succeeded'/);
+  assert.match(source, /receipt_pending/);
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(app, /recovery\.loadForWallet\(session\)/);
+  assert.match(app, /walletOwnedUpload\.resume\(file, recoveryRecord/);
+});
