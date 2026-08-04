@@ -94,8 +94,10 @@ test('Upload routes through wallet sessions without funding links or server-mana
 
 test('Upload hashes the selected file and validates an immutable signed quote before approval', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const contentAddressSource = fs.readFileSync(path.join(publicDir, 'content-address.js'), 'utf8');
   assert.match(source, /mountQuoteUi/);
-  assert.match(source, /crypto\.subtle\.digest\('SHA-256'/);
+  assert.match(source, /import \{[^}]*sha256FileHex[^}]*\} from '\.\/content-address\.js'/s);
+  assert.match(contentAddressSource, /crypto\.subtle\.digest\('SHA-256'/);
   assert.match(source, /\/api\/quotes\/upload/);
   assert.match(source, /\/api\/quotes\/validate/);
   assert.match(source, /quoteToken/);

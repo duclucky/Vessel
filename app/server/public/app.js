@@ -11,6 +11,7 @@ import { settleContractQuote } from './settlement-client.js';
 import { createRecoveryLedger } from './recovery-ledger.js';
 import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
+import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -55,20 +56,6 @@ function toast(msg, kind = 'info') {
 }
 
 function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Copied', 'ok')).catch(() => {}); }
-
-async function sha256Hex(file) {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function contentAddressedBlobName(file, fileHash) {
-  const parts = String(file.name || '').split('.');
-  const rawExtension = parts.length > 1 ? parts.pop() : 'bin';
-  const extension = rawExtension.toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
-  return `media/${fileHash}.${extension}`;
-}
 
 function normalizedSourceNetwork(session) {
   if (session.chain === 'aptos') return 'aptos-testnet';
@@ -281,7 +268,7 @@ function initUpload() {
       const cfg = await api('/api/config', { signal });
       const maxBytes = cfg.maxUploadBytes || 25 * 1024 * 1024;
       if (file.size > maxBytes) throw new Error(`File exceeds ${(maxBytes / 1048576) | 0}MB demo limit`);
-      const fileHash = await sha256Hex(file);
+      const fileHash = await sha256FileHex(file);
       if (signal.aborted) return;
       const blobName = contentAddressedBlobName(file, fileHash);
       const sourceNetwork = normalizedSourceNetwork(session);
@@ -688,7 +675,7 @@ function initUpload() {
     recoveryInput.addEventListener('change', async () => {
       const file = recoveryInput.files?.[0];
       if (!file) return;
-      const hash = await sha256Hex(file);
+      const hash = await sha256FileHex(file);
       if (hash !== record.context.fileHash) {
         toast('Selected file does not match the recovery SHA-256', 'error');
         return;
