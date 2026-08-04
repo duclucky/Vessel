@@ -78,12 +78,13 @@ test('Upload preserves every runtime state and explains both payment paths', () 
 
 test('Upload routes through wallet sessions without funding links or server-managed fallback', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
-  assert.match(source, /walletController\(\)\.upload\(file/);
+  const service = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
+  assert.match(service, /controllerInstance\.upload\(validated\.file/);
   assert.match(source, /insufficient_apt/);
   assert.match(source, /insufficient_shelby_usd/);
   assert.match(source, /settleContractQuote\(\{/);
-  assert.match(source, /getAptosSettlementClient/);
-  assert.match(source, /getSolanaSettlementClient/);
+  assert.match(service, /getAptosSettlementClient/);
+  assert.match(service, /getSolanaSettlementClient/);
   assert.match(source, /settlementTransactionId/);
   assert.match(source, /CHECK PAYMENT STATUS/);
   assert.doesNotMatch(source, /settleQuote\(\{/);
@@ -113,7 +114,7 @@ test('pre-submission wallet errors restore the signed quote for retry', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(
     source,
-    /activeUploadContext = quotedContext;\s*quoteUi\.render\(\{\s*kind: 'ready',\s*quote: quotedContext\.quote,\s*message,/s,
+    /activeUploadContext = quotedContext;[\s\S]*quoteUi\.render\(\{ kind: 'ready', quote: quotedContext\.quote, message \}\)/,
   );
 });
 
@@ -121,7 +122,7 @@ test('post-payment Solana upload errors remain visible instead of disappearing w
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(
     source,
-    /if \(session\.chain === 'solana'.*?catch \(e\) \{.*?await renderRecoveryPanel\(\);.*?upload-recovery-error/s,
+    /walletOwnedUpload\.upload\(quotedContext.*?catch \(error\).*?quoteUi\.render.*?await renderRecoveryPanel\(\)/s,
   );
 });
 

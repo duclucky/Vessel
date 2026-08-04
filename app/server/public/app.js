@@ -59,30 +59,6 @@ function toast(msg, kind = 'info') {
 
 function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Copied', 'ok')).catch(() => {}); }
 
-function normalizedSourceNetwork(session) {
-  if (session.chain === 'aptos') return 'aptos-testnet';
-  if (session.chain === 'solana') return 'solana-devnet';
-  return String(session.sourceNetwork || 'unknown');
-}
-
-function settlementDeploymentFor(chain, quote, config) {
-  const quoted = quote?.settlementDeployment;
-  if (quoted?.chain) {
-    return Object.freeze({
-      ...quoted.chain,
-      quotePublicKey: quoted.quotePublicKey,
-      configVersion: quoted.configVersion,
-    });
-  }
-  const contracts = config?.settlementContracts;
-  if (!contracts?.enabled || !contracts?.[chain]) return null;
-  return Object.freeze({
-    ...contracts[chain],
-    quotePublicKey: contracts.quotePublicKey,
-    configVersion: contracts.configVersion,
-  });
-}
-
 function settlementExplorerUrl(chain, transactionId) {
   const id = encodeURIComponent(String(transactionId || ''));
   return chain === 'aptos'
@@ -674,6 +650,7 @@ function initUpload() {
       await requestQuote(file);
       return failed(new Error('Review the signed quote before uploading'));
     }
+
     const walletState = walletController().getState();
     const session = walletState.session;
     if (!session || walletState.status !== 'ready') {
@@ -684,17 +661,13 @@ function initUpload() {
       } else {
         void walletUi.open(opener);
       }
-      return failed(Object.assign(new Error('Connect a wallet before uploading'), { code: 'wallet_required' }));
+      return failed(Object.assign(
+        new Error('Connect a wallet before uploading'),
+        { code: 'wallet_required' },
+      ));
     }
-    const cfg = await api('/api/config').catch(() => ({}));
-    const maxB = cfg.maxUploadBytes || 25 * 1024 * 1024;
-    if (file.size > maxB) {
-      const error = Object.assign(new Error(`File exceeds ${(maxB / 1048576) | 0}MB demo limit`), { code: 'file_too_large' });
-      toast(error.message, 'error');
-      return failed(error);
-    }
-    if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
 
+    if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
     showTransactionProgress();
     try {
       const result = await walletOwnedUpload.upload(quotedContext, {
@@ -734,207 +707,6 @@ function initUpload() {
       }
       return failed(error);
     }
-
-    let settlement = quotedContext.settlement;
-    if (!settlement) {
-      if (session.chain === 'solana' && !quotedContext.settlementTransactionId) {
-        const requiredUsdc = Number(quotedContext.quote.solanaAmountMicro) / 1_000_000;
-        const balance = await SOL().usdcBalance();
-        if (balance < requiredUsdc) {
-          show(vInit);
-          showPayGate(quotedContext.quote, balance, () => void confirmQuotedUpload());
-          return failed(Object.assign(new Error('Add testnet USDC to continue'), { code: 'insufficient_usdc' }));
-        }
-      }
-      showTransactionProgress();
-      setStep(quotedContext.settlementTransactionId ? 'settlementPending' : 'settlementApproval');
-      try {
-        const deployment = settlementDeploymentFor(session.chain, quotedContext.quote, cfg);
-        if (!deployment) throw Object.assign(
-          new Error('Vessel settlement contract is not configured'),
-          { code: 'settlement_unavailable' },
-        );
-        const chainClient = session.chain === 'aptos'
-          ? walletController().getAptosSettlementClient(deployment)
-          : walletController().getSolanaSettlementClient(deployment);
-        const verified = await settleContractQuote({
-          quote: {
-            ...quotedContext.quote,
-            uploadContext: quotedContext.quote.uploadContext || quotedContext.intent,
-          },
-          chainClient,
-          request: api,
-          transactionId: quotedContext.settlementTransactionId,
-          onSubmitted: ({ transactionId }) => {
-            quotedContext = Object.freeze({
-              ...quotedContext,
-              settlementTransactionId: transactionId,
-            });
-            activeUploadContext = quotedContext;
-            recovery.advance(quotedContext.quote.quoteId, 'settlement_submitted', {
-              settlementTransactionId: transactionId,
-              quoteToken: quotedContext.quote.quoteToken,
-              contractQuote: quotedContext.quote.contractQuote,
-              contractSignature: quotedContext.quote.contractSignature,
-              quotePublicKey: quotedContext.quote.quotePublicKey,
-              settlementDeployment: deployment,
-            });
-            setStep('settlementPending');
-          },
-        });
-        const settlementHash = verified.receipt?.transactionId
-          || quotedContext.settlementTransactionId;
-        settlement = Object.freeze({
-          ...verified,
-          settlementHash,
-        });
-        quotedContext = Object.freeze({ ...quotedContext, settlement });
-        activeUploadContext = quotedContext;
-        recovery.advance(quotedContext.quote.quoteId, 'paid', {
-          paidAuthorization: settlement.paidAuthorization,
-          settlementHash,
-          paymentSignature: settlementHash,
-        });
-        setStep('receiptVerified');
-      } catch (error) {
-        show(vInit);
-        if (error?.code === 'receipt_pending') {
-          toast('Contract submitted. Receipt is pending; no new payment is required.', 'warn');
-          await renderRecoveryPanel();
-          return failed(error);
-        }
-        const message = error?.code === 'user_rejected'
-          ? 'Payment approval was rejected'
-          : String(error?.message || error).slice(0, 160);
-        activeUploadContext = quotedContext;
-        quoteUi.render({
-          kind: 'ready',
-          quote: quotedContext.quote,
-          message,
-        });
-        toast(message, 'error');
-        return failed(error);
-      }
-    }
-    const onCheckpoint = (stage, evidence = {}) => {
-      recovery.advance(quotedContext.quote.quoteId, stage, evidence);
-    };
-
-    if (session.chain === 'aptos' && session.mode === 'native') {
-      $('#aptos-funding-gate')?.remove();
-      showTransactionProgress();
-      setStep('encoding');
-      try {
-        const result = await walletController().upload(file, {
-          quoteToken: quotedContext.quote.quoteToken,
-          paidAuthorization: settlement.paidAuthorization,
-          expirationMicros: quotedContext.quote.expirationMicros,
-          expectedFileHash: quotedContext.quote.fileHash,
-          paymentTier: quotedContext.quote.tierId,
-          uploadContext: quotedContext.intent,
-          contractQuote: quotedContext.quote.contractQuote,
-          contractSignature: quotedContext.quote.contractSignature,
-          onStep: setStep,
-          onCheckpoint,
-        });
-        onCheckpoint('active', {
-          registerTransactionHash: result.transactionHash,
-          actualStorageUnits: result.actualStorageUnits,
-          actualGasUsed: result.actualGasUsed,
-        });
-        recovery.complete(quotedContext.quote.quoteId);
-        if (bar) bar.style.width = '100%';
-        if (pct) pct.textContent = '100%';
-        return Object.freeze({ ok: true, result: Object.freeze({
-          ...result,
-          settlementHash: settlement.settlementHash,
-          quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
-          lastReconciledAt: Date.now(),
-        }) });
-      } catch (error) {
-        show(vInit);
-        if (['insufficient_apt', 'insufficient_shelby_usd'].includes(error?.code)) {
-          showAptosFundingGate({
-            code: error.code,
-            session,
-            retry: () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()),
-          });
-        } else {
-          if (error?.code === 'registration_evidence_missing') {
-            onCheckpoint('recovery_required', { errorCode: error.code });
-          }
-          const message = String(error?.message || error);
-          toast(message.toLowerCase().includes('reject') ? 'Signature rejected' : message.slice(0, 160), 'error');
-        }
-        return failed(error);
-      }
-    }
-
-    // Sponsored + USDC: the Solana wallet pays a stablecoin fee and signs; the server sponsors the
-    // Aptos-side storage. The blob is owned by the visitor's own DAA account. No APT/ShelbyUSD needed.
-    if (session.chain === 'solana' && SOL()?.available() && cfg.sponsored) {
-      showTransactionProgress(); setStep('signing');
-      try {
-        if (!SOL().state.solana) {
-          throw new Error('Reconnect your Solana wallet before uploading');
-        }
-
-        const r = await walletController().upload(file, {
-          quoteToken: quotedContext.quote.quoteToken,
-          paidAuthorization: settlement.paidAuthorization,
-          expirationMicros: quotedContext.quote.expirationMicros,
-          expectedFileHash: quotedContext.quote.fileHash,
-          paymentTier: quotedContext.quote.tierId,
-          uploadContext: quotedContext.intent,
-          contractQuote: quotedContext.quote.contractQuote,
-          contractSignature: quotedContext.quote.contractSignature,
-          onStep: setStep,
-          onCheckpoint,
-        });
-        onCheckpoint('active', {
-          registerTransactionHash: r.transactionHash,
-          actualStorageUnits: r.actualStorageUnits,
-          actualGasUsed: r.actualGasUsed,
-        });
-        recovery.complete(quotedContext.quote.quoteId);
-        if (bar) bar.style.width = '100%'; if (pct) pct.textContent = '100%';
-        return Object.freeze({ ok: true, result: Object.freeze({
-          ...r,
-          contentType: file.type,
-          paidUsdc: Number(quotedContext.quote.solanaAmountMicro) / 1_000_000,
-          settlementHash: settlement.settlementHash,
-          quotedAccountingMicro: quotedContext.quote.totalAccountingMicro,
-          lastReconciledAt: Date.now(),
-        }) });
-      } catch (e) {
-        show(vInit);
-        if (e?.name === 'AbortError') return failed(e);
-        if (e?.code === 'registration_evidence_missing') {
-          onCheckpoint('recovery_required', { errorCode: e.code });
-        }
-        const m = String(e?.message || e);
-        const message = m.includes('reject') ? 'Signature rejected' : m.slice(0, 160);
-        toast(message, 'error');
-        await renderRecoveryPanel();
-        const recoveryPanel = $('#upload-recovery');
-        if (recoveryPanel) {
-          const errorStatus = document.createElement('p');
-          errorStatus.id = 'upload-recovery-error';
-          errorStatus.className = 'mt-3 text-sm leading-6 text-error';
-          errorStatus.setAttribute('role', 'alert');
-          errorStatus.textContent = message;
-          recoveryPanel.appendChild(errorStatus);
-        }
-        return failed(e);
-      }
-    }
-
-    const unavailable = Object.assign(
-      new Error(`Uploads are unavailable for ${session.walletName || session.chain}`),
-      { code: 'upload_unavailable' },
-    );
-    toast(unavailable.message, 'error');
-    return failed(unavailable);
   }
 
   function showAptosFundingGate({ code, session, retry }) {

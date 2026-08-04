@@ -5,6 +5,7 @@ import fs from 'node:fs';
 const server = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
 const paidUploadAccess = fs.readFileSync(new URL('../src/lib/paid-upload-access.js', import.meta.url), 'utf8');
 const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+const walletOwnedUpload = fs.readFileSync(new URL('../public/wallet-owned-upload.js', import.meta.url), 'utf8');
 const solana = fs.readFileSync(new URL('../client-src/vessel-solana.js', import.meta.url), 'utf8');
 
 test('contract settlement is the only route that can issue paid authorization', () => {
@@ -43,9 +44,9 @@ test('contract receipt verification emits redacted submitted, pending, verified,
 });
 
 test('browser payment flow creates one immutable context and reuses its expiration', () => {
-  assert.match(app, /activeUploadContext = Object\.freeze\(\{ file, intent, quote \}\)/);
-  assert.match(app, /settleContractQuote\(\{/);
-  assert.match(app, /expirationMicros:\s*quotedContext\.quote\.expirationMicros/);
+  assert.match(walletOwnedUpload, /const result = Object\.freeze\(\{/);
+  assert.match(walletOwnedUpload, /settleContractQuote\(\{/);
+  assert.match(walletOwnedUpload, /expirationMicros:\s*validated\.quote\.expirationMicros/);
   assert.match(solana, /uploadContext\.expirationMicros !== expirationMicros/);
   assert.match(solana, /paidAuthorization/);
   assert.doesNotMatch(app, /\/api\/pay\/quote/);
