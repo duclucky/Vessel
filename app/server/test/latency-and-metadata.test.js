@@ -27,7 +27,8 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
     'nft-name', 'nft-desc', 'nft-link', 'single-traits', 'single-add-trait',
     'single-retention-days', 'json-preview', 'single-validation',
     'single-download-json', 'single-host-shelby', 'result-area', 'result-uri', 'copy-uri',
-    'metadata-folder-picker', 'metadata-folder-input', 'batch-name-prefix',
+    'metadata-collection-list', 'metadata-collection-refresh', 'metadata-collection-status',
+    'batch-name-prefix',
     'batch-description', 'batch-external-url', 'batch-uri-vessel',
     'batch-uri-custom', 'batch-base-uri', 'batch-csv-input',
     'batch-summary', 'batch-item-table', 'batch-json-preview',
@@ -40,6 +41,10 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
   assert.match(html, /1 GB beta limit/i);
   assert.match(html, /mainnet/i);
   assert.doesNotMatch(html, /immutable/i);
+  assert.equal(ids.has('metadata-folder-picker'), false);
+  assert.equal(ids.has('metadata-folder-input'), false);
+  assert.doesNotMatch(html, /Select collection folder|webkitdirectory/i);
+  assert.match(html, /Select a Shelby collection/i);
   assert.match(html, /src="\/theme\.js"/);
   assert.match(html, /id="metadata-mode-tabs"[^>]*role="tablist"/);
   assert.match(html, /id="metadata-single-tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*aria-controls="metadata-single-panel"/);
