@@ -6,7 +6,7 @@ import { walletPresentation } from './wallet-ui.js';
 import { mountWalletUi } from './wallet-modal.js';
 import { confirmAction } from './confirm-dialog.js';
 import { createUploadIntent } from './retention.js';
-import { mountQuoteUi } from './quote-ui.js';
+import { formatAccountingMicro, mountQuoteUi } from './quote-ui.js';
 import { settleContractQuote } from './settlement-client.js';
 import { createRecoveryLedger } from './recovery-ledger.js';
 import { createBatchQueue, runBatchQueue } from './batch-upload.js';
@@ -1181,16 +1181,56 @@ function animate(el, from, to, dur) {
 async function initMetadata() {
   let cfg = {};
   try { cfg = await api('/api/config'); } catch (error) { toast(error.message, 'warn'); }
+  async function hostMetadataFiles(files, { days, sourcePath, sourcePaths, onUpdate } = {}) {
+    const results = [];
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      const path = sourcePaths?.[index] || sourcePath || file.name;
+      onUpdate?.({ phase: 'quoting', index, total: files.length, path });
+      let quoted = await walletOwnedUpload.quote(file, { days });
+      const total = formatAccountingMicro(quoted.quote.totalAccountingMicro);
+      const approved = await confirmAction({
+        opener: $('#single-host-shelby') || $('#batch-host-shelby'),
+        kicker: files.length > 1 ? `METADATA ${index + 1} OF ${files.length}` : 'TOKENURI QUOTE',
+        title: `Host ${file.name} for ${quoted.quote.days} days?`,
+        message: `${total} total, including Shelby network costs, sponsored gas, and the Vessel service fee. Your connected wallet will approve the Vessel settlement receipt.`,
+        cancelLabel: 'NOT NOW',
+        confirmLabel: 'APPROVE & HOST',
+      });
+      if (!approved) throw Object.assign(new Error('Metadata hosting cancelled'), { code: 'user_rejected' });
+      onUpdate?.({ phase: 'validating', index, total: files.length, path });
+      let validated = await walletOwnedUpload.validate(quoted);
+      if (validated.requiresConfirmation) {
+        const changedTotal = formatAccountingMicro(validated.quote.totalAccountingMicro);
+        const reconfirmed = await confirmAction({
+          opener: $('#single-host-shelby') || $('#batch-host-shelby'),
+          kicker: 'UPDATED TOKENURI QUOTE',
+          title: 'The live price changed',
+          message: `The refreshed total is ${changedTotal}. Review and approve the updated quote to continue.`,
+          cancelLabel: 'CANCEL',
+          confirmLabel: 'APPROVE UPDATED PRICE',
+        });
+        if (!reconfirmed) throw Object.assign(new Error('Updated metadata quote was not approved'), { code: 'user_rejected' });
+        quoted = Object.freeze({ ...validated, quote: validated.quote });
+        validated = Object.freeze({ ...quoted, requiresConfirmation: false });
+      }
+      onUpdate?.({ phase: 'uploading', index, total: files.length, path });
+      const hosted = await walletOwnedUpload.upload(validated, {
+        onStep: (step) => onUpdate?.({ phase: step, index, total: files.length, path }),
+      });
+      const result = Object.freeze({ ...hosted, sourcePath: path });
+      ledger.commitUpload(result);
+      results.push(result);
+      onUpdate?.({ phase: 'succeeded', index, total: files.length, path, result });
+    }
+    return Object.freeze(results);
+  }
   const metadataPage = initMetadataPage({
     document,
     selectedArtifact: ledger.selected(),
     walletState: walletController()?.getState?.() || {},
     hostingAvailable: cfg.shelbyWritesEnabled === true,
-    hostFiles: async () => {
-      throw Object.assign(new Error('Wallet-owned metadata hosting is not ready'), {
-        code: 'wallet_owned_metadata_host_not_ready',
-      });
-    },
+    hostFiles: hostMetadataFiles,
     notify: toast,
     copyText: copy,
     origin: window.location.origin,

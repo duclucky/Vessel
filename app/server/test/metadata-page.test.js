@@ -41,3 +41,26 @@ test('metadata controller delegates schema, batch, export, and directory behavio
   assert.match(source, /clearTimeout\(pendingBatchRebuild\).*setTimeout\([^)]*rebuildBatch/s);
   assert.doesNotMatch(source, /\b(?:alert|confirm)\s*\(/);
 });
+
+test('single hosting serializes canonical JSON and delegates to wallet-owned upload', () => {
+  const page = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const singleStart = page.indexOf('async function hostSingle()');
+  const singleEnd = page.indexOf('async function hostBatch()', singleStart);
+  const single = page.slice(singleStart, singleEnd);
+
+  assert.match(single, /metadataJsonFile\(current\.metadata/);
+  assert.match(single, /hostFiles\(\[file\]/);
+  assert.match(single, /application\/json|metadataJsonFile/);
+  assert.match(app, /walletOwnedUpload\.quote/);
+  assert.match(app, /walletOwnedUpload\.validate/);
+  assert.match(app, /walletOwnedUpload\.upload/);
+  assert.doesNotMatch(app, /api\('\/api\/metadata/);
+});
+
+test('single hosting keeps local download enabled while writes are paused', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  assert.match(source, /singleHost\.disabled = isHosting \|\| !\(canHost && walletReady && singleValid\)/);
+  assert.match(source, /singleDownload\.disabled = !ready/);
+  assert.match(source, /Shelby testnet hosting is temporarily paused/);
+});

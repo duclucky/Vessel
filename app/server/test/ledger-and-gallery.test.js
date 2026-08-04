@@ -132,3 +132,14 @@ test('wallet upload history retains collection-scale batches instead of truncati
   assert.equal(ledger.loadMine().length, 75);
   assert.equal(ledger.loadMine()[0].sourcePath, 'collection/74.png');
 });
+
+test('Metadata hosting commits the wallet-owned JSON result to the same gallery ledger', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const metadataStart = source.indexOf('async function initMetadata()');
+  const metadataEnd = source.indexOf('/* ------------------------------- boot', metadataStart);
+  const metadata = source.slice(metadataStart, metadataEnd);
+
+  assert.match(metadata, /walletOwnedUpload\.upload/);
+  assert.match(metadata, /ledger\.commitUpload\(result\)/);
+  assert.match(metadata, /sourcePath/);
+});

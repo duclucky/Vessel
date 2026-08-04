@@ -157,6 +157,7 @@ export function initMetadataPage({
   let selectedBatchItemId = '';
   let batchGeneration = 0;
   let pendingBatchRebuild = 0;
+  let isHosting = false;
   const hashFile = createFileHashCache();
 
   const artifactKey = String(selectedArtifact.key || '');
@@ -205,10 +206,13 @@ export function initMetadataPage({
     const walletReady = readyWallet(currentWallet);
     const singleValid = validateNftMetadata(currentSingleMetadata()).valid && sourceState === 'ready';
     const allBatchValid = Boolean(batchPlan?.items.length) && batchPlan.errors.length === 0;
-    if (element.singleHost) element.singleHost.disabled = !(canHost && walletReady && singleValid);
-    if (element.batchHost) element.batchHost.disabled = !(canHost && walletReady && allBatchValid);
+    if (element.singleHost) element.singleHost.disabled = isHosting || !(canHost && walletReady && singleValid);
+    if (element.batchHost) element.batchHost.disabled = isHosting || !(canHost && walletReady && allBatchValid);
     if (!element.hostingStatus) return;
-    if (!canHost) {
+    if (isHosting) {
+      element.hostingStatus.dataset.state = 'hosting';
+      element.hostingStatus.textContent = 'Hosting wallet-owned metadata. Keep this tab open and approve the wallet request.';
+    } else if (!canHost) {
       element.hostingStatus.dataset.state = 'paused';
       element.hostingStatus.textContent = 'Shelby testnet hosting is temporarily paused. Local JSON and ZIP export remain available.';
     } else if (!walletReady) {
@@ -461,20 +465,27 @@ export function initMetadataPage({
     const current = renderSingle();
     if (!current.ready) throw metadataPageError('Complete valid metadata before hosting', 'metadata_invalid');
     const file = metadataJsonFile(current.metadata, `${fileNameStem(artifactKey)}.json`);
-    const results = await hostFiles([file], {
-      days: Number(element.singleDays?.value || 30),
-      sourcePath: file.name,
-    });
-    const result = Array.isArray(results) ? results[0] : results;
-    const tokenUri = result?.url || result?.tokenUri;
-    if (!tokenUri) throw metadataPageError('Shelby did not return an active TokenURI', 'metadata_token_uri_missing');
-    if (element.resultArea) {
-      element.resultArea.classList.remove('hidden');
-      element.resultArea.classList.add('flex');
+    isHosting = true;
+    renderHostingState();
+    try {
+      const results = await hostFiles([file], {
+        days: Number(element.singleDays?.value || 30),
+        sourcePath: file.name,
+      });
+      const result = Array.isArray(results) ? results[0] : results;
+      const tokenUri = result?.url || result?.tokenUri;
+      if (!tokenUri) throw metadataPageError('Shelby did not return an active TokenURI', 'metadata_token_uri_missing');
+      if (element.resultArea) {
+        element.resultArea.classList.remove('hidden');
+        element.resultArea.classList.add('flex');
+      }
+      if (element.resultUri) element.resultUri.value = tokenUri;
+      notify('TokenURI hosted under your wallet-owned storage address', 'ok');
+      return result;
+    } finally {
+      isHosting = false;
+      renderHostingState();
     }
-    if (element.resultUri) element.resultUri.value = tokenUri;
-    notify('TokenURI hosted under your wallet-owned storage address', 'ok');
-    return result;
   }
 
   async function hostBatch() {
