@@ -11,11 +11,29 @@ export function resolveProjectFile(value) {
   return path.isAbsolute(value) ? value : path.resolve(projectRoot, value);
 }
 
+export function parseShelbyWritesEnabled(env = process.env) {
+  const value = env.SHELBY_WRITES_ENABLED;
+  if (value == null || value === '') {
+    if (env.NODE_ENV === 'production') {
+      const error = new Error('SHELBY_WRITES_ENABLED is required in production');
+      error.code = 'shelby_writes_config_required';
+      throw error;
+    }
+    return true;
+  }
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  const error = new Error('SHELBY_WRITES_ENABLED must be true or false');
+  error.code = 'shelby_writes_config_invalid';
+  throw error;
+}
+
 export const config = {
   port: Number(process.env.PORT || 8787),
   publicBase: process.env.PUBLIC_BASE || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${process.env.PORT || 8787}`),
   storageBackend: process.env.STORAGE_BACKEND || 'mock', // mock | shelby
   network: process.env.SHELBY_NETWORK || 'testnet',
+  shelbyWritesEnabled: parseShelbyWritesEnabled(),
   shelbyApiKey: process.env.SHELBY_API_KEY || '',
   // Testnet Solana-DAA storage identity (server-held keypair; the account that owns the blobs).
   shelbySolanaSecretKey: process.env.SHELBY_SOLANA_SECRET_KEY || '',

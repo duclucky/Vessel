@@ -13,7 +13,6 @@ import {
 import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
-import { assertMetadataImageAvailable, resolveMetadataImageUrl } from './lib/metadata-source.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
 import { SponsorManager } from './lib/sponsor.js';
 import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
@@ -25,6 +24,7 @@ import { ShelbyUploadGateway } from './lib/shelby-upload-gateway.js';
 import { targetExpirationMicros } from '../public/retention.js';
 import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
 import { createTelemetry } from './lib/telemetry.js';
+import { shelbyWriteGate } from './lib/shelby-write-gate.js';
 import { loadSettlementDeployments } from './lib/settlement/deployments.js';
 import { SettlementAdapterRegistry } from './lib/settlement/adapters.js';
 import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
@@ -170,6 +170,12 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 const send = (res, status, body) => res.status(status).json(body);
+function requireShelbyWrites(res) {
+  const blocked = shelbyWriteGate(config.shelbyWritesEnabled);
+  if (!blocked) return true;
+  send(res, blocked.status, blocked.body);
+  return false;
+}
 function fail(res, e) {
   const status = e?.status || 500;
   return send(res, status, { error: e?.message || 'Internal error', code: e?.code, retriable: !!e?.retriable });
@@ -355,6 +361,7 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
 
 app.post('/api/shelby/register', async (req, res) => {
   try {
+    if (!requireShelbyWrites(res)) return;
     if (!shelbyClient || !shelbyGateway || !sponsor || !config.gasStationAccount) {
       return send(res, 503, { error: 'Sponsored Shelby registration is unavailable' });
     }
@@ -373,6 +380,7 @@ app.post('/api/shelby/register', async (req, res) => {
 
 app.post('/api/shelby/uploads', async (req, res) => {
   try {
+    if (!requireShelbyWrites(res)) return;
     if (!shelbyClient || !shelbyGateway) {
       return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
     }
@@ -413,6 +421,7 @@ app.put(
   express.raw({ type: 'application/octet-stream', limit: '3mb' }),
   async (req, res) => {
     try {
+      if (!requireShelbyWrites(res)) return;
       if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
       const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
       await shelbyGateway.putPart({
@@ -428,6 +437,7 @@ app.put(
 
 app.post('/api/shelby/uploads/:uploadId/complete', async (req, res) => {
   try {
+    if (!requireShelbyWrites(res)) return;
     if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
     const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
     await shelbyGateway.complete({ uploadId: req.params.uploadId, uploadToken });
@@ -441,25 +451,12 @@ app.delete('/api/media/*', async (req, res) => {
   catch (e) { fail(res, e); }
 });
 
-// ---- NFT metadata (host JSON on Shelby, referencing the Shelby-hosted image) ----
-app.post('/api/metadata', async (req, res) => {
-  try {
-    const { name, description, imageKey, imageUrl: imageUrlIn, external_url, attributes } = req.body || {};
-    if (!imageKey && !imageUrlIn) return send(res, 400, { error: 'imageKey or imageUrl required' });
-    const imageUrl = resolveMetadataImageUrl({
-      imageUrl: imageUrlIn,
-      imageKey,
-      publicBase: config.publicBase,
-    });
-    await assertMetadataImageAvailable({ imageUrl });
-    const json = { name: name || '', description: description || '', image: imageUrl };
-    if (external_url) json.external_url = external_url;
-    if (Array.isArray(attributes) && attributes.length) json.attributes = attributes;
-    const bytes = new TextEncoder().encode(JSON.stringify(json, null, 2));
-    const key = contentKey(bytes, 'application/json');
-    const put = await store.put(key, bytes, { contentType: 'application/json' });
-    send(res, 200, { tokenUri: put.url, url: put.url, json });
-  } catch (e) { fail(res, e); }
+// Metadata JSON is uploaded through the wallet-owned Shelby flow, never server-owned storage.
+app.post('/api/metadata', (_req, res) => {
+  send(res, 410, {
+    error: 'Use wallet-owned metadata hosting',
+    code: 'wallet_owned_metadata_required',
+  });
 });
 
 // ---- Latency (Shelby vs IPFS) ----
@@ -504,6 +501,7 @@ app.get('/api/latency', async (req, res) => {
 app.get('/api/config', (_req, res) => {
   send(res, 200, {
     network: config.network,
+    shelbyWritesEnabled: config.shelbyWritesEnabled,
     domain: config.daaDomain,
     solanaRpc: config.solanaRpc,
     shelbyApiKey: '', // never exposed; authenticated Shelby requests go through this server

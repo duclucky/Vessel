@@ -70,14 +70,13 @@ test('metadata source probe rejects missing or non-image artifacts', async () =>
   }
 });
 
-test('metadata route validates the normalized image before storing JSON', () => {
+test('legacy metadata route cannot create app-owned JSON', () => {
   const server = fs.readFileSync(new URL('../src/index.js', import.meta.url), 'utf8');
   const start = server.indexOf("app.post('/api/metadata'");
   const end = server.indexOf('// ---- Latency', start);
   const route = server.slice(start, end);
-  const normalized = route.indexOf('resolveMetadataImageUrl');
-  const available = route.indexOf('assertMetadataImageAvailable', normalized);
-  const stored = route.indexOf('store.put', available);
 
-  assert.equal(normalized >= 0 && available > normalized && stored > available, true);
+  assert.match(route, /410/);
+  assert.match(route, /wallet_owned_metadata_required/);
+  assert.doesNotMatch(route, /store\.put|assertMetadataImageAvailable|resolveMetadataImageUrl/);
 });

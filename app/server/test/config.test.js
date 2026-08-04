@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   defaultSettlementDeploymentsFile,
+  parseShelbyWritesEnabled,
   resolveProjectFile,
 } from '../src/config.js';
 
@@ -34,10 +35,31 @@ test('public config exposes server-gated wallet families without secrets', () =>
   assert.match(config, /walletAptosEnabled/);
   assert.match(config, /walletSolanaEnabled/);
   assert.match(server, /walletFamilies/);
+  assert.match(publicConfigRoute, /shelbyWritesEnabled:\s*config\.shelbyWritesEnabled/);
   assert.match(server, /evm:\s*false/);
   assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*settlementDeployments\.enabled/);
   assert.doesNotMatch(publicConfigRoute, /gasStationApiKey:\s*config\.gasStationApiKey/);
   assert.doesNotMatch(publicConfigRoute, /paySecret:\s*config\.paySecret/);
+});
+
+test('Shelby write availability uses strict production configuration', () => {
+  assert.equal(parseShelbyWritesEnabled({ NODE_ENV: 'development' }), true);
+  assert.equal(parseShelbyWritesEnabled({
+    NODE_ENV: 'production',
+    SHELBY_WRITES_ENABLED: 'false',
+  }), false);
+  assert.equal(parseShelbyWritesEnabled({
+    NODE_ENV: 'production',
+    SHELBY_WRITES_ENABLED: 'true',
+  }), true);
+  assert.throws(
+    () => parseShelbyWritesEnabled({ NODE_ENV: 'production' }),
+    (error) => error.code === 'shelby_writes_config_required',
+  );
+  assert.throws(
+    () => parseShelbyWritesEnabled({ SHELBY_WRITES_ENABLED: 'TRUE' }),
+    (error) => error.code === 'shelby_writes_config_invalid',
+  );
 });
 
 test('wallet identity changes abort pending payment work and clear stale gates', () => {
