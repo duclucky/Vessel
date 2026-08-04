@@ -11,13 +11,8 @@ import {
   downloadBlob,
   metadataJsonFile,
 } from './metadata-export.js';
-import {
-  contentAddressedBlobName,
-  createFileHashCache,
-  vesselBlobUrl,
-} from './content-address.js';
-import { collectDirectoryFiles } from './directory-picker.js';
 import { createBatchQueue, runBatchQueue } from './batch-upload.js';
+import { metadataFilesFromCollection } from './vault-collections.js';
 
 const MIME_BY_EXTENSION = Object.freeze({
   avif: 'image/avif',
@@ -95,11 +90,11 @@ export function initMetadataPage({
   selectedArtifact = {},
   walletState = {},
   hostingAvailable = false,
+  loadCollections = async () => [],
   hostFiles = async () => { throw metadataPageError('Wallet-owned metadata hosting is not ready', 'wallet_owned_metadata_host_not_ready'); },
   notify = () => {},
   copyText = (value) => globalThis.navigator?.clipboard?.writeText?.(value),
   origin = globalThis.location?.origin || 'http://localhost',
-  scope = globalThis,
 } = {}) {
   if (!document?.querySelector) throw new TypeError('A document is required');
   const byId = (id) => document.querySelector(`#${id}`);
@@ -125,9 +120,9 @@ export function initMetadataPage({
     resultArea: byId('result-area'),
     resultUri: byId('result-uri'),
     copyUri: byId('copy-uri'),
-    folderPicker: byId('metadata-folder-picker'),
-    folderInput: byId('metadata-folder-input'),
-    folderStatus: byId('metadata-folder-status'),
+    collectionList: byId('metadata-collection-list'),
+    collectionRefresh: byId('metadata-collection-refresh'),
+    collectionStatus: byId('metadata-collection-status'),
     batchName: byId('batch-name-prefix'),
     batchDescription: byId('batch-description'),
     batchExternalUrl: byId('batch-external-url'),
@@ -158,7 +153,10 @@ export function initMetadataPage({
   let sourceState = 'empty';
   let singleTraits = [{ id: 1, trait_type: '', value: '' }];
   let nextTraitId = 2;
-  let batchFiles = [];
+  let collections = [];
+  let selectedCollectionId = '';
+  let collectionState = readyWallet(walletState) ? 'loading' : 'wallet';
+  let collectionGeneration = 0;
   let csvRows = [];
   let batchPlan = null;
   let selectedBatchItemId = '';
@@ -166,7 +164,6 @@ export function initMetadataPage({
   let pendingBatchRebuild = 0;
   let isHosting = false;
   let batchHostQueue = null;
-  const hashFile = createFileHashCache();
 
   const artifactKey = String(selectedArtifact.key || '');
   const artifactUrl = selectedArtifact.url
@@ -208,6 +205,89 @@ export function initMetadataPage({
       attributes: traitValues(),
       mimeType: metadataImageMimeType(artifactFile),
     });
+  }
+
+  function selectedCollection() {
+    return collections.find((entry) => entry.id === selectedCollectionId) || null;
+  }
+
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  }
+
+  function formatExpiry(value) {
+    const expiry = Number(value || 0);
+    return Number.isFinite(expiry) && expiry > 0
+      ? new Date(expiry).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+      : 'unknown expiry';
+  }
+
+  function renderCollections(error = null) {
+    if (!element.collectionList || !element.collectionStatus) return;
+    const selected = selectedCollection();
+    const messages = {
+      wallet: 'Connect your wallet to load Shelby collections.',
+      loading: 'Checking your wallet-owned collections on Shelby...',
+      ready: collections.length
+        ? `${collections.length} active Shelby collection${collections.length === 1 ? '' : 's'} found.${selected ? ` Selected ${selected.name}.` : ''}`
+        : 'No eligible folder collection was found. Upload a folder as a batch first.',
+      error: `Unable to load Shelby collections: ${String(error?.message || 'Unknown error')}`,
+    };
+    element.collectionStatus.dataset.state = collectionState;
+    element.collectionStatus.textContent = messages[collectionState] || messages.wallet;
+    if (element.collectionRefresh) element.collectionRefresh.disabled = collectionState === 'loading';
+
+    if (!collections.length) {
+      const empty = document.createElement('div');
+      empty.className = 'rounded-2xl border border-dashed border-white/10 p-5 text-sm leading-6 text-outline';
+      empty.setAttribute('role', 'listitem');
+      empty.append(document.createTextNode(
+        collectionState === 'error'
+          ? 'Shelby could not verify this Vault. Refresh to try again.'
+          : 'Upload a folder as a batch to make it available here. ',
+      ));
+      if (collectionState !== 'error') {
+        const link = document.createElement('a');
+        link.className = 'text-primary underline decoration-primary/30 underline-offset-4';
+        link.href = '/upload.html';
+        link.textContent = 'Open Upload';
+        empty.appendChild(link);
+      }
+      element.collectionList.replaceChildren(empty);
+      return;
+    }
+
+    const rows = collections.map((collection) => {
+      const row = document.createElement('div');
+      row.setAttribute('role', 'listitem');
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'metadata-collection-choice flex min-h-20 w-full items-center justify-between gap-4 rounded-2xl border border-white/10 bg-surface-lowest/35 px-5 py-4 text-left transition hover:border-primary-container/35 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+      button.dataset.collectionId = collection.id;
+      button.setAttribute('aria-pressed', String(collection.id === selectedCollectionId));
+      if (collection.id === selectedCollectionId) button.dataset.state = 'selected';
+      const label = document.createElement('span');
+      label.className = 'min-w-0';
+      const name = document.createElement('strong');
+      name.className = 'block truncate font-display text-lg text-on-surface';
+      name.textContent = collection.name;
+      const details = document.createElement('small');
+      details.className = 'vessel-technical mt-2 block text-[10px] leading-5 text-on-surface-variant';
+      details.textContent = `${collection.itemCount} image${collection.itemCount === 1 ? '' : 's'} · ${formatBytes(collection.totalBytes)} · expires ${formatExpiry(collection.earliestExpiry)}`;
+      label.append(name, details);
+      const icon = document.createElement('span');
+      icon.className = 'material-symbols-outlined shrink-0 text-primary';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = collection.id === selectedCollectionId ? 'check_circle' : 'folder_open';
+      button.append(label, icon);
+      button.addEventListener('click', () => selectCollection(collection.id));
+      row.appendChild(button);
+      return row;
+    });
+    element.collectionList.replaceChildren(...rows);
   }
 
   function renderHostingState() {
@@ -379,9 +459,10 @@ export function initMetadataPage({
     const invalidCount = items.length - validCount;
     if (element.batchSummary) {
       if (!batchPlan) {
-        element.batchSummary.textContent = 'Select a folder to build the collection plan.';
+        element.batchSummary.textContent = 'Select a Shelby collection to build the collection plan.';
       } else {
         element.batchSummary.replaceChildren(
+          renderSummaryChip('collection', selectedCollection()?.name || 'Shelby'),
           renderSummaryChip('images', items.length),
           renderSummaryChip('ready', validCount, 'valid'),
           renderSummaryChip('invalid', invalidCount, invalidCount ? 'invalid' : ''),
@@ -436,58 +517,38 @@ export function initMetadataPage({
     const generation = ++batchGeneration;
     batchHostQueue = null;
     element.batchHostResults?.classList.add('hidden');
-    if (!batchFiles.length) {
+    const collection = selectedCollection();
+    const files = metadataFilesFromCollection(collection, { origin });
+    if (!files.length) {
       batchPlan = null;
       renderBatch();
       return;
     }
-    if (element.folderStatus) element.folderStatus.textContent = `Preparing ${batchFiles.length} selected files...`;
     const useCustom = Boolean(element.customUri?.checked);
     if (element.baseUriWrap) element.baseUriWrap.classList.toggle('hidden', !useCustom);
     try {
       const plan = await buildMetadataBatch({
-        files: batchFiles,
+        files,
         csvRows,
         defaults: {
-          namePrefix: element.batchName?.value,
+          namePrefix: element.batchName?.value || collection.name,
           description: element.batchDescription?.value,
           externalUrl: element.batchExternalUrl?.value,
           startNumber: Number(element.startNumber?.value || 1),
         },
-        uriForImage: async (file, relativePath) => {
-          if (useCustom) return joinMetadataBaseUri(element.baseUri?.value, relativePath);
-          if (!readyWallet(currentWallet)) {
-            throw metadataPageError('Connect a wallet to generate automatic Vessel image URIs', 'metadata_wallet_required');
-          }
-          const hash = await hashFile(file);
-          return vesselBlobUrl({
-            origin,
-            storageAddress: currentWallet.session.storageAddress,
-            blobName: contentAddressedBlobName(file, hash),
-          });
-        },
+        uriForImage: async (file, relativePath) => (
+          useCustom ? joinMetadataBaseUri(element.baseUri?.value, relativePath) : file.url
+        ),
       });
       if (generation !== batchGeneration) return;
       batchPlan = plan;
       selectedBatchItemId = plan.items[0]?.id || '';
-      if (element.folderStatus) {
-        const imageCount = plan.items.length;
-        element.folderStatus.textContent = `${imageCount} image${imageCount === 1 ? '' : 's'} mapped. ${plan.errors.length} validation error${plan.errors.length === 1 ? '' : 's'}.`;
-      }
     } catch (error) {
       if (generation !== batchGeneration) return;
       batchPlan = null;
-      if (element.folderStatus) element.folderStatus.textContent = error.message;
       notify(error.message, 'error');
     }
     renderBatch();
-  }
-
-  async function selectFolder(files) {
-    batchFiles = [...(files || [])];
-    csvRows = [];
-    if (element.csvInput) element.csvInput.value = '';
-    await rebuildBatch();
   }
 
   function scheduleBatchRebuild() {
@@ -495,17 +556,71 @@ export function initMetadataPage({
     pendingBatchRebuild = setTimeout(rebuildBatch, 180);
   }
 
-  async function pickFolder() {
-    if (typeof scope.showDirectoryPicker !== 'function') {
-      element.folderInput?.click();
+  async function refreshCollections() {
+    const generation = ++collectionGeneration;
+    const requestedAddress = currentWallet?.session?.storageAddress || '';
+    batchHostQueue = null;
+    batchPlan = null;
+    selectedBatchItemId = '';
+    if (!readyWallet(currentWallet)) {
+      collections = [];
+      selectedCollectionId = '';
+      collectionState = 'wallet';
+      renderCollections();
+      renderBatch();
+      return [];
+    }
+    collectionState = 'loading';
+    renderCollections();
+    renderBatch();
+    try {
+      const loaded = await loadCollections();
+      if (
+        generation !== collectionGeneration
+        || requestedAddress !== (currentWallet?.session?.storageAddress || '')
+      ) return [];
+      collections = [...(loaded || [])];
+      if (!collections.some((entry) => entry.id === selectedCollectionId)) selectedCollectionId = '';
+      collectionState = 'ready';
+      renderCollections();
+      await rebuildBatch();
+      return collections;
+    } catch (error) {
+      if (generation !== collectionGeneration) return [];
+      collections = [];
+      selectedCollectionId = '';
+      collectionState = 'error';
+      renderCollections(error);
+      renderBatch();
+      throw error;
+    }
+  }
+
+  function refreshCollectionsWithNotice() {
+    refreshCollections().catch((error) => {
+      notify(error.message, 'error');
+    });
+  }
+
+  function clearCsvOverrides() {
+    csvRows = [];
+    if (element.csvInput) element.csvInput.value = '';
+  }
+
+  function selectCollection(collectionId) {
+    if (!collections.some((entry) => entry.id === collectionId)) {
+      throw metadataPageError('Select an active Shelby collection', 'metadata_collection_invalid');
+    }
+    if (selectedCollectionId !== collectionId) {
+      selectedCollectionId = collectionId;
+      clearCsvOverrides();
+      const collection = selectedCollection();
+      if (element.batchName && !element.batchName.value.trim()) element.batchName.value = collection.name;
+      renderCollections();
+      void rebuildBatch();
       return;
     }
-    try {
-      const directory = await scope.showDirectoryPicker({ mode: 'read' });
-      await selectFolder(await collectDirectoryFiles(directory));
-    } catch (error) {
-      if (error?.name !== 'AbortError') notify(error.message, 'error');
-    }
+    renderCollections();
   }
 
   async function hostSingle() {
@@ -608,8 +723,7 @@ export function initMetadataPage({
     });
     element.singleHost?.addEventListener('click', () => hostSingle().catch((error) => notify(error.message, 'error')));
     element.copyUri?.addEventListener('click', () => copyText(element.resultUri?.value || ''));
-    element.folderPicker?.addEventListener('click', pickFolder);
-    element.folderInput?.addEventListener('change', () => selectFolder(element.folderInput.files));
+    element.collectionRefresh?.addEventListener('click', refreshCollectionsWithNotice);
     [element.batchName, element.batchDescription, element.batchExternalUrl, element.baseUri, element.startNumber].forEach((input) => {
       input?.addEventListener('input', scheduleBatchRebuild);
     });
@@ -657,21 +771,29 @@ export function initMetadataPage({
   function reset() {
     clearTimeout(pendingBatchRebuild);
     singleTraits = [{ id: nextTraitId++, trait_type: '', value: '' }];
-    batchFiles = [];
-    csvRows = [];
+    collections = [];
+    selectedCollectionId = '';
+    clearCsvOverrides();
     batchPlan = null;
     selectedBatchItemId = '';
     renderTraitRows();
     renderSingle();
+    renderCollections();
     renderBatch();
   }
 
   function refreshWallet(next) {
     const previousAddress = currentWallet?.session?.storageAddress || '';
+    const previousReady = readyWallet(currentWallet);
+    const nextAddress = next?.session?.storageAddress || '';
+    const nextReady = readyWallet(next);
     currentWallet = next || {};
     renderHostingState();
-    if (batchFiles.length && element.vesselUri?.checked && previousAddress !== (currentWallet?.session?.storageAddress || '')) {
-      void rebuildBatch();
+    if (previousAddress !== nextAddress || previousReady !== nextReady) {
+      collections = [];
+      selectedCollectionId = '';
+      clearCsvOverrides();
+      refreshCollectionsWithNotice();
     }
   }
 
@@ -684,13 +806,16 @@ export function initMetadataPage({
   wireEvents();
   selectMode('single');
   initializeSource();
+  renderCollections();
   renderBatch();
   renderHostingState();
+  refreshCollectionsWithNotice();
 
   return Object.freeze({
     reset,
     refreshWallet,
     refreshHosting,
+    refreshCollections,
     hostSingle,
     hostBatch,
     retryFailedBatch,

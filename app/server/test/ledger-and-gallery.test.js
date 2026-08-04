@@ -143,3 +143,15 @@ test('Metadata hosting commits the wallet-owned JSON result to the same gallery 
   assert.match(metadata, /ledger\.commitUpload\(result\)/);
   assert.match(metadata, /sourcePath/);
 });
+
+test('Metadata loader reconciles local collection paths with remote Shelby artifacts', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const start = source.indexOf('async function initMetadata()');
+  const end = source.indexOf('/* ------------------------------- boot', start);
+  const metadata = source.slice(start, end);
+
+  assert.match(metadata, /listArtifacts\(\)/);
+  assert.match(metadata, /reconcileArtifacts\(loadMine\(\), remote\)/);
+  assert.match(metadata, /groupVaultCollections/);
+  assert.match(metadata, /loadCollections/);
+});

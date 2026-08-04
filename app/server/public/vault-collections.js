@@ -58,3 +58,14 @@ export function groupVaultCollections(artifacts, {
   collections.sort((left, right) => collator.compare(left.name, right.name));
   return Object.freeze(collections);
 }
+
+export function metadataFilesFromCollection(collection, { origin } = {}) {
+  return Object.freeze((collection?.items || []).map((artifact) => Object.freeze({
+    name: artifact.sourcePath.split('/').pop() || 'artifact.png',
+    type: artifact.contentType,
+    size: artifact.size,
+    vesselRelativePath: artifact.sourcePath,
+    url: new URL(artifact.url, origin).href,
+    artifact,
+  })));
+}

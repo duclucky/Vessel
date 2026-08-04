@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { groupVaultCollections } from '../public/vault-collections.js';
+import * as vaultCollections from '../public/vault-collections.js';
+
+const { groupVaultCollections } = vaultCollections;
 
 const ADDRESS = '0xabc';
 
@@ -55,4 +57,30 @@ test('requires an active wallet storage address and a usable Shelby URL', () => 
   assert.deepEqual(groupVaultCollections([
     image('genesis/1.png', { url: '' }),
   ], { storageAddress: ADDRESS, now: 10_000 }), []);
+});
+
+test('adapts a Shelby collection to metadata files without hashing or re-uploading images', () => {
+  assert.equal(typeof vaultCollections.metadataFilesFromCollection, 'function');
+  const [collection] = groupVaultCollections([
+    image('genesis/images/2.png', { url: '/api/shelby/blobs/0xabc/media/two.png' }),
+  ], { storageAddress: ADDRESS, now: 10_000 });
+
+  const [file] = vaultCollections.metadataFilesFromCollection(collection, { origin: 'https://vessel.example' });
+
+  assert.deepEqual({
+    name: file.name,
+    type: file.type,
+    size: file.size,
+    vesselRelativePath: file.vesselRelativePath,
+    url: file.url,
+    key: file.artifact.key,
+  }, {
+    name: '2.png',
+    type: 'image/png',
+    size: 10,
+    vesselRelativePath: 'genesis/images/2.png',
+    url: 'https://vessel.example/api/shelby/blobs/0xabc/media/two.png',
+    key: 'media/genesis-images-2.png',
+  });
+  assert.equal('arrayBuffer' in file, false);
 });

@@ -101,3 +101,12 @@ test('Metadata previews the selected artifact and gates generation on image avai
   assert.match(source, /initMetadataPage/);
   assert.doesNotMatch(source, /api\('\/api\/metadata'/);
 });
+
+test('selected Shelby collection has a visible state beyond color alone', () => {
+  const page = fs.readFileSync(new URL('../public/metadata-page.js', import.meta.url), 'utf8');
+  const css = fs.readFileSync(new URL('../public/vessel.css', import.meta.url), 'utf8');
+
+  assert.match(page, /metadata-collection-choice/);
+  assert.match(page, /check_circle/);
+  assert.match(css, /\.metadata-collection-choice\[data-state="selected"\]/);
+});

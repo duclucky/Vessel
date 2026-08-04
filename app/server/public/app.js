@@ -13,6 +13,7 @@ import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 import { initMetadataPage } from './metadata-page.js';
+import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 
 const API = location.origin;
@@ -953,6 +954,18 @@ function animate(el, from, to, dur) {
 async function initMetadata() {
   let cfg = {};
   try { cfg = await api('/api/config'); } catch (error) { toast(error.message, 'warn'); }
+  async function loadMetadataCollections() {
+    const controller = walletController();
+    const state = controller?.getState?.();
+    if (state?.status !== 'ready' || !state.session?.storageAddress) return [];
+    const remote = await controller.listArtifacts();
+    const reconciled = controller.reconcileArtifacts(loadMine(), remote);
+    replaceMine(reconciled);
+    return groupVaultCollections(reconciled, {
+      storageAddress: state.session.storageAddress,
+      now: Date.now(),
+    });
+  }
   async function hostMetadataFiles(files, { days, sourcePath, sourcePaths, onUpdate } = {}) {
     const results = [];
     for (let index = 0; index < files.length; index += 1) {
@@ -1029,11 +1042,11 @@ async function initMetadata() {
     selectedArtifact: ledger.selected(),
     walletState: walletController()?.getState?.() || {},
     hostingAvailable: cfg.shelbyWritesEnabled === true,
+    loadCollections: loadMetadataCollections,
     hostFiles: hostMetadataFiles,
     notify: toast,
     copyText: copy,
     origin: window.location.origin,
-    scope: window,
   });
   walletController()?.subscribe?.((next) => metadataPage.refreshWallet(next));
 }

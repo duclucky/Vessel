@@ -29,14 +29,19 @@ test('image MIME type uses the browser value then a safe extension fallback', ()
   assert.equal(metadataImageMimeType({ name: 'three.unknown', type: '' }), 'image/png');
 });
 
-test('metadata controller delegates schema, batch, export, and directory behavior', () => {
+test('metadata controller delegates schema, batch, export, and Shelby collection behavior', () => {
   const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
   assert.match(source, /createNftMetadata/);
   assert.match(source, /buildMetadataBatch/);
   assert.match(source, /buildMetadataZip/);
   assert.match(source, /downloadBlob/);
-  assert.match(source, /collectDirectoryFiles/);
-  assert.match(source, /showDirectoryPicker/);
+  assert.match(source, /loadCollections/);
+  assert.match(source, /refreshCollections/);
+  assert.match(source, /metadataFilesFromCollection/);
+  assert.match(source, /file\.url/);
+  assert.match(source, /previousAddress.*nextAddress/s);
+  assert.match(source, /selectedCollectionId = ''/);
+  assert.doesNotMatch(source, /collectDirectoryFiles|showDirectoryPicker|metadata-folder-input/);
   assert.match(source, /ArrowLeft|ArrowRight/);
   assert.match(source, /clearTimeout\(pendingBatchRebuild\).*setTimeout\([^)]*rebuildBatch/s);
   assert.doesNotMatch(source, /\b(?:alert|confirm)\s*\(/);
