@@ -10,6 +10,24 @@ export async function sha256FileHex(file) {
     .join('');
 }
 
+export function createFileHashCache(hashFile = sha256FileHex) {
+  const cache = new WeakMap();
+  return function cachedFileHash(file) {
+    if (!file || (typeof file !== 'object' && typeof file !== 'function')) {
+      return Promise.reject(Object.assign(new TypeError('A File or Blob is required'), { code: 'file_required' }));
+    }
+    let pending = cache.get(file);
+    if (!pending) {
+      pending = Promise.resolve().then(() => hashFile(file));
+      cache.set(file, pending);
+      pending.catch(() => {
+        if (cache.get(file) === pending) cache.delete(file);
+      });
+    }
+    return pending;
+  };
+}
+
 export function contentAddressedBlobName(file, fileHash) {
   if (!SHA256_HEX.test(String(fileHash || ''))) {
     throw Object.assign(new Error('A valid SHA-256 hash is required'), { code: 'content_hash_invalid' });

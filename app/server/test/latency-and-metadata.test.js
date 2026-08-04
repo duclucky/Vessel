@@ -17,17 +17,35 @@ test('Latency keeps proof hooks inside the Ethereal shell', () => {
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
-test('Metadata keeps generator hooks and accurately describes testnet storage', () => {
+test('Metadata exposes accessible single and batch composer hooks', () => {
   const html = readPage('metadata.html');
   const ids = getIds(html);
   for (const id of [
-    'main-content', 'meta-image-key', 'nft-name', 'nft-desc', 'nft-link',
-    'json-preview', 'generate-btn', 'result-area', 'result-uri', 'copy-uri',
+    'main-content', 'metadata-mode-tabs', 'metadata-single-tab', 'metadata-batch-tab',
+    'metadata-single-panel', 'metadata-batch-panel', 'meta-image-key',
+    'meta-image-preview', 'meta-image-fallback', 'meta-image-status',
+    'nft-name', 'nft-desc', 'nft-link', 'single-traits', 'single-add-trait',
+    'single-retention-days', 'json-preview', 'single-validation',
+    'single-download-json', 'single-host-shelby', 'result-area', 'result-uri', 'copy-uri',
+    'metadata-folder-picker', 'metadata-folder-input', 'batch-name-prefix',
+    'batch-description', 'batch-external-url', 'batch-uri-vessel',
+    'batch-uri-custom', 'batch-base-uri', 'batch-csv-input',
+    'batch-summary', 'batch-item-table', 'batch-json-preview',
+    'batch-download-zip', 'batch-host-shelby', 'metadata-hosting-status',
   ]) assert.equal(ids.has(id), true, `missing #${id}`);
   assert.match(html, /Metadata Atelier/);
   assert.match(html, /ephemeral/i);
+  assert.match(html, /1 GB beta limit/i);
+  assert.match(html, /mainnet/i);
   assert.doesNotMatch(html, /immutable/i);
   assert.match(html, /src="\/theme\.js"/);
+  assert.match(html, /id="metadata-mode-tabs"[^>]*role="tablist"/);
+  assert.match(html, /id="metadata-single-tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*aria-controls="metadata-single-panel"/);
+  assert.match(html, /id="metadata-batch-tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*aria-controls="metadata-batch-panel"/);
+  assert.match(html, /id="metadata-single-panel"[^>]*role="tabpanel"[^>]*aria-labelledby="metadata-single-tab"/);
+  assert.match(html, /id="metadata-batch-panel"[^>]*role="tabpanel"[^>]*aria-labelledby="metadata-batch-tab"[^>]*hidden/);
+  assert.match(html, /id="single-validation"[^>]*role="status"[^>]*aria-live="polite"/);
+  assert.match(html, /id="metadata-hosting-status"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
@@ -71,9 +89,6 @@ test('Metadata previews the selected artifact and gates generation on image avai
   }
   assert.match(html, /id="meta-image-status"[^>]*role="status"[^>]*aria-live="polite"/);
   assert.match(html, /disabled:opacity-50/);
-  assert.match(source, /new URL\(url, window\.location\.origin\)\.href/);
-  assert.match(source, /previewImage\.addEventListener\('load'/);
-  assert.match(source, /previewImage\.addEventListener\('error'/);
-  assert.match(source, /gen\.disabled = !sourceReady/);
-  assert.match(source, /Source artifact is unavailable\. Choose another artifact from your Vault\./);
+  assert.match(source, /initMetadataPage/);
+  assert.doesNotMatch(source, /api\('\/api\/metadata'/);
 });
