@@ -13,6 +13,7 @@ import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 import { initMetadataPage } from './metadata-page.js';
+import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -91,6 +92,16 @@ function settlementExplorerUrl(chain, transactionId) {
 
 /* ------------------------------- wallet ------------------------------- */
 const walletController = () => window.VesselWallets;
+const walletOwnedUpload = createWalletOwnedUploadService({
+  request: api,
+  controller: walletController,
+  getSolana: () => window.VesselSolana,
+  recovery,
+  settleContractQuote,
+  createUploadIntent,
+  sha256FileHex,
+  contentAddressedBlobName,
+});
 let pendingWalletWork = new AbortController();
 let activeUploadContext = null;
 let activeWalletIdentity = '';
@@ -246,8 +257,7 @@ function initUpload() {
   async function requestQuote(file) {
     if (!file || !quoteUi) return;
     const walletState = walletController().getState();
-    const session = walletState.session;
-    if (!session || walletState.status !== 'ready') {
+    if (!walletState.session || walletState.status !== 'ready') {
       activeUploadContext = null;
       quoteUi.render({ kind: 'unavailable', message: 'Connect a supported testnet wallet to request a quote.' });
       const opener = document.querySelector('[data-wallet-summary]');
@@ -266,62 +276,9 @@ function initUpload() {
     quoteRoot?.classList.remove('hidden');
     quoteUi.render({ kind: 'loading' });
     try {
-      const cfg = await api('/api/config', { signal });
-      const maxBytes = cfg.maxUploadBytes || 25 * 1024 * 1024;
-      if (file.size > maxBytes) throw new Error(`File exceeds ${(maxBytes / 1048576) | 0}MB demo limit`);
-      const fileHash = await sha256FileHex(file);
-      if (signal.aborted) return;
-      const blobName = contentAddressedBlobName(file, fileHash);
-      const sourceNetwork = normalizedSourceNetwork(session);
-      const storageNetwork = 'shelby-testnet';
-      const quote = await api('/api/quotes/upload', {
-        method: 'POST',
-        signal,
-        body: {
-          operation: 'upload',
-          chain: session.chain,
-          sourceNetwork,
-          storageNetwork,
-          sourceAddress: session.sourceAddress,
-          storageAddress: session.storageAddress,
-          fileHash,
-          blobName,
-          sizeBytes: file.size,
-          contentType: file.type || 'application/octet-stream',
-          encoding: 0,
-          days: quoteUi.days(),
-        },
-      });
-      if (signal.aborted || walletIdentityKey(walletController().getState()) !== walletIdentityKey(walletState)) return;
-      const uploadIntent = createUploadIntent({
-        file,
-        fileHash,
-        blobName,
-        session,
-        days: quote.days,
-        serverTimeMs: quote.serverTimeMs,
-        encoding: quote.encoding,
-      });
-      const intent = Object.freeze({ ...uploadIntent, sourceNetwork, storageNetwork });
-      if (intent.expirationMicros !== quote.expirationMicros) {
-        throw new Error('Quote expiration did not match the selected retention');
-      }
-      activeUploadContext = Object.freeze({ file, intent, quote });
-      recovery.save({
-        id: quote.quoteId,
-        stage: 'quoted',
-        walletIdentity: session,
-        quoteId: quote.quoteId,
-        quoteToken: quote.quoteToken,
-        context: intent,
-        paymentTier: quote.tierId,
-        quotedAccountingMicro: quote.totalAccountingMicro,
-        contractQuote: quote.contractQuote,
-        contractSignature: quote.contractSignature,
-        quotePublicKey: quote.quotePublicKey,
-        settlementDeployment: quote.settlementDeployment,
-      });
-      quoteUi.render({ kind: 'ready', quote });
+      activeUploadContext = await walletOwnedUpload.quote(file, { days: quoteUi.days(), signal });
+      if (signal.aborted) return null;
+      quoteUi.render({ kind: 'ready', quote: activeUploadContext.quote });
       return activeUploadContext;
     } catch (error) {
       if (error?.name === 'AbortError') return;
@@ -345,30 +302,9 @@ function initUpload() {
   }
 
   async function validateUploadQuote(current, signal = pendingWalletWork.signal) {
-    const walletState = walletController().getState();
-    const validation = await api('/api/quotes/validate', {
-      method: 'POST',
-      signal,
-      body: { ...current.intent, quoteToken: current.quote.quoteToken },
-    });
-    const nextContext = Object.freeze({ ...current, quote: validation.quote });
-    activeUploadContext = nextContext;
-    recovery.complete(current.quote.quoteId);
-    recovery.save({
-      id: validation.quote.quoteId,
-      stage: 'quoted',
-      walletIdentity: walletState.session,
-      quoteId: validation.quote.quoteId,
-      quoteToken: validation.quote.quoteToken,
-      context: nextContext.intent,
-      paymentTier: validation.quote.tierId,
-      quotedAccountingMicro: validation.quote.totalAccountingMicro,
-      contractQuote: validation.quote.contractQuote,
-      contractSignature: validation.quote.contractSignature,
-      quotePublicKey: validation.quote.quotePublicKey,
-      settlementDeployment: validation.quote.settlementDeployment,
-    });
-    return Object.freeze({ context: nextContext, requiresConfirmation: validation.requiresConfirmation });
+    const context = await walletOwnedUpload.validate(current, { signal });
+    activeUploadContext = context;
+    return Object.freeze({ context, requiresConfirmation: context.requiresConfirmation });
   }
 
   function renderChangedQuote(context) {
@@ -758,6 +694,46 @@ function initUpload() {
       return failed(error);
     }
     if (fname) fname.textContent = `${file.name} (${(file.size / 1048576).toFixed(2)}MB)`;
+
+    showTransactionProgress();
+    try {
+      const result = await walletOwnedUpload.upload(quotedContext, {
+        signal: pendingWalletWork.signal,
+        onStep: setStep,
+        onSubmitted: ({ transactionId }) => {
+          quotedContext = Object.freeze({ ...quotedContext, settlementTransactionId: transactionId });
+          activeUploadContext = quotedContext;
+        },
+      });
+      activeUploadContext = null;
+      if (bar) bar.style.width = '100%';
+      if (pct) pct.textContent = '100%';
+      return Object.freeze({ ok: true, result });
+    } catch (error) {
+      show(vInit);
+      if (error?.name === 'AbortError') return failed(error);
+      if (error?.code === 'insufficient_usdc') {
+        showPayGate(quotedContext.quote, error.balance, () => void confirmQuotedUpload());
+      } else if (['insufficient_apt', 'insufficient_shelby_usd'].includes(error?.code)) {
+        showAptosFundingGate({
+          code: error.code,
+          session,
+          retry: () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()),
+        });
+      } else if (error?.code === 'receipt_pending') {
+        toast('Contract submitted. Receipt is pending; no new payment is required.', 'warn');
+        await renderRecoveryPanel();
+      } else {
+        const message = error?.code === 'user_rejected'
+          ? 'Payment approval was rejected'
+          : String(error?.message || error).slice(0, 160);
+        activeUploadContext = quotedContext;
+        quoteUi.render({ kind: 'ready', quote: quotedContext.quote, message });
+        toast(message.toLowerCase().includes('reject') ? 'Signature rejected' : message, 'error');
+        await renderRecoveryPanel();
+      }
+      return failed(error);
+    }
 
     let settlement = quotedContext.settlement;
     if (!settlement) {
