@@ -130,20 +130,23 @@ The public source of truth for all addresses is [`deployments/vessel-settlement.
 
 ## NFT metadata and batch collections
 
-Single and collection exports use one canonical NFT metadata model so Aptos and Solana consumers receive the same semantic fields. Depending on the form, the JSON can include:
+Single and collection exports use one marketplace-compatible NFT metadata model. The Metadata Designer supports image, video, audio, HTML or interactive, and game item presets. Generated JSON can include:
 
 - `name`
 - `description`
 - `image`
 - `external_url`
 - `animation_url`
+- `background_color`
 - `attributes`
-- `collection`
+- `properties.category`
 - `properties.files`
 
 Batch collection generation does not select a second local source folder. It selects a collection already recorded in the connected wallet's Vault, preserves the original filenames and relative paths, and reuses previously uploaded Shelby URLs. The metadata builder does not hash or re-upload source images.
 
-An optional CSV can override item names, descriptions, external URLs, and traits. Vessel validates the collection before enabling ZIP export. Batch metadata hosting uses the same Shelby write gate as single metadata hosting.
+Batch collection names default to `<Collection Name> #<Number>`, and batch JSON files default to `1.json`, `2.json`, `3.json`. CSV overrides can update names, descriptions, external URLs, background colors, animation URLs, and text, number, date, boost number, or boost percentage traits.
+
+Optional Vessel proof can be added under `properties.vessel`, but it is off by default so marketplace-facing JSON stays clean. Vessel validates the collection before enabling ZIP export. Batch metadata hosting uses the same Shelby write gate as single metadata hosting.
 
 ## Repository map
 
