@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SponsorManager } from '../src/lib/sponsor.js';
+import { SponsorManager, resolveGasStationNetwork } from '../src/lib/sponsor.js';
 
 const decoded = (value) => ({
   transaction: { rawTransaction: { sender: { toString: () => value } } },
@@ -45,4 +45,9 @@ test('sponsor requires a non-empty expected sender', async () => {
     () => sponsor.submit('txn', 'auth', { expectedSender: '' }),
     (error) => error.code === 'sender_required' && error.status === 400,
   );
+});
+
+test('sponsor resolves ShelbyNet for gas station submissions', () => {
+  assert.equal(resolveGasStationNetwork('shelbynet'), 'shelbynet');
+  assert.equal(resolveGasStationNetwork('testnet'), 'testnet');
 });

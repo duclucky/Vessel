@@ -14,12 +14,19 @@ test('Shelby API key stays server-side across register, multipart write, list, a
   ]) {
     assert.equal(server.includes(route), true, route);
   }
-  assert.match(server, /Authorization: `Bearer \$\{config\.shelbyApiKey\}`/);
+  assert.match(server, /Authorization: `Bearer \$\{config\.shelbyRpcApiKey\}`/);
   assert.match(server, /validatePaidUploadBody\(req\.body\)/);
   assert.match(server, /express\.raw\(\{ type: 'application\/octet-stream', limit: '3mb' \}\)/);
   assert.match(wallets, /\/api\/shelby\/artifacts\?account=/);
   assert.match(server, /contentType: mimeForKey\(row\.blobNameSuffix\)/);
   assert.doesNotMatch(wallets, /coordination\.getAccountBlobs/);
+});
+
+test('Shelby API routes use the configured runtime instead of hard-coded Aptos Testnet', () => {
+  assert.match(server, /publicNetworkDescriptor\(config\.shelbyRuntime\)/);
+  assert.match(server, /network:\s*config\.shelbyRuntime\.aptosNetwork/);
+  assert.match(server, /apiKey:\s*config\.shelbyRpcApiKey/);
+  assert.doesNotMatch(server, /network:\s*Network\.TESTNET/);
 });
 
 test('Shelby read proxy forwards a bounded byte range and preserves partial response metadata', () => {

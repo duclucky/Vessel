@@ -4,7 +4,7 @@ import multer from 'multer';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
-import { Aptos, AptosConfig, Network } from '@aptos-labs/ts-sdk';
+import { Aptos, AptosConfig } from '@aptos-labs/ts-sdk';
 import {
   expectedTotalChunksets,
   SHELBYUSD_FA_METADATA_ADDRESS,
@@ -29,6 +29,7 @@ import { loadSettlementDeployments } from './lib/settlement/deployments.js';
 import { SettlementAdapterRegistry } from './lib/settlement/adapters.js';
 import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
 import { SolanaSettlementAdapter } from './lib/settlement/solana-adapter.js';
+import { publicNetworkDescriptor } from './lib/shelby-network.js';
 import {
   assertContractQuoteMatchesContext,
   ContractQuoteManager,
@@ -44,23 +45,40 @@ const store = getStorageProvider();
 const telemetry = createTelemetry({ walletSalt: config.telemetryWalletSalt });
 let sponsor = null;
 try {
-  if (config.gasStationApiKey) sponsor = new SponsorManager({ gasStationApiKey: config.gasStationApiKey, network: config.network });
+  if (config.gasStationApiKey) {
+    sponsor = new SponsorManager({
+      gasStationApiKey: config.gasStationApiKey,
+      network: config.shelbyRuntime,
+    });
+  }
 } catch (e) { console.warn('[sponsor] disabled:', String(e?.message || e)); }
 const aptos = new Aptos(new AptosConfig({
-  network: Network.TESTNET,
-  clientConfig: config.shelbyApiKey ? { API_KEY: config.shelbyApiKey } : undefined,
+  network: config.shelbyRuntime.aptosNetwork,
+  clientConfig: config.shelbyAptosApiKey ? { API_KEY: config.shelbyAptosApiKey } : undefined,
 }));
 const pricingReader = createShelbyPricingReader({ aptos });
 let shelbyClient = null;
 let shelbyGateway = null;
 try {
-  if (config.shelbyApiKey) {
+  if (config.shelbyRpcApiKey) {
     shelbyClient = new ShelbyNodeClient({
-      network: Network.TESTNET,
-      apiKey: config.shelbyApiKey,
+      network: config.shelbyRuntime.aptosNetwork,
+      apiKey: config.shelbyRpcApiKey,
+      aptos: {
+        network: config.shelbyRuntime.aptosNetwork,
+        clientConfig: config.shelbyAptosApiKey ? { API_KEY: config.shelbyAptosApiKey } : undefined,
+      },
+      rpc: {
+        baseUrl: config.shelbyRuntime.rpcBaseUrl,
+        apiKey: config.shelbyRpcApiKey,
+      },
+      indexer: {
+        baseUrl: config.shelbyRuntime.indexerUrl,
+        apiKey: config.shelbyIndexerApiKey,
+      },
     });
     shelbyGateway = new ShelbyUploadGateway({
-      apiKey: config.shelbyApiKey,
+      apiKey: config.shelbyRpcApiKey,
       rpcBaseUrl: shelbyClient.baseUrl,
       secret: config.paySecret,
     });
@@ -322,7 +340,7 @@ app.get('/api/shelby/transactions/:hash', async (req, res) => {
 
 app.get('/api/shelby/blobs/:account/*', async (req, res) => {
   try {
-    if (!shelbyClient || !config.shelbyApiKey) {
+    if (!shelbyClient || !config.shelbyRpcApiKey) {
       return send(res, 503, { error: 'Shelby API access is unavailable' });
     }
     const account = String(req.params.account || '').toLowerCase();
@@ -330,7 +348,7 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
     if (!/^0x[0-9a-f]{64}$/.test(account) || !blobName || blobName.includes('..')) {
       return send(res, 400, { error: 'invalid Shelby blob path', code: 'invalid_blob_name' });
     }
-    const upstreamHeaders = { Authorization: `Bearer ${config.shelbyApiKey}` };
+    const upstreamHeaders = { Authorization: `Bearer ${config.shelbyRpcApiKey}` };
     const requestedRange = String(req.headers.range || '');
     if (/^bytes=\d+-\d*$/.test(requestedRange)) upstreamHeaders.Range = requestedRange;
     const upstream = await fetch(
@@ -501,6 +519,7 @@ app.get('/api/latency', async (req, res) => {
 app.get('/api/config', (_req, res) => {
   send(res, 200, {
     network: config.network,
+    shelbyNetwork: publicNetworkDescriptor(config.shelbyRuntime),
     shelbyWritesEnabled: config.shelbyWritesEnabled,
     domain: config.daaDomain,
     solanaRpc: config.solanaRpc,

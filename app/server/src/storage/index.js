@@ -11,12 +11,13 @@ export function getStorageProvider() {
   if (config.storageBackend === 'shelby') {
     try {
       provider = new ShelbyProvider({
-        apiKey: config.shelbyApiKey,
+        apiKey: config.shelbyRpcApiKey,
         solanaSecretKey: config.shelbySolanaSecretKey,
         domain: config.daaDomain,
         publicBase: base,
+        runtime: config.shelbyRuntime,
       });
-      console.log('[storage] backend = shelby (testnet, Solana-DAA), account =', provider.address.toString());
+      console.log(`[storage] backend = shelby (${config.shelbyRuntime.displayName}, Solana-DAA), account =`, provider.address.toString());
     } catch (e) {
       console.warn('[storage] shelby init failed, falling back to mock:', String(e?.message || e));
       provider = new MockProvider({ publicBase: base });

@@ -1,5 +1,20 @@
 import { GasStationClient } from '@aptos-labs/gas-station-client';
 import { MultiAgentTransaction, AccountAuthenticator, Deserializer, Network } from '@aptos-labs/ts-sdk';
+import { NetworkToGasStationBaseUrl } from '@shelby-protocol/sdk/node';
+
+export function resolveGasStationNetwork(network = 'testnet') {
+  const name = typeof network === 'object' && network?.aptosNetwork
+    ? network.aptosNetwork
+    : network;
+  if (name === Network.SHELBYNET || name === 'shelbynet') return Network.SHELBYNET;
+  if (name === Network.TESTNET || name === 'testnet') return Network.TESTNET;
+  if (name === Network.MAINNET || name === 'mainnet') return Network.MAINNET;
+  return Network.TESTNET;
+}
+
+export function resolveGasStationBaseUrl(network = 'testnet') {
+  return NetworkToGasStationBaseUrl[resolveGasStationNetwork(network)];
+}
 
 // Server-side sponsor: the customer (Phantom) signs the multi-agent register_blob_with_sponsor as
 // SENDER and ships the serialized transaction + sender authenticator here. We submit it via the
@@ -10,8 +25,12 @@ export class SponsorManager {
     if (!gasStationApiKey && !gasStationClient) {
       throw new Error('SponsorManager requires GAS_STATION_API_KEY');
     }
-    const net = network === 'testnet' ? Network.TESTNET : network === 'mainnet' ? Network.MAINNET : Network.TESTNET;
-    this.gs = gasStationClient || new GasStationClient({ network: net, apiKey: gasStationApiKey });
+    const net = resolveGasStationNetwork(network);
+    this.gs = gasStationClient || new GasStationClient({
+      network: net,
+      apiKey: gasStationApiKey,
+      baseUrl: resolveGasStationBaseUrl(net),
+    });
     this._deserialize = deserialize || ((txnB64, senderAuthB64) => ({
       transaction: MultiAgentTransaction.deserialize(
         new Deserializer(Buffer.from(txnB64, 'base64')),
