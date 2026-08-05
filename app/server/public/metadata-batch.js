@@ -3,6 +3,15 @@ import {
   serializeNftMetadata,
   validateNftMetadata,
 } from './metadata-schema.js';
+import {
+  formatItemName,
+  metadataOutputPathForNumber,
+} from './metadata-template-presets.js';
+import {
+  mergeTraitMaxValues,
+  normalizeCsvTraitValue,
+  parseCsvTraitColumn,
+} from './metadata-traits.js';
 
 export const METADATA_BATCH_MAX_BYTES = 1024 * 1024 * 1024;
 export const METADATA_BATCH_MAX_ITEMS = 3000;
@@ -195,16 +204,35 @@ export function parseMetadataCsv(text) {
     const key = csvLookup(filename);
     if (seen.has(key)) throw new MetadataBatchError('CSV contains a duplicate filename', 'csv_filename_duplicate', { filename });
     seen.add(key);
-    const row = { filename, name: '', description: '', external_url: '', attributes: [] };
+    const row = {
+      filename,
+      name: '',
+      description: '',
+      external_url: '',
+      background_color: '',
+      animation_url: '',
+      attributes: [],
+    };
+    const maxColumns = new Map();
     for (let index = 0; index < headers.length; index += 1) {
       const header = normalizedHeaders[index];
+      const originalHeader = headers[index];
       const cell = values[index].trim();
-      if (header === 'name' || header === 'description' || header === 'external_url') row[header] = cell;
-      if (header.startsWith('trait:') && cell !== '') {
-        const traitType = headers[index].slice(headers[index].indexOf(':') + 1).trim();
-        if (traitType) row.attributes.push({ trait_type: traitType, value: cell });
+      if (['name', 'description', 'external_url', 'background_color', 'animation_url'].includes(header)) {
+        row[header] = cell;
       }
+      const traitColumn = parseCsvTraitColumn(originalHeader);
+      if (traitColumn?.max) {
+        const numericMax = Number(cell);
+        if (cell !== '' && Number.isFinite(numericMax)) {
+          maxColumns.set(traitColumn.trait_type.toLowerCase(), numericMax);
+        }
+        continue;
+      }
+      const attribute = normalizeCsvTraitValue(traitColumn, cell);
+      if (attribute) row.attributes.push(attribute);
     }
+    row.attributes = mergeTraitMaxValues(row.attributes, maxColumns);
     rows.push(row);
   }
   return rows;
@@ -222,10 +250,10 @@ function mergeAttributes(...groups) {
     for (const attribute of group) {
       const traitType = String(attribute?.trait_type || '').trim();
       if (!traitType) {
-        merged.push({ trait_type: '', value: attribute?.value });
+        merged.push({ ...attribute, trait_type: '', value: attribute?.value });
         continue;
       }
-      const next = { trait_type: traitType, value: attribute?.value };
+      const next = { ...attribute, trait_type: traitType, value: attribute?.value };
       const key = traitType.toLowerCase();
       if (positions.has(key)) merged[positions.get(key)] = next;
       else {
@@ -253,9 +281,12 @@ function itemIssue(code, path, message) {
 export async function buildMetadataBatch({ files, csvRows = [], defaults = {}, uriForImage } = {}) {
   if (typeof uriForImage !== 'function') throw new TypeError('uriForImage is required');
   const indexed = indexMetadataFolder(files);
+  const startNumber = Number.isSafeInteger(Number(defaults.startNumber)) && Number(defaults.startNumber) >= 0
+    ? Number(defaults.startNumber)
+    : 1;
   const outputPaths = new Set();
-  for (const image of indexed.images) {
-    const outputPath = `metadata/${image.outputStem}.json`.toLowerCase();
+  for (const [index] of indexed.images.entries()) {
+    const outputPath = metadataOutputPathForNumber(startNumber + index).toLowerCase();
     if (outputPaths.has(outputPath)) {
       throw new MetadataBatchError('Multiple images map to the same metadata output', 'metadata_output_duplicate', {
         outputPath,
@@ -269,11 +300,6 @@ export async function buildMetadataBatch({ files, csvRows = [], defaults = {}, u
   const matchedCsv = new Set();
   const items = [];
   const errors = [];
-  const startNumber = Number.isSafeInteger(Number(defaults.startNumber)) && Number(defaults.startNumber) >= 0
-    ? Number(defaults.startNumber)
-    : 1;
-  const width = Math.max(3, String(startNumber + indexed.images.length - 1).length);
-
   for (const [index, image] of indexed.images.entries()) {
     const itemErrors = [];
     const jsonMatch = indexed.jsonByStem.get(image.stem);
@@ -296,19 +322,26 @@ export async function buildMetadataBatch({ files, csvRows = [], defaults = {}, u
     } catch (error) {
       itemErrors.push(itemIssue('image_uri_generation_failed', image.relativePath, String(error?.message || error)));
     }
-    const number = String(startNumber + index).padStart(width, '0');
-    const namePrefix = String(defaults.namePrefix || '').trim();
+    const tokenNumber = startNumber + index;
+    const collectionName = String(defaults.collectionName || defaults.namePrefix || '').trim();
+    const itemNamePattern = String(defaults.itemNamePattern || '<Collection Name> #<Number>');
+    const generatedName = collectionName ? formatItemName(itemNamePattern, collectionName, tokenNumber) : '';
     const metadata = createNftMetadata({
-      name: nonBlank(csv?.name, imported.name, namePrefix ? `${namePrefix} #${number}` : ''),
+      preset: defaults.preset || 'marketplace',
+      name: nonBlank(csv?.name, imported.name, generatedName),
       description: nonBlank(csv?.description, imported.description, String(defaults.description || '')),
       image: imageUri,
       externalUrl: nonBlank(csv?.external_url, imported.external_url, String(defaults.externalUrl || '')),
+      animationUrl: nonBlank(csv?.animation_url, imported.animation_url, String(defaults.animationUrl || '')),
+      backgroundColor: nonBlank(csv?.background_color, imported.background_color, String(defaults.backgroundColor || '')),
       attributes: mergeAttributes(defaults.attributes, imported.attributes, csv?.attributes),
       mimeType: image.mimeType,
+      animationMimeType: String(defaults.animationMimeType || 'application/octet-stream'),
+      category: defaults.category,
     });
     const validation = validateNftMetadata(metadata);
     itemErrors.push(...validation.errors.map((entry) => itemIssue(entry.code, entry.field, entry.code)));
-    const outputPath = `metadata/${image.outputStem}.json`;
+    const outputPath = metadataOutputPathForNumber(tokenNumber);
     const status = itemErrors.length ? 'invalid' : 'valid';
     const item = Object.freeze({
       id: `metadata-${index}-${image.stem}`,

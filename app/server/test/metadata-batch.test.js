@@ -53,7 +53,7 @@ test('batch pairs images and JSON by normalized relative stem', async () => {
     { trait_type: 'Series', value: 'Genesis' },
     { trait_type: 'Sky', value: 'Blue' },
   ]);
-  assert.equal(result.items[0].outputPath, 'metadata/001.json');
+  assert.equal(result.items[0].outputPath, '1.json');
   assert.equal(result.items[0].status, 'valid');
   assert.equal(JSON.parse(result.items[0].serialized).properties.files[0].uri, 'https://example.com/001.png');
 });
@@ -96,16 +96,72 @@ test('images-only batch generates easy defaults with stable numbering', async ()
   });
 
   assert.deepEqual(result.items.map((item) => item.metadata.name), [
-    'Vessel Genesis #007',
-    'Vessel Genesis #008',
+    'Vessel Genesis #7',
+    'Vessel Genesis #8',
   ]);
   assert.deepEqual(result.items.map((item) => item.outputPath), [
-    'metadata/alpha.json',
-    'metadata/beta.json',
+    '7.json',
+    '8.json',
   ]);
   assert.deepEqual(result.items.map((item) => item.metadata.properties.files[0].type), [
     'image/png',
     'image/webp',
+  ]);
+});
+
+test('batch output names use token numbering instead of source filenames', async () => {
+  const result = await buildMetadataBatch({
+    files: [
+      asset('alpha.png', 'collection/art/alpha.png', 'image/png'),
+      asset('beta.webp', 'collection/art/beta.webp', 'image/webp'),
+    ],
+    defaults: {
+      collectionName: 'Shelby Ghosts',
+      itemNamePattern: '<Collection Name> #<Number>',
+      description: 'Wallet-owned collection',
+      startNumber: 1,
+    },
+    uriForImage: async (_file, relativePath) => `https://example.com/${relativePath}`,
+  });
+
+  assert.deepEqual(result.items.map((item) => item.metadata.name), [
+    'Shelby Ghosts #1',
+    'Shelby Ghosts #2',
+  ]);
+  assert.deepEqual(result.items.map((item) => item.outputPath), [
+    '1.json',
+    '2.json',
+  ]);
+});
+
+test('advanced CSV columns override metadata fields and trait display types', async () => {
+  const rows = parseMetadataCsv([
+    'filename,name,description,external_url,background_color,animation_url,trait:Background,number:Power,number:Power:max,date:Birthday,boost_percentage:Luck',
+    'alpha.png,CSV Name,CSV Description,https://example.com/item,00ffee,https://example.com/alpha.mp4,Blue,80,100,1546360800,15',
+  ].join('\n'));
+  const result = await buildMetadataBatch({
+    files: [asset('alpha.png', 'collection/art/alpha.png', 'image/png')],
+    csvRows: rows,
+    defaults: {
+      preset: 'video',
+      collectionName: 'Shelby Ghosts',
+      itemNamePattern: '<Collection Name> #<Number>',
+      description: 'Default description',
+    },
+    uriForImage: async () => 'https://example.com/alpha.png',
+  });
+
+  const metadata = result.items[0].metadata;
+  assert.equal(metadata.name, 'CSV Name');
+  assert.equal(metadata.description, 'CSV Description');
+  assert.equal(metadata.external_url, 'https://example.com/item');
+  assert.equal(metadata.background_color, '00ffee');
+  assert.equal(metadata.animation_url, 'https://example.com/alpha.mp4');
+  assert.deepEqual(metadata.attributes, [
+    { trait_type: 'Background', value: 'Blue' },
+    { display_type: 'number', trait_type: 'Power', value: 80, max_value: 100 },
+    { display_type: 'date', trait_type: 'Birthday', value: 1546360800 },
+    { display_type: 'boost_percentage', trait_type: 'Luck', value: 15 },
   ]);
 });
 
@@ -120,6 +176,8 @@ test('CSV parser supports quoted commas, escaped quotes, CRLF, and blank optiona
     name: 'One, First',
     description: 'Says "hello"',
     external_url: '',
+    background_color: '',
+    animation_url: '',
     attributes: [{ trait_type: 'Mood', value: 'Calm' }],
   }]);
 });
@@ -192,18 +250,17 @@ test('missing collection defaults produce actionable item errors', async () => {
   ]);
 });
 
-test('duplicate output stems and beta limits fail before generation', async () => {
-  await assert.rejects(
-    () => buildMetadataBatch({
-      files: [
-        asset('001.png', 'collection/images/001.png', 'image/png'),
-        asset('001.webp', 'collection/images/001.webp', 'image/webp'),
-      ],
-      defaults,
-      uriForImage: async () => 'https://example.com/image',
-    }),
-    (error) => error.code === 'metadata_output_duplicate',
-  );
+test('similar image stems receive sequential output names and beta limits fail before generation', async () => {
+  const result = await buildMetadataBatch({
+    files: [
+      asset('001.png', 'collection/images/001.png', 'image/png'),
+      asset('001.webp', 'collection/images/001.webp', 'image/webp'),
+    ],
+    defaults,
+    uriForImage: async (_file, relativePath) => `https://example.com/${relativePath}`,
+  });
+
+  assert.deepEqual(result.items.map((item) => item.outputPath), ['1.json', '2.json']);
 
   assert.throws(
     () => indexMetadataFolder([
