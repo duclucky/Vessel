@@ -58,6 +58,26 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
+test('Metadata designer exposes presets and advanced NFT fields without minting controls', () => {
+  const html = readPage('metadata.html');
+  for (const id of [
+    'metadata-preset',
+    'nft-animation-url',
+    'nft-background-color',
+    'nft-category',
+    'nft-vessel-proof',
+    'metadata-card-preview',
+    'batch-preset',
+    'batch-item-name-pattern',
+    'batch-background-color',
+    'batch-animation-url',
+    'batch-erc1155-helper',
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`));
+  }
+  assert.doesNotMatch(html, /mint nft|deploy nft contract|marketplace listing/i);
+});
+
 test('Metadata is discoverable from desktop and mobile navigation on every page', () => {
   for (const page of [
     'index.html',

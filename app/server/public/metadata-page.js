@@ -2,6 +2,7 @@ import {
   createNftMetadata,
   validateNftMetadata,
 } from './metadata-schema.js';
+import { METADATA_PRESETS } from './metadata-template-presets.js';
 import {
   buildMetadataBatch,
   parseMetadataCsv,
@@ -107,9 +108,14 @@ export function initMetadataPage({
     imageFallback: byId('meta-image-fallback'),
     imageKey: byId('meta-image-key'),
     imageStatus: byId('meta-image-status'),
+    preset: byId('metadata-preset'),
     name: byId('nft-name'),
     description: byId('nft-desc'),
     externalUrl: byId('nft-link'),
+    animationUrl: byId('nft-animation-url'),
+    backgroundColor: byId('nft-background-color'),
+    category: byId('nft-category'),
+    vesselProof: byId('nft-vessel-proof'),
     singleTraits: byId('single-traits'),
     addSingleTrait: byId('single-add-trait'),
     singleDays: byId('single-retention-days'),
@@ -117,15 +123,20 @@ export function initMetadataPage({
     singleValidation: byId('single-validation'),
     singleDownload: byId('single-download-json'),
     singleHost: byId('single-host-shelby'),
+    cardPreview: byId('metadata-card-preview'),
     resultArea: byId('result-area'),
     resultUri: byId('result-uri'),
     copyUri: byId('copy-uri'),
     collectionList: byId('metadata-collection-list'),
     collectionRefresh: byId('metadata-collection-refresh'),
     collectionStatus: byId('metadata-collection-status'),
+    batchPreset: byId('batch-preset'),
     batchName: byId('batch-name-prefix'),
+    batchItemNamePattern: byId('batch-item-name-pattern'),
     batchDescription: byId('batch-description'),
     batchExternalUrl: byId('batch-external-url'),
+    batchBackgroundColor: byId('batch-background-color'),
+    batchAnimationUrl: byId('batch-animation-url'),
     vesselUri: byId('batch-uri-vessel'),
     customUri: byId('batch-uri-custom'),
     baseUriWrap: byId('batch-base-uri-wrap'),
@@ -198,13 +209,40 @@ export function initMetadataPage({
 
   function currentSingleMetadata() {
     return createNftMetadata({
+      preset: element.preset?.value || 'marketplace',
       name: element.name?.value,
       description: element.description?.value,
       image: artifactUrl,
       externalUrl: element.externalUrl?.value,
+      animationUrl: element.animationUrl?.value,
+      backgroundColor: element.backgroundColor?.value,
+      category: element.category?.value,
       attributes: traitValues(),
       mimeType: metadataImageMimeType(artifactFile),
+      animationMimeType: 'application/octet-stream',
+      vesselProof: element.vesselProof?.checked ? {
+        storage_network: 'shelby-testnet',
+        storage_address: currentWallet?.session?.storageAddress || '',
+        media_url: artifactUrl,
+        receipt_chain: currentWallet?.session?.chain || '',
+        receipt_hash: selectedArtifact?.receiptHash || '',
+        expires_at: selectedArtifact?.expiresAt || '',
+      } : null,
     });
+  }
+
+  function applyPresetCategory() {
+    const preset = METADATA_PRESETS[element.preset?.value || 'marketplace'];
+    if (preset?.category && element.category) element.category.value = preset.category;
+  }
+
+  function renderCardPreview(metadata) {
+    if (!element.cardPreview) return;
+    const name = element.cardPreview.querySelector('[data-preview-name]');
+    const description = element.cardPreview.querySelector('[data-preview-description]');
+    if (name) name.textContent = metadata.name || 'Untitled NFT';
+    if (description) description.textContent = metadata.description || 'No description yet.';
+    element.cardPreview.dataset.preset = element.preset?.value || 'marketplace';
   }
 
   function selectedCollection() {
@@ -325,6 +363,7 @@ export function initMetadataPage({
     const metadata = currentSingleMetadata();
     const validation = validateNftMetadata(metadata);
     if (element.singlePreview) element.singlePreview.textContent = `${JSON.stringify(metadata, null, 2)}\n`;
+    renderCardPreview(metadata);
     const ready = validation.valid && sourceState === 'ready';
     if (element.singleDownload) element.singleDownload.disabled = !ready;
     if (element.singleValidation) {
@@ -540,9 +579,14 @@ export function initMetadataPage({
         files,
         csvRows,
         defaults: {
+          preset: element.batchPreset?.value || 'marketplace',
+          collectionName: element.batchName?.value || collection.name,
           namePrefix: element.batchName?.value || collection.name,
+          itemNamePattern: element.batchItemNamePattern?.value || '<Collection Name> #<Number>',
           description: element.batchDescription?.value,
           externalUrl: element.batchExternalUrl?.value,
+          animationUrl: element.batchAnimationUrl?.value,
+          backgroundColor: element.batchBackgroundColor?.value,
           startNumber: Number(element.startNumber?.value || 1),
         },
         uriForImage: async (file, relativePath) => (
@@ -718,8 +762,13 @@ export function initMetadataPage({
     element.batchTab?.addEventListener('click', () => selectMode('batch'));
     element.singleTab?.addEventListener('keydown', handleTabKey);
     element.batchTab?.addEventListener('keydown', handleTabKey);
-    [element.name, element.description, element.externalUrl].forEach((input) => {
+    [element.name, element.description, element.externalUrl, element.animationUrl, element.backgroundColor, element.category, element.vesselProof].forEach((input) => {
       input?.addEventListener('input', renderSingle);
+      input?.addEventListener('change', renderSingle);
+    });
+    element.preset?.addEventListener('change', () => {
+      applyPresetCategory();
+      renderSingle();
     });
     element.addSingleTrait?.addEventListener('click', () => {
       singleTraits.push({ id: nextTraitId++, trait_type: '', value: '' });
@@ -733,8 +782,9 @@ export function initMetadataPage({
     element.singleHost?.addEventListener('click', () => hostSingle().catch((error) => notify(error.message, 'error')));
     element.copyUri?.addEventListener('click', () => copyText(element.resultUri?.value || ''));
     element.collectionRefresh?.addEventListener('click', refreshCollectionsWithNotice);
-    [element.batchName, element.batchDescription, element.batchExternalUrl, element.baseUri, element.startNumber].forEach((input) => {
+    [element.batchName, element.batchDescription, element.batchExternalUrl, element.baseUri, element.startNumber, element.batchPreset, element.batchItemNamePattern, element.batchBackgroundColor, element.batchAnimationUrl].forEach((input) => {
       input?.addEventListener('input', scheduleBatchRebuild);
+      input?.addEventListener('change', scheduleBatchRebuild);
     });
     [element.vesselUri, element.customUri].forEach((input) => {
       input?.addEventListener('change', scheduleBatchRebuild);

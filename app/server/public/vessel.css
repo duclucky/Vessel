@@ -73,6 +73,10 @@ input.vessel-input, textarea.vessel-input { background: rgba(12, 14, 19, 0.7); c
 .metadata-table td { color: #c6cfcc; font-size: 0.82rem; }
 .metadata-table tr[data-state="invalid"] td:last-child { color: #ffb4ab; }
 .metadata-item-select { min-height: 44px; max-width: 21rem; overflow-wrap: anywhere; color: #5ee6ff; text-align: left; text-decoration: underline; text-decoration-color: rgba(94, 230, 255, 0.25); text-underline-offset: 0.25rem; }
+.metadata-card-preview { display: grid; gap: 0.75rem; border-top: 1px solid rgba(255, 255, 255, 0.06); padding: 1.25rem 1.5rem; }
+.metadata-card-media { display: flex; aspect-ratio: 1; max-width: 9rem; align-items: center; justify-content: center; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 1rem; background: rgba(255, 255, 255, 0.04); color: #5eead4; }
+.metadata-card-preview strong { color: #e2e2e9; font-family: Space Grotesk, sans-serif; font-size: 1rem; }
+.metadata-card-preview small { color: #a8b3b0; line-height: 1.5; }
 .metadata-hosting-status { border: 1px solid rgba(255, 255, 255, 0.09); border-radius: 1.25rem; background: rgba(12, 14, 19, 0.7); padding: 1rem 1.1rem; color: #a8b3b0; font-size: 0.875rem; line-height: 1.55; }
 .metadata-hosting-status[data-state="paused"] { border-color: rgba(255, 216, 168, 0.2); color: #ffd8a8; }
 .metadata-hosting-status[data-state="ready"] { border-color: rgba(94, 234, 212, 0.22); color: #b5fff0; }

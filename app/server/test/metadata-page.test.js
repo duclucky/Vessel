@@ -72,6 +72,17 @@ test('single hosting keeps local download enabled while writes are paused', () =
   assert.match(source, /Shelby testnet hosting is temporarily paused/);
 });
 
+test('metadata page sends designer preset fields into schema builders', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  assert.match(source, /preset: element\.preset\?\.value \|\| 'marketplace'/);
+  assert.match(source, /animationUrl: element\.animationUrl\?\.value/);
+  assert.match(source, /backgroundColor: element\.backgroundColor\?\.value/);
+  assert.match(source, /category: element\.category\?\.value/);
+  assert.match(source, /vesselProof: element\.vesselProof\?\.checked/);
+  assert.match(source, /itemNamePattern: element\.batchItemNamePattern\?\.value/);
+  assert.match(source, /renderCardPreview\(metadata\)/);
+});
+
 test('batch metadata hosting uses the retryable sequential queue and preserves successful items', () => {
   const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
   assert.match(source, /createBatchQueue/);
