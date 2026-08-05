@@ -39,13 +39,21 @@ export function resolveShelbyNetwork(name = 'testnet') {
   return runtime;
 }
 
+function cleanSecret(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  if (/^<.*>$/.test(text)) return '';
+  if (/your|replace|placeholder/i.test(text)) return '';
+  return text;
+}
+
 export function resolveShelbyKeys(env = process.env) {
-  const legacyApiKey = env.SHELBY_API_KEY || '';
+  const legacyApiKey = cleanSecret(env.SHELBY_API_KEY);
   return Object.freeze({
     legacyApiKey,
-    rpcApiKey: env.SHELBY_RPC_API_KEY || legacyApiKey,
-    indexerApiKey: env.SHELBY_INDEXER_API_KEY || legacyApiKey,
-    aptosApiKey: env.SHELBY_APTOS_API_KEY || legacyApiKey,
+    rpcApiKey: cleanSecret(env.SHELBY_RPC_API_KEY) || legacyApiKey,
+    indexerApiKey: cleanSecret(env.SHELBY_INDEXER_API_KEY) || legacyApiKey,
+    aptosApiKey: cleanSecret(env.SHELBY_APTOS_API_KEY) || legacyApiKey,
   });
 }
 

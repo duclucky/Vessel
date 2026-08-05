@@ -46,6 +46,21 @@ test('split Shelby keys fall back to legacy SHELBY_API_KEY', () => {
   });
 });
 
+test('split Shelby keys ignore documented placeholders and fall back to legacy key', () => {
+  const keys = resolveShelbyKeys({
+    SHELBY_API_KEY: 'legacy',
+    SHELBY_RPC_API_KEY: '<ShelbyNet API key>',
+    SHELBY_INDEXER_API_KEY: 'replace-me',
+    SHELBY_APTOS_API_KEY: '',
+  });
+  assert.deepEqual(keys, {
+    legacyApiKey: 'legacy',
+    rpcApiKey: 'legacy',
+    indexerApiKey: 'legacy',
+    aptosApiKey: 'legacy',
+  });
+});
+
 test('public descriptor contains no secret values', () => {
   const descriptor = publicNetworkDescriptor(resolveShelbyNetwork('shelbynet'));
   assert.deepEqual(descriptor, {
