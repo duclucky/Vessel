@@ -17,7 +17,7 @@ test('all six journeys share the accessible Ethereal shell', () => {
     assert.equal(getIds(html).has('main-content'), true, `${page}: main landmark target`);
     assert.match(html, /<h1\b/, `${page}: h1`);
     assert.match(html, /<footer\b/, `${page}: footer`);
-    assert.match(html, /Powered by Shelby · Live on Aptos Testnet/, `${page}: Shelby attribution and live network status`);
+    assert.match(html, /Powered by Shelby · Live on ShelbyNet/, `${page}: Shelby attribution and live network status`);
     assert.doesNotMatch(html, /Shelby Testnet · [^<]+ · Data is Ephemeral/, `${page}: no stale beta status`);
     assert.match(html, /src="\/theme\.js"/, `${page}: shared theme`);
     assert.match(html, /href="\/vessel\.css"/, `${page}: shared CSS`);

@@ -21,13 +21,26 @@ test('shared theme scripts parse and Landing uses them', () => {
 test('Landing CTAs route users into the app and the workflow explanation', () => {
   const html = readPage('index.html');
   const appEntries = getLinks(html).filter((link) => /data-dapp-entry/.test(link.attrs));
-  assert.equal(appEntries.length, 3);
+  assert.equal(appEntries.length, 4);
   assert.deepEqual(appEntries.map((link) => link.href), [
-    '/identity.html', '/identity.html', '/identity.html',
+    '/identity.html', '/identity.html', '/identity.html', '/identity.html',
   ]);
   const workflowEntry = getLinks(html).find((link) => link.href === '#how-it-works');
   assert.equal(workflowEntry?.text.toUpperCase().replace(/^SOUTH\s+/, ''), 'EXPLORE HOW IT WORKS');
   assert.doesNotMatch(html, /data-wallet-summary|connect wallet to start/i);
+});
+
+test('Landing exposes ShelbyNet live and leaves Aptos Testnet in maintenance', () => {
+  const html = readPage('index.html');
+  assert.match(html, /data-network-option="aptos-testnet"/);
+  assert.match(html, /data-network-status="maintenance"/);
+  assert.match(html, /Aptos Testnet/i);
+  assert.match(html, /Maintenance/i);
+  assert.match(html, /aria-disabled="true"/);
+  assert.match(html, /data-network-option="shelbynet"/);
+  assert.match(html, /data-network-status="live"/);
+  assert.match(html, /ShelbyNet/i);
+  assert.match(html, /Live/i);
 });
 
 test('dApp wallet actions no longer use the legacy MetaMask ownership path', () => {
