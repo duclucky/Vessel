@@ -1,6 +1,10 @@
 import 'dotenv/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  resolveShelbyKeys,
+  resolveShelbyNetwork,
+} from './lib/shelby-network.js';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const defaultSettlementDeploymentsFile = fileURLToPath(
@@ -28,13 +32,20 @@ export function parseShelbyWritesEnabled(env = process.env) {
   throw error;
 }
 
+const shelbyRuntime = resolveShelbyNetwork(process.env.SHELBY_NETWORK || 'testnet');
+const shelbyKeys = resolveShelbyKeys(process.env);
+
 export const config = {
   port: Number(process.env.PORT || 8787),
   publicBase: process.env.PUBLIC_BASE || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${process.env.PORT || 8787}`),
   storageBackend: process.env.STORAGE_BACKEND || 'mock', // mock | shelby
-  network: process.env.SHELBY_NETWORK || 'testnet',
+  network: shelbyRuntime.name,
+  shelbyRuntime,
   shelbyWritesEnabled: parseShelbyWritesEnabled(),
-  shelbyApiKey: process.env.SHELBY_API_KEY || '',
+  shelbyApiKey: shelbyKeys.legacyApiKey,
+  shelbyRpcApiKey: shelbyKeys.rpcApiKey,
+  shelbyIndexerApiKey: shelbyKeys.indexerApiKey,
+  shelbyAptosApiKey: shelbyKeys.aptosApiKey,
   // Testnet Solana-DAA storage identity (server-held keypair; the account that owns the blobs).
   shelbySolanaSecretKey: process.env.SHELBY_SOLANA_SECRET_KEY || '',
   daaDomain: process.env.DAPP_DOMAIN || 'vessel.demo',
