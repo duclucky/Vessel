@@ -39,10 +39,14 @@ const approvedArgs = (response, code = 'user_rejected') => {
 
 const addressOf = (account) => account?.address?.toString?.() || String(account?.address || '');
 
-const isTargetNetwork = (network, target) => (
-  String(network?.name || '').toLowerCase() === target.name
-  && Number(network?.chainId) === target.chainId
-);
+const isTargetNetwork = (network, target) => {
+  const name = String(network?.name || '').toLowerCase();
+  const chainId = Number(network?.chainId);
+  if (target.name === 'shelbynet') {
+    return chainId === target.chainId || name.includes('shelby');
+  }
+  return name === target.name && chainId === target.chainId;
+};
 
 export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInput } = {}) {
   const wallet = descriptor.provider;

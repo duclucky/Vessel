@@ -10883,7 +10883,14 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     return response.args;
   };
   var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
-  var isTargetNetwork = (network, target) => String(network?.name || "").toLowerCase() === target.name && Number(network?.chainId) === target.chainId;
+  var isTargetNetwork = (network, target) => {
+    const name = String(network?.name || "").toLowerCase();
+    const chainId = Number(network?.chainId);
+    if (target.name === "shelbynet") {
+      return chainId === target.chainId || name.includes("shelby");
+    }
+    return name === target.name && chainId === target.chainId;
+  };
   function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInput } = {}) {
     const wallet = descriptor.provider;
     const targetNetwork = normalizeTargetNetwork(targetNetworkInput);

@@ -133,6 +133,27 @@ test('runtime target network can request ShelbyNet instead of Aptos Testnet', as
   assert.equal(session.sourceNetwork, 'shelbynet');
 });
 
+test('ShelbyNet target accepts custom wallet labels when chain ID matches', async () => {
+  let switchCalls = 0;
+  const provider = wallet({
+    network: { name: 'custom', chainId: 118 },
+    changeNetwork: async () => {
+      switchCalls += 1;
+      throw new Error('should not request a network switch');
+    },
+  });
+  const adapter = createAptosAdapter(
+    { id: 'aptos:petra:1', name: 'Petra', provider },
+    { targetNetwork: { name: 'shelbynet', chainId: 118, displayName: 'ShelbyNet' } },
+  );
+
+  const session = await adapter.connect({ silent: false });
+
+  assert.equal(session.sourceAddress, '0xabc');
+  assert.equal(session.sourceNetwork, 'shelbynet');
+  assert.equal(switchCalls, 0);
+});
+
 test('wrong network without changeNetwork exposes manual switch state', async () => {
   const adapter = createAptosAdapter({
     id: 'aptos:petra:1',
