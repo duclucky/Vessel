@@ -16,6 +16,33 @@ const gatewayError = (message, code, status) => Object.assign(
   { code, status, retriable: status >= 500 },
 );
 
+function normalizeWalletArgument(value) {
+  if (typeof value === 'bigint') return value.toString();
+  if (Array.isArray(value)) return value.map((item) => normalizeWalletArgument(item));
+  if (
+    value
+    && typeof value === 'object'
+    && Object.hasOwn(value, 'value')
+    && (
+      typeof value.value === 'number'
+      || typeof value.value === 'bigint'
+      || typeof value.value === 'string'
+    )
+  ) {
+    return normalizeWalletArgument(value.value);
+  }
+  return value;
+}
+
+function normalizeWalletPayload(payload) {
+  return Object.freeze({
+    ...payload,
+    functionArguments: Array.isArray(payload?.functionArguments)
+      ? payload.functionArguments.map((value) => normalizeWalletArgument(value))
+      : payload?.functionArguments,
+  });
+}
+
 function cleanBlobName(value) {
   const name = String(value || '');
   if (!name || name.startsWith('/') || name.includes('..') || name.includes('//')) {
@@ -194,12 +221,12 @@ export class ShelbyUploadGateway {
       throw gatewayError('Storage provider acknowledgements are required', 'missing_storage_acks', 400);
     }
     return Object.freeze({
-      commitPayload: ShelbyBlobClient.createCommitObjectPayload({
+      commitPayload: normalizeWalletPayload(ShelbyBlobClient.createCommitObjectPayload({
         uid: scope.registrationUid,
         blobName: scope.blobName,
         overwrite: true,
         storageProviderAcks: spAcks,
-      }),
+      })),
     });
   }
 }

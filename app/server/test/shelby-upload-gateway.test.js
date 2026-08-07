@@ -55,6 +55,7 @@ test('Shelby upload gateway keeps the private API key upstream and scopes every 
   assert.deepEqual([...uploads[0].blobData], [1, 2, 3]);
   assert.deepEqual(uploaded.spAcks, [{ slot: 2, signature: 'sig-2' }]);
   assert.match(completed.commitPayload.function, /::blob_metadata::commit_object$/);
+  assert.equal(typeof completed.commitPayload.functionArguments[4], 'number');
 });
 
 test('Shelby upload gateway rejects token replay and oversized chunks before upstream I/O', async () => {
