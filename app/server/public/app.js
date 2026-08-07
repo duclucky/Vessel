@@ -630,6 +630,19 @@ function initUpload() {
         const remote = await walletController().listArtifacts();
         const matched = remote.find((item) => item.blobNameSuffix === record.context.blobName);
         if (matched?.isWritten) {
+          renderSuccess({
+            key: matched.blobNameSuffix || record.context.blobName,
+            url: matched.url,
+            size: Number(matched.size || record.context.sizeBytes || 0),
+            contentType: matched.contentType || record.context.contentType,
+            ownedByYou: true,
+            account: record.context.storageAddress,
+            expirationMicros: Number(matched.expirationMicros || record.context.expirationMicros),
+            registerTransactionHash: record.registerTransactionHash,
+            acknowledgementHash: record.acknowledgementHash,
+            settlementHash: record.settlementHash,
+            quotedAccountingMicro: record.quotedAccountingMicro,
+          });
           recovery.complete(record.id);
           toast('Recovered upload is active on Shelby', 'ok');
         } else {

@@ -126,6 +126,15 @@ test('post-payment Solana upload errors remain visible instead of disappearing w
   );
 });
 
+test('recovery resume renders success when Shelby confirms the recovered artifact', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const matchedCheck = source.indexOf('if (matched?.isWritten)');
+  const renderRecovered = source.indexOf('renderSuccess({', matchedCheck);
+  const completeRecovered = source.indexOf('recovery.complete(record.id)', matchedCheck);
+
+  assert.equal(matchedCheck >= 0 && renderRecovered > matchedCheck && completeRecovered > matchedCheck, true);
+});
+
 test('folder uploads run through the existing quote and settlement path sequentially', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);
