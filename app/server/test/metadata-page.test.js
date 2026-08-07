@@ -83,6 +83,48 @@ test('metadata page sends designer preset fields into schema builders', () => {
   assert.match(source, /renderCardPreview\(metadata\)/);
 });
 
+test('metadata form fields expose accessible help tooltips', () => {
+  const html = readPage('metadata.html');
+  const expectedHelpIds = [
+    'metadata-preset',
+    'nft-name',
+    'nft-desc',
+    'nft-link',
+    'nft-animation-url',
+    'nft-background-color',
+    'nft-category',
+    'single-retention-days',
+    'batch-preset',
+    'batch-item-name-pattern',
+    'batch-name-prefix',
+    'batch-external-url',
+    'batch-description',
+    'batch-base-uri',
+    'batch-start-number',
+    'batch-retention-days',
+    'batch-background-color',
+    'batch-animation-url',
+    'batch-csv-input',
+  ];
+
+  for (const id of expectedHelpIds) {
+    assert.match(html, new RegExp(`for="${id}"[\\s\\S]*aria-describedby="help-${id}"`), `${id} label should include a help trigger`);
+    assert.match(html, new RegExp(`id="help-${id}"[\\s\\S]*role="tooltip"`), `${id} should have a tooltip panel`);
+  }
+
+  assert.match(html, /aria-label="Help: Template preset"/);
+  assert.doesNotMatch(html, /placeholder-only/i);
+});
+
+test('metadata help tooltips are visible on hover and keyboard focus', () => {
+  const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
+
+  assert.match(css, /\.metadata-help-trigger/);
+  assert.match(css, /\.metadata-help-popover/);
+  assert.match(css, /\.metadata-help:hover\s+\.metadata-help-popover/);
+  assert.match(css, /\.metadata-help:focus-within\s+\.metadata-help-popover/);
+});
+
 test('batch metadata hosting uses the retryable sequential queue and preserves successful items', () => {
   const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
   assert.match(source, /createBatchQueue/);
