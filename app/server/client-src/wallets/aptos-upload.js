@@ -217,13 +217,23 @@ export async function uploadNativeAptos(file, {
   onStep?.('uploading');
   onCheckpoint?.('uploading', { registerTransactionHash: evidence.transactionHash });
   if (typeof deps.uploadBlob === 'function') {
-    await deps.uploadBlob(blobData, {
+    const uploaded = await deps.uploadBlob(blobData, {
       quoteToken,
       paidAuthorization,
       uploadContext,
       contractQuote,
       contractSignature,
+      registrationUid: evidence.registrationUid,
+      blobMerkleRoot: commitments.blob_merkle_root,
     });
+    if (!uploaded?.commitPayload) throw nativeError('Shelby commit payload is missing', 'commit_payload_missing');
+    onStep?.('committing');
+    const commitSubmitted = await adapter.signAndSubmitTransaction({ data: uploaded.commitPayload });
+    if (!commitSubmitted?.hash) throw nativeError('Wallet did not return a commit transaction hash', 'submit_failed');
+    const commitTransaction = typeof deps.waitForTransaction === 'function'
+      ? await deps.waitForTransaction(commitSubmitted.hash)
+      : await deps.aptos.waitForTransaction({ transactionHash: commitSubmitted.hash });
+    onCheckpoint?.('committed', { commitTransactionHash: commitTransaction.hash || commitSubmitted.hash });
   } else {
     await deps.shelby.rpc.putBlob({
       account: session.storageAddress,

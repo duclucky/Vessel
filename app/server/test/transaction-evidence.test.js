@@ -8,7 +8,7 @@ const registered = {
   gas_used: '718',
   events: [{
     type: '0x42::blob_metadata::BlobRegisteredEvent',
-    data: { payment_amount: '4200', blob_name: 'media/proof.png' },
+    data: { payment_amount: '4200', blob_name: 'media/proof.png', uid: '79234787875693568' },
   }],
 };
 
@@ -16,6 +16,7 @@ test('Shelby registration evidence returns exact on-chain decimal strings', () =
   assert.deepEqual(extractShelbyTransactionEvidence(registered), {
     actualStorageUnits: '4200',
     actualGasUsed: '718',
+    registrationUid: '79234787875693568',
     transactionHash: '0xabc123',
   });
 });

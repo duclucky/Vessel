@@ -17,6 +17,8 @@ export async function uploadBlobViaVesselGateway(blobData, {
   uploadContext,
   contractQuote,
   contractSignature,
+  registrationUid,
+  blobMerkleRoot,
   request = fetch,
   onProgress,
 } = {}) {
@@ -28,6 +30,8 @@ export async function uploadBlobViaVesselGateway(blobData, {
     || !uploadContext
     || !contractQuote
     || !contractSignature
+    || !registrationUid
+    || !blobMerkleRoot
   ) {
     throw uploadError('Paid upload context is required', 'invalid_paid_authorization');
   }
@@ -41,32 +45,33 @@ export async function uploadBlobViaVesselGateway(blobData, {
       contractQuote,
       contractSignature,
       totalBytes: data.byteLength,
+      registrationUid,
+      blobMerkleRoot,
     }),
   }));
   if (!start.uploadId || !start.uploadToken || !Number.isSafeInteger(start.partSize) || start.partSize <= 0) {
     throw uploadError('Vessel returned an invalid Shelby upload session');
   }
 
-  let uploadedBytes = 0;
-  let partIdx = 0;
-  for (let offset = 0; offset < data.byteLength; offset += start.partSize) {
-    const part = data.subarray(offset, Math.min(data.byteLength, offset + start.partSize));
-    await readJson(await request(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/parts/${partIdx}`, {
-      method: 'PUT',
-      headers: {
-        'content-type': 'application/octet-stream',
-        Authorization: `Bearer ${start.uploadToken}`,
-      },
-      body: part,
-    }));
-    uploadedBytes += part.byteLength;
-    partIdx += 1;
-    onProgress?.({ uploadedBytes, totalBytes: data.byteLength, partIdx, totalParts: Math.ceil(data.byteLength / start.partSize) });
-  }
-
-  await readJson(await request(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/complete`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${start.uploadToken}` },
+  const part = data.subarray(0);
+  const uploaded = await readJson(await request(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/parts/0`, {
+    method: 'PUT',
+    headers: {
+      'content-type': 'application/octet-stream',
+      Authorization: `Bearer ${start.uploadToken}`,
+    },
+    body: part,
   }));
-  return Object.freeze({ uploadId: start.uploadId, uploadedBytes });
+  const uploadedBytes = Number(uploaded.uploadedBytes || data.byteLength);
+  onProgress?.({ uploadedBytes, totalBytes: data.byteLength, partIdx: 1, totalParts: 1 });
+
+  const completed = await readJson(await request(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/complete`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      Authorization: `Bearer ${start.uploadToken}`,
+    },
+    body: JSON.stringify({ spAcks: uploaded.spAcks }),
+  }));
+  return Object.freeze({ uploadId: start.uploadId, uploadedBytes, commitPayload: completed.commitPayload });
 }

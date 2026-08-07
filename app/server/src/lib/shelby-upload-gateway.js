@@ -1,9 +1,15 @@
 import crypto from 'node:crypto';
+import {
+  ShelbyBlobClient,
+  createDefaultErasureCodingProvider,
+  generateCommitments,
+} from '@shelby-protocol/sdk/node';
 
 const TOKEN_PREFIX = 'vupload';
 const DEFAULT_TTL_MS = 60 * 60_000;
 const ADDRESS = /^0x[0-9a-f]{64}$/i;
 const UPLOAD_ID = /^[A-Za-z0-9_-]{1,200}$/;
+const UINT_DECIMAL = /^[0-9]+$/;
 
 const gatewayError = (message, code, status) => Object.assign(
   new Error(message),
@@ -27,6 +33,9 @@ export class ShelbyUploadGateway {
     now = Date.now,
     ttlMs = DEFAULT_TTL_MS,
     maxPartBytes = 3 * 1024 * 1024,
+    rpcClient,
+    createProvider = createDefaultErasureCodingProvider,
+    generateCommitmentsImpl = generateCommitments,
   } = {}) {
     if (!apiKey) throw new TypeError('Shelby API key is required');
     if (!rpcBaseUrl) throw new TypeError('Shelby RPC base URL is required');
@@ -38,6 +47,9 @@ export class ShelbyUploadGateway {
     this.now = now;
     this.ttlMs = ttlMs;
     this.maxPartBytes = maxPartBytes;
+    this.rpcClient = rpcClient;
+    this.createProvider = createProvider;
+    this.generateCommitments = generateCommitmentsImpl;
   }
 
   sign(encoded) {
@@ -66,6 +78,7 @@ export class ShelbyUploadGateway {
         || !ADDRESS.test(payload.account)
         || !Number.isSafeInteger(payload.partSize)
         || !Number.isSafeInteger(payload.totalBytes)
+        || !UINT_DECIMAL.test(String(payload.registrationUid || ''))
         || !Number.isSafeInteger(payload.exp)
         || this.now() >= payload.exp
       ) throw new Error();
@@ -95,7 +108,14 @@ export class ShelbyUploadGateway {
     return response;
   }
 
-  async start({ account, blobName, totalBytes, partSize }) {
+  async start({
+    account,
+    blobName,
+    totalBytes,
+    partSize,
+    registrationUid,
+    blobMerkleRoot,
+  }) {
     const normalizedAccount = String(account || '').toLowerCase();
     const normalizedBlobName = cleanBlobName(blobName);
     if (!ADDRESS.test(normalizedAccount)) {
@@ -111,20 +131,10 @@ export class ShelbyUploadGateway {
     ) {
       throw gatewayError('Invalid upload part size', 'invalid_upload_part_size', 400);
     }
-    const response = await this.upstream('/v1/multipart-uploads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        rawAccount: normalizedAccount,
-        rawBlobName: normalizedBlobName,
-        rawPartSize: partSize,
-      }),
-    });
-    const json = await response.json();
-    const uploadId = String(json?.uploadId || '');
-    if (!UPLOAD_ID.test(uploadId)) {
-      throw gatewayError('Shelby RPC returned an invalid upload id', 'shelby_upload_failed', 502);
+    if (!UINT_DECIMAL.test(String(registrationUid || ''))) {
+      throw gatewayError('Invalid Shelby registration uid', 'invalid_registration_uid', 400);
     }
+    const uploadId = crypto.randomUUID();
     const issuedAtMs = this.now();
     return Object.freeze({
       uploadId,
@@ -134,6 +144,8 @@ export class ShelbyUploadGateway {
         id: uploadId,
         account: normalizedAccount,
         blobName: normalizedBlobName,
+        registrationUid: String(registrationUid),
+        blobMerkleRoot: String(blobMerkleRoot || ''),
         totalBytes,
         partSize,
         iat: issuedAtMs,
@@ -152,18 +164,42 @@ export class ShelbyUploadGateway {
     if (bytes.byteLength <= 0 || bytes.byteLength > scope.partSize || bytes.byteLength > this.maxPartBytes) {
       throw gatewayError('Upload part is too large', 'upload_part_too_large', 413);
     }
-    await this.upstream(`/v1/multipart-uploads/${encodeURIComponent(scope.id)}/parts/${partIdx}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: bytes,
+    if (totalParts !== 1 || partIdx !== 0 || bytes.byteLength !== scope.totalBytes) {
+      throw gatewayError('Vessel currently requires a single complete upload part', 'invalid_upload_part', 400);
+    }
+    if (!this.rpcClient?.putBlobChunksets) {
+      throw gatewayError('Shelby v2 upload client is unavailable', 'shelby_upload_failed', 503);
+    }
+    const provider = await this.createProvider();
+    const commitments = await this.generateCommitments(provider, bytes);
+    if (scope.blobMerkleRoot && commitments.blob_merkle_root !== scope.blobMerkleRoot) {
+      throw gatewayError('Upload bytes do not match the registered Shelby commitment', 'blob_commitment_mismatch', 409);
+    }
+    const result = await this.rpcClient.putBlobChunksets({
+      accountAddress: scope.account,
+      uid: scope.registrationUid,
+      blobData: bytes,
+      commitments,
+      totalBytes: scope.totalBytes,
+    });
+    return Object.freeze({
+      uploadedBytes: bytes.byteLength,
+      spAcks: result?.spAcks || [],
     });
   }
 
-  async complete({ uploadId, uploadToken }) {
+  async complete({ uploadId, uploadToken, spAcks }) {
     const scope = this.validate(uploadToken, String(uploadId || ''));
-    await this.upstream(`/v1/multipart-uploads/${encodeURIComponent(scope.id)}/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    if (!Array.isArray(spAcks) || spAcks.length === 0) {
+      throw gatewayError('Storage provider acknowledgements are required', 'missing_storage_acks', 400);
+    }
+    return Object.freeze({
+      commitPayload: ShelbyBlobClient.createCommitObjectPayload({
+        uid: scope.registrationUid,
+        blobName: scope.blobName,
+        overwrite: true,
+        storageProviderAcks: spAcks,
+      }),
     });
   }
 }

@@ -45,7 +45,7 @@ test('native upload registers before RPC byte upload and returns the wallet name
     adapter: {
       signAndSubmitTransaction: async ({ data }) => {
         calls.push(['sign', data]);
-        return { hash: '0xtxn' };
+        return { hash: calls.filter(([name]) => name === 'sign').length === 1 ? '0xregister' : '0xcommit' };
       },
     },
     expirationMicros: 2_592_001_000_000,
@@ -77,7 +77,7 @@ test('native upload registers before RPC byte upload and returns the wallet name
             gas_used: '718',
             events: [{
               type: '0x42::blob_metadata::BlobRegisteredEvent',
-              data: { payment_amount: '4200' },
+              data: { payment_amount: '4200', uid: '79234787875693568' },
             }],
           };
         },
@@ -92,6 +92,10 @@ test('native upload registers before RPC byte upload and returns the wallet name
       expectedTotalChunksets: (rawSize, chunksetSize) => {
         chunksetInput = { rawSize, chunksetSize };
         return 1;
+      },
+      uploadBlob: async (_data, context) => {
+        calls.push(['upload', context]);
+        return { commitPayload: { function: 'commit_object' } };
       },
       createRegisterPayload: (args) => {
         chunksetInput.registerArgs = args;
@@ -115,8 +119,8 @@ test('native upload registers before RPC byte upload and returns the wallet name
     },
   });
 
-  assert.deepEqual(calls.map(([name]) => name), ['sign', 'wait', 'put']);
-  assert.deepEqual(steps, ['encoding', 'signing', 'confirming', 'uploading']);
+  assert.deepEqual(calls.map(([name]) => name), ['sign', 'wait', 'upload', 'sign', 'wait']);
+  assert.deepEqual(steps, ['encoding', 'signing', 'confirming', 'uploading', 'committing']);
   assert.equal(calls[0][1].functionArguments[0], `media/${expectedFileHash}.png`);
   assert.equal(calls[0][1].functionArguments[1], 'shelbynet-1');
   assert.equal(calls[0][1].functionArguments[2], null);
@@ -126,9 +130,9 @@ test('native upload registers before RPC byte upload and returns the wallet name
   assert.equal(chunksetInput.rawSize, 3);
   assert.equal(chunksetInput.chunksetSize, 6);
   assert.equal(chunksetInput.registerArgs.paymentTier, 3);
-  assert.equal(calls[2][1].account, '0xabc');
-  assert.equal(calls[2][1].blobName, `media/${expectedFileHash}.png`);
-  assert.deepEqual([...calls[2][1].blobData], [1, 2, 3]);
+  assert.equal(calls[2][1].registrationUid, '79234787875693568');
+  assert.equal(calls[2][1].blobMerkleRoot, '0xroot');
+  assert.equal(calls[3][1].function, 'commit_object');
   assert.equal(result.account, '0xabc');
   assert.equal(result.key, `media/${expectedFileHash}.png`);
   assert.equal(result.paymentMode, 'native-aptos');

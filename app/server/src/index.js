@@ -81,6 +81,8 @@ try {
       apiKey: config.shelbyRpcApiKey,
       rpcBaseUrl: shelbyClient.baseUrl,
       secret: config.paySecret,
+      rpcClient: shelbyClient.rpc,
+      maxPartBytes: config.maxUploadBytes,
     });
   }
 } catch (error) {
@@ -410,10 +412,14 @@ app.post('/api/shelby/uploads', async (req, res) => {
     if (Number(req.body?.totalBytes) !== context.sizeBytes) {
       return send(res, 409, { error: 'Upload size does not match the paid quote', code: 'paid_context_mismatch' });
     }
-    const metadata = await shelbyClient.coordination.getBlobMetadata({
-      account: context.storageAddress,
-      name: context.blobName,
-    });
+    const registrationUid = String(req.body?.registrationUid || '');
+    if (!/^\d+$/.test(registrationUid)) {
+      return send(res, 400, {
+        error: 'Shelby registration UID is required',
+        code: 'registration_uid_required',
+      });
+    }
+    const metadata = await shelbyClient.coordination.getFullObjectMetadataByUid(BigInt(registrationUid));
     if (
       !metadata
       || Number(metadata.size) !== context.sizeBytes
@@ -431,7 +437,9 @@ app.post('/api/shelby/uploads', async (req, res) => {
       account: context.storageAddress,
       blobName: context.blobName,
       totalBytes: context.sizeBytes,
-      partSize: 3 * 1024 * 1024,
+      partSize: context.sizeBytes,
+      registrationUid,
+      blobMerkleRoot: req.body?.blobMerkleRoot,
     });
     send(res, 200, started);
   } catch (e) { fail(res, e); }
@@ -445,13 +453,13 @@ app.put(
       if (!requireShelbyWrites(res)) return;
       if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
       const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-      await shelbyGateway.putPart({
+      const result = await shelbyGateway.putPart({
         uploadId: req.params.uploadId,
         partIdx: Number(req.params.partIdx),
         data: req.body,
         uploadToken,
       });
-      send(res, 200, { ok: true });
+      send(res, 200, { ok: true, ...result });
     } catch (e) { fail(res, e); }
   },
 );
@@ -461,8 +469,12 @@ app.post('/api/shelby/uploads/:uploadId/complete', async (req, res) => {
     if (!requireShelbyWrites(res)) return;
     if (!shelbyGateway) return send(res, 503, { error: 'Shelby upload gateway is unavailable' });
     const uploadToken = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
-    await shelbyGateway.complete({ uploadId: req.params.uploadId, uploadToken });
-    send(res, 200, { ok: true });
+    const result = await shelbyGateway.complete({
+      uploadId: req.params.uploadId,
+      uploadToken,
+      spAcks: req.body?.spAcks,
+    });
+    send(res, 200, { ok: true, ...result });
   } catch (e) { fail(res, e); }
 });
 

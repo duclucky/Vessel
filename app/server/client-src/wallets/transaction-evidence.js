@@ -31,6 +31,9 @@ export function extractShelbyTransactionEvidence(transaction) {
   return Object.freeze({
     actualStorageUnits: decimalString(event.data.payment_amount, 'storage payment'),
     actualGasUsed: decimalString(transaction.gas_used, 'gas usage'),
+    registrationUid: event.data.uid == null
+      ? undefined
+      : decimalString(event.data.uid, 'registration uid'),
     transactionHash,
   });
 }

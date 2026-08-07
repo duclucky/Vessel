@@ -48662,7 +48662,7 @@ KeylessErrorResolutionTip: ${r14}`, R7;
   init_process();
   init_buffer();
 
-  // node_modules/@shelby-protocol/clay-codes/dist/chunk-RXWC2ROY.js
+  // node_modules/@shelby-protocol/clay-codes/dist/chunk-SHPQFULV.js
   init_process();
   init_buffer();
 
@@ -48771,13 +48771,14 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     };
   }
 
-  // node_modules/@shelby-protocol/clay-codes/dist/chunk-N26WXNR7.js
+  // node_modules/@shelby-protocol/clay-codes/dist/chunk-CK6XSN7K.js
   init_process();
   init_buffer();
   var DEFAULT_ALIGNMENT = 64;
   var DEFAULT_ALIGN_MASK = DEFAULT_ALIGNMENT - 1;
   var DEFAULT_PAGE_SIZE = 65536;
   var CLAY_PARAMS_BYTES = 64;
+  var CHUNK_ROOT_BYTES_LEN = 32;
 
   // node_modules/@shelby-protocol/clay-codes/dist/chunk-XAN62WH2.js
   init_process();
@@ -48797,7 +48798,7 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     }
   };
 
-  // node_modules/@shelby-protocol/clay-codes/dist/chunk-RXWC2ROY.js
+  // node_modules/@shelby-protocol/clay-codes/dist/chunk-SHPQFULV.js
   var MAX_WASM_MASK_BITS = 32;
   function toMaskFromIndexes(indexes, totalChunks) {
     let mask2 = 0;
@@ -48825,45 +48826,8 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     }
     return mask2 >>> 0;
   }
-  function erasedMaskFromAvailable(availableIndexes, totalChunks) {
-    const available = /* @__PURE__ */ new Set();
-    for (const idx of availableIndexes) {
-      if (!Number.isInteger(idx) || idx < 0) {
-        throw new InvalidChunkIndexError(idx, "not a valid non-negative integer");
-      }
-      if (idx >= totalChunks) {
-        throw new InvalidChunkIndexError(
-          idx,
-          `exceeds total chunks (${totalChunks})`
-        );
-      }
-      if (idx >= MAX_WASM_MASK_BITS) {
-        throw new InvalidChunkIndexError(
-          idx,
-          `exceeds mask width (${MAX_WASM_MASK_BITS} bits)`
-        );
-      }
-      if (available.has(idx)) {
-        throw new DuplicateChunkIndexError(idx);
-      }
-      available.add(idx);
-    }
-    let mask2 = 0;
-    for (let idx = 0; idx < totalChunks; idx++) {
-      if (!available.has(idx)) {
-        mask2 |= 1 << idx;
-      }
-    }
-    return mask2 >>> 0;
-  }
   function convertToErasedMask(options, totalChunks) {
-    if ("erasedChunksMask" in options) {
-      return options.erasedChunksMask >>> 0;
-    }
-    if ("erasedChunkIndexes" in options) {
-      return toMaskFromIndexes(options.erasedChunkIndexes, totalChunks);
-    }
-    return erasedMaskFromAvailable(options.availableChunkIndexes, totalChunks);
+    return toMaskFromIndexes(options.erasedChunkIndexes, totalChunks);
   }
   function makeDecoderAPI(instance, opts) {
     const exp = instance.exports;
@@ -48888,7 +48852,10 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     }
     const decoderSize = exp.clay_decoder_footprint(paramsPtr);
     const decoderPtr = workspace.alloc(decoderSize);
-    const staging = workspace.createStagingBuffer(opts.chunkSizeBytes);
+    const chunkStaging = workspace.createStagingBuffer(opts.chunkSizeBytes);
+    const merkleStaging = workspace.createStagingBuffer(
+      CHUNK_ROOT_BYTES_LEN * (opts.n + 1)
+    );
     const missingIndexes = /* @__PURE__ */ new Set();
     const availableIndexes = [];
     const staged = /* @__PURE__ */ new Set();
@@ -48925,26 +48892,27 @@ KeylessErrorResolutionTip: ${r14}`, R7;
           `Chunk ${idx} length ${data.byteLength} does not match chunkSizeBytes ${opts.chunkSizeBytes}`
         );
       }
-      staging.write(data);
+      chunkStaging.write(data);
       exp.clay_decoder_set_slice(
         activeDecoderPtr,
         idx,
-        staging.pointer,
+        chunkStaging.pointer,
         opts.chunkSizeBytes
       );
       staged.add(idx);
     };
     const run2 = () => {
-      if (staged.size < opts.k) {
+      const missing = availableIndexes.filter((idx) => !staged.has(idx));
+      if (missing.length > 0) {
         throw new Error(
-          `Decoder requires at least ${opts.k} staged chunks but only ${staged.size} provided`
+          `Decoder requires all ${availableIndexes.length} non-erased chunks to be staged; missing indexes: [${missing.join(", ")}]`
         );
       }
       exp.clay_decoder_run(activeDecoderPtr);
     };
     const getChunk = (idx) => {
-      exp.clay_decoder_get_chunk(activeDecoderPtr, idx, staging.pointer);
-      return staging.read();
+      exp.clay_decoder_get_chunk(activeDecoderPtr, idx, chunkStaging.pointer);
+      return chunkStaging.read();
     };
     const reconfigure = (erasurePattern) => {
       const mask2 = convertToErasedMask(erasurePattern, opts.n);
@@ -48985,11 +48953,11 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     const getChunkMerkleRoots = () => {
       exp.clay_decoder_get_merkle_root(
         activeDecoderPtr,
-        staging.pointer + 32 * opts.n,
-        staging.pointer
+        merkleStaging.pointer + CHUNK_ROOT_BYTES_LEN * opts.n,
+        merkleStaging.pointer
       );
-      const array3 = staging.read().slice(0, 32 * opts.n);
-      const chunkSize = 32;
+      const array3 = merkleStaging.read().slice(0, CHUNK_ROOT_BYTES_LEN * opts.n);
+      const chunkSize = CHUNK_ROOT_BYTES_LEN;
       return Array.from(
         { length: opts.n },
         (_9, i24) => array3.slice(i24 * chunkSize, (i24 + 1) * chunkSize)
@@ -48998,7 +48966,7 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     return { setChunk, run: run2, getChunk, reset, decode: decode3, getChunkMerkleRoots };
   }
 
-  // node_modules/@shelby-protocol/clay-codes/dist/chunk-BWTMZB33.js
+  // node_modules/@shelby-protocol/clay-codes/dist/chunk-BGUHDS6E.js
   init_process();
   init_buffer();
   function makeEncoderAPI(instance, opts) {
@@ -49019,22 +48987,25 @@ KeylessErrorResolutionTip: ${r14}`, R7;
     );
     const encPtr = workspace.alloc(exp.clay_encoder_footprint(paramsPtr));
     exp.clay_encoder_init(encPtr, paramsPtr);
-    const staging = workspace.createStagingBuffer(opts.chunkSizeBytes);
+    const chunkStaging = workspace.createStagingBuffer(opts.chunkSizeBytes);
+    const merkleStaging = workspace.createStagingBuffer(
+      CHUNK_ROOT_BYTES_LEN * (opts.n + 1)
+    );
     const setChunk = (idx, data) => {
       if (data.byteLength !== opts.chunkSizeBytes) {
         throw new Error(
           `Chunk ${idx} length ${data.byteLength} does not match chunkSizeBytes ${opts.chunkSizeBytes}`
         );
       }
-      staging.write(data);
-      exp.clay_encoder_set_data_chunk(encPtr, idx, staging.pointer);
+      chunkStaging.write(data);
+      exp.clay_encoder_set_data_chunk(encPtr, idx, chunkStaging.pointer);
     };
     const run2 = () => {
       exp.clay_encoder_run(encPtr);
     };
     const getChunk = (idx) => {
-      exp.clay_encoder_get_chunk(encPtr, idx, staging.pointer);
-      return staging.read();
+      exp.clay_encoder_get_chunk(encPtr, idx, chunkStaging.pointer);
+      return chunkStaging.read();
     };
     const erasureCode = (input) => {
       exp.clay_decoder_reset(encPtr);
@@ -49054,20 +49025,35 @@ KeylessErrorResolutionTip: ${r14}`, R7;
       }
       return buildChunkCollection(outputs, opts.k);
     };
-    const getChunkMerkleRoots = () => {
+    const getMerkleCommitment = () => {
+      const rootOffset = CHUNK_ROOT_BYTES_LEN * opts.n;
       exp.clay_encoder_get_merkle_root(
         encPtr,
-        staging.pointer + 32 * opts.n,
-        staging.pointer
+        merkleStaging.pointer + rootOffset,
+        merkleStaging.pointer
       );
-      const array3 = staging.read().slice(0, 32 * opts.n);
-      const chunkSize = 32;
-      return Array.from(
+      const fullArray = merkleStaging.read();
+      const chunkRoots = Array.from(
         { length: opts.n },
-        (_9, i24) => array3.slice(i24 * chunkSize, (i24 + 1) * chunkSize)
+        (_9, i24) => fullArray.slice(i24 * CHUNK_ROOT_BYTES_LEN, (i24 + 1) * CHUNK_ROOT_BYTES_LEN)
       );
+      const chunksetRoot = fullArray.slice(
+        rootOffset,
+        rootOffset + CHUNK_ROOT_BYTES_LEN
+      );
+      return { chunkRoots, chunksetRoot };
     };
-    return { setChunk, run: run2, getChunk, erasureCode, getChunkMerkleRoots };
+    const getChunkMerkleRoots = () => {
+      return getMerkleCommitment().chunkRoots;
+    };
+    return {
+      setChunk,
+      run: run2,
+      getChunk,
+      erasureCode,
+      getChunkMerkleRoots,
+      getMerkleCommitment
+    };
   }
 
   // node_modules/@shelby-protocol/clay-codes/dist/index.js
@@ -52632,19 +52618,24 @@ spurious results.`);
     };
   }
   var NetworkToShelbyRPCBaseUrl = {
-    [e7.SHELBYNET]: "https://api.shelbynet.shelby.xyz/shelby",
+    [e7.SHELBYNET]: "https://shelby.shelbynet.shelby.xyz/shelby",
     [e7.NETNA]: void 0,
     [e7.DEVNET]: void 0,
-    [e7.TESTNET]: "https://api.testnet.shelby.xyz/shelby",
+    // Shelby Testnet has been retired.
+    // [Network.TESTNET]: "https://api.testnet.shelby.xyz/shelby",
+    [e7.TESTNET]: void 0,
     [e7.MAINNET]: void 0,
     [e7.LOCAL]: "http://localhost:9090",
     [e7.CUSTOM]: void 0
   };
   var NetworkToShelbyBlobIndexerBaseUrl = {
-    [e7.SHELBYNET]: "https://api.shelbynet.aptoslabs.com/nocode/v1/public/alias/shelby/shelbynet/v1/graphql",
+    [e7.SHELBYNET]: "https://api.shelbynet.aptoslabs.com/v1/graphql",
     [e7.NETNA]: void 0,
     [e7.DEVNET]: void 0,
-    [e7.TESTNET]: "https://api.testnet.aptoslabs.com/nocode/v1/public/alias/shelby/testnet/v1/graphql",
+    // Shelby Testnet has been retired.
+    // [Network.TESTNET]:
+    //   "https://api.testnet.aptoslabs.com/nocode/v1/public/alias/shelby/testnet/v1/graphql",
+    [e7.TESTNET]: void 0,
     [e7.MAINNET]: void 0,
     [e7.LOCAL]: "http://localhost:8091/v1/graphql",
     [e7.CUSTOM]: void 0
@@ -52653,7 +52644,9 @@ spurious results.`);
     [e7.SHELBYNET]: "https://api.shelbynet.shelby.xyz/gs/v1",
     [e7.NETNA]: void 0,
     [e7.DEVNET]: void 0,
-    [e7.TESTNET]: "https://api.testnet.shelby.xyz/gs/v1",
+    // Shelby Testnet has been retired.
+    // [Network.TESTNET]: "https://api.testnet.shelby.xyz/gs/v1",
+    [e7.TESTNET]: void 0,
     [e7.MAINNET]: void 0,
     [e7.LOCAL]: void 0,
     [e7.CUSTOM]: void 0
@@ -52794,21 +52787,28 @@ spurious results.`);
     };
   }
   var DEFAULT_CHUNK_SIZE_BYTES2 = 2 * 1024 * 1024;
+  var shelbyNetworks = [
+    e7.LOCAL,
+    // Network.TESTNET, // Shelby Testnet has been retired.
+    e7.SHELBYNET
+  ];
   var GetBlobsDocument = lib_default`
     query getBlobs($where: blobs_bool_exp, $orderBy: [blobs_order_by!], $limit: Int, $offset: Int) {
   blobs(where: $where, order_by: $orderBy, limit: $limit, offset: $offset) {
+    uid
+    object_name
     owner
     blob_commitment
-    blob_name
     created_at
     expires_at
-    num_chunksets
-    is_deleted
-    is_written
-    placement_group
-    size
     updated_at
+    num_chunksets
+    size
     slice_address
+    placement_group
+    is_persisted
+    is_committed
+    is_deleted
   }
 }
     `;
@@ -52820,7 +52820,8 @@ spurious results.`);
     limit: $limit
     offset: $offset
   ) {
-    blob_name
+    uid
+    object_name
     event_index
     event_type
     transaction_hash
@@ -52903,22 +52904,6 @@ spurious results.`);
     challenge: external_exports.string(),
     expiresAt: external_exports.number()
   });
-  var MultipartUploadStatusResponseSchema = external_exports.object({
-    uploadId: external_exports.string(),
-    completedParts: external_exports.array(external_exports.number()),
-    partSize: external_exports.number(),
-    nParts: external_exports.number(),
-    uploadedBytes: external_exports.number()
-  });
-  var StartMultipartUploadResponseSchema = external_exports.object({
-    uploadId: external_exports.string()
-  });
-  var UploadPartResponseSchema = external_exports.object({
-    success: external_exports.literal(true)
-  });
-  var CompleteMultipartUploadResponseSchema = external_exports.object({
-    success: external_exports.literal(true)
-  });
   var RPCErrorResponseSchema = external_exports.object({
     error: external_exports.string()
   });
@@ -52926,11 +52911,6 @@ spurious results.`);
     error: external_exports.string().optional(),
     storedMicropayment: external_exports.string().optional()
   });
-  var shelbyNetworks = [
-    e7.LOCAL,
-    e7.TESTNET,
-    e7.SHELBYNET
-  ];
 
   // node_modules/@aptos-labs/derived-wallet-solana/dist/index.mjs
   init_process();
@@ -65509,11 +65489,13 @@ ${fields.join("\n")}`;
     uploadContext,
     contractQuote,
     contractSignature,
+    registrationUid,
+    blobMerkleRoot,
     request: request2 = fetch,
     onProgress
   } = {}) {
     const data = blobData instanceof Uint8Array ? blobData : new Uint8Array(blobData || []);
-    if (!data.byteLength || !quoteToken || !paidAuthorization || !uploadContext || !contractQuote || !contractSignature) {
+    if (!data.byteLength || !quoteToken || !paidAuthorization || !uploadContext || !contractQuote || !contractSignature || !registrationUid || !blobMerkleRoot) {
       throw uploadError("Paid upload context is required", "invalid_paid_authorization");
     }
     const start = await readJson(await request2("/api/shelby/uploads", {
@@ -65525,33 +65507,34 @@ ${fields.join("\n")}`;
         uploadContext,
         contractQuote,
         contractSignature,
-        totalBytes: data.byteLength
+        totalBytes: data.byteLength,
+        registrationUid,
+        blobMerkleRoot
       })
     }));
     if (!start.uploadId || !start.uploadToken || !Number.isSafeInteger(start.partSize) || start.partSize <= 0) {
       throw uploadError("Vessel returned an invalid Shelby upload session");
     }
-    let uploadedBytes = 0;
-    let partIdx = 0;
-    for (let offset2 = 0; offset2 < data.byteLength; offset2 += start.partSize) {
-      const part = data.subarray(offset2, Math.min(data.byteLength, offset2 + start.partSize));
-      await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/parts/${partIdx}`, {
-        method: "PUT",
-        headers: {
-          "content-type": "application/octet-stream",
-          Authorization: `Bearer ${start.uploadToken}`
-        },
-        body: part
-      }));
-      uploadedBytes += part.byteLength;
-      partIdx += 1;
-      onProgress?.({ uploadedBytes, totalBytes: data.byteLength, partIdx, totalParts: Math.ceil(data.byteLength / start.partSize) });
-    }
-    await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/complete`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${start.uploadToken}` }
+    const part = data.subarray(0);
+    const uploaded = await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/parts/0`, {
+      method: "PUT",
+      headers: {
+        "content-type": "application/octet-stream",
+        Authorization: `Bearer ${start.uploadToken}`
+      },
+      body: part
     }));
-    return Object.freeze({ uploadId: start.uploadId, uploadedBytes });
+    const uploadedBytes = Number(uploaded.uploadedBytes || data.byteLength);
+    onProgress?.({ uploadedBytes, totalBytes: data.byteLength, partIdx: 1, totalParts: 1 });
+    const completed = await readJson(await request2(`/api/shelby/uploads/${encodeURIComponent(start.uploadId)}/complete`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Authorization: `Bearer ${start.uploadToken}`
+      },
+      body: JSON.stringify({ spAcks: uploaded.spAcks })
+    }));
+    return Object.freeze({ uploadId: start.uploadId, uploadedBytes, commitPayload: completed.commitPayload });
   }
 
   // client-src/vessel-solana.js

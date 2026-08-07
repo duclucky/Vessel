@@ -5,50 +5,56 @@ import { ShelbyUploadGateway } from '../src/lib/shelby-upload-gateway.js';
 const SECRET = 'test-upload-secret-that-is-at-least-32-bytes';
 
 test('Shelby upload gateway keeps the private API key upstream and scopes every chunk', async () => {
-  const requests = [];
-  const fetchImpl = async (url, options = {}) => {
-    requests.push({ url, options });
-    if (options.method === 'POST' && url.endsWith('/v1/multipart-uploads')) {
-      return new Response(JSON.stringify({ uploadId: 'upload-1' }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-    return new Response('', { status: 200 });
-  };
+  const uploads = [];
   const gateway = new ShelbyUploadGateway({
     apiKey: 'server-only-key',
     rpcBaseUrl: 'https://api.testnet.shelby.xyz/shelby',
     secret: SECRET,
-    fetchImpl,
+    rpcClient: {
+      putBlobChunksets: async (args) => {
+        uploads.push(args);
+        return { spAcks: [{ slot: 2, signature: 'sig-2' }] };
+      },
+    },
+    createProvider: async () => ({ config: { erasure_n: 16, erasure_k: 10, chunkSizeBytes: 1 } }),
+    generateCommitmentsImpl: async (_provider, bytes) => ({
+      raw_data_size: bytes.byteLength,
+      blob_merkle_root: `0x${'44'.repeat(32)}`,
+      chunkset_commitments: [{ chunkset_root: `0x${'55'.repeat(32)}`, chunk_commitments: Array.from({ length: 16 }, () => `0x${'66'.repeat(32)}`) }],
+    }),
     now: () => 1_000,
-    maxPartBytes: 3 * 1024 * 1024,
+    maxPartBytes: 4_000_000,
   });
 
   const started = await gateway.start({
     account: `0x${'11'.repeat(32)}`,
     blobName: `media/${'22'.repeat(32)}.png`,
-    totalBytes: 4_000_000,
-    partSize: 3_000_000,
+    totalBytes: 3,
+    partSize: 3,
+    registrationUid: '79234787875693568',
+    blobMerkleRoot: `0x${'44'.repeat(32)}`,
   });
-  assert.equal(started.uploadId, 'upload-1');
-  assert.equal(started.partSize, 3_000_000);
+  assert.match(started.uploadId, /^[0-9a-f-]{36}$/);
+  assert.equal(started.partSize, 3);
   assert.match(started.uploadToken, /^vupload\./);
-  assert.equal(requests[0].options.headers.Authorization, 'Bearer server-only-key');
-  assert.equal(JSON.parse(requests[0].options.body).rawAccount, `0x${'11'.repeat(32)}`);
 
-  await gateway.putPart({
-    uploadId: 'upload-1',
+  const uploaded = await gateway.putPart({
+    uploadId: started.uploadId,
     partIdx: 0,
     data: new Uint8Array([1, 2, 3]),
     uploadToken: started.uploadToken,
   });
-  await gateway.complete({ uploadId: 'upload-1', uploadToken: started.uploadToken });
+  const completed = await gateway.complete({
+    uploadId: started.uploadId,
+    uploadToken: started.uploadToken,
+    spAcks: uploaded.spAcks,
+  });
 
-  assert.equal(requests[1].options.headers.Authorization, 'Bearer server-only-key');
-  assert.deepEqual([...requests[1].options.body], [1, 2, 3]);
-  assert.match(requests[1].url, /\/v1\/multipart-uploads\/upload-1\/parts\/0$/);
-  assert.match(requests[2].url, /\/v1\/multipart-uploads\/upload-1\/complete$/);
+  assert.equal(uploads[0].accountAddress, `0x${'11'.repeat(32)}`);
+  assert.equal(uploads[0].uid, '79234787875693568');
+  assert.deepEqual([...uploads[0].blobData], [1, 2, 3]);
+  assert.deepEqual(uploaded.spAcks, [{ slot: 2, signature: 'sig-2' }]);
+  assert.match(completed.commitPayload.function, /::blob_metadata::commit_object$/);
 });
 
 test('Shelby upload gateway rejects token replay and oversized chunks before upstream I/O', async () => {
@@ -57,10 +63,10 @@ test('Shelby upload gateway rejects token replay and oversized chunks before ups
     apiKey: 'server-only-key',
     rpcBaseUrl: 'https://api.testnet.shelby.xyz/shelby',
     secret: SECRET,
-    fetchImpl: async () => {
+    rpcClient: { putBlobChunksets: async () => {
       calls += 1;
-      return new Response(JSON.stringify({ uploadId: 'upload-1' }), { status: 200 });
-    },
+      return { spAcks: [] };
+    } },
     now: () => 1_000,
     maxPartBytes: 8,
   });
@@ -69,8 +75,9 @@ test('Shelby upload gateway rejects token replay and oversized chunks before ups
     blobName: 'media/file.bin',
     totalBytes: 8,
     partSize: 8,
+    registrationUid: '79234787875693568',
   });
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
 
   await assert.rejects(
     () => gateway.putPart({
@@ -80,9 +87,9 @@ test('Shelby upload gateway rejects token replay and oversized chunks before ups
   );
   await assert.rejects(
     () => gateway.putPart({
-      uploadId: 'upload-1', partIdx: 0, data: new Uint8Array(9), uploadToken: started.uploadToken,
+      uploadId: started.uploadId, partIdx: 0, data: new Uint8Array(9), uploadToken: started.uploadToken,
     }),
     (error) => error.code === 'upload_part_too_large',
   );
-  assert.equal(calls, 1);
+  assert.equal(calls, 0);
 });

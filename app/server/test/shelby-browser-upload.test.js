@@ -8,8 +8,20 @@ test('browser upload sends bounded chunks through Vessel without receiving a She
     requests.push({ url, options });
     if (url === '/api/shelby/uploads') {
       return new Response(JSON.stringify({
-        uploadId: 'upload-1', uploadToken: 'vupload.scoped', partSize: 3,
+        uploadId: 'upload-1', uploadToken: 'vupload.scoped', partSize: 5,
       }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (String(url).endsWith('/parts/0')) {
+      return new Response(JSON.stringify({ ok: true, uploadedBytes: 5, spAcks: [{ slot: 1, signature: 'sig' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (String(url).endsWith('/complete')) {
+      return new Response(JSON.stringify({ ok: true, commitPayload: { function: 'commit_object' } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     }
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -23,15 +35,17 @@ test('browser upload sends bounded chunks through Vessel without receiving a She
     uploadContext: { storageAddress: `0x${'11'.repeat(32)}`, blobName: 'media/file.bin' },
     contractQuote: { quoteId: 'contract-quote' },
     contractSignature: 'signature',
+    registrationUid: '79234787875693568',
+    blobMerkleRoot: `0x${'22'.repeat(32)}`,
     request,
   });
 
-  assert.deepEqual(result, { uploadId: 'upload-1', uploadedBytes: 5 });
-  assert.equal(requests.length, 4);
-  assert.deepEqual([...requests[1].options.body], [1, 2, 3]);
-  assert.deepEqual([...requests[2].options.body], [4, 5]);
+  assert.deepEqual(result, { uploadId: 'upload-1', uploadedBytes: 5, commitPayload: { function: 'commit_object' } });
+  assert.equal(requests.length, 3);
+  assert.deepEqual([...requests[1].options.body], [1, 2, 3, 4, 5]);
   assert.equal(requests[1].options.headers.Authorization, 'Bearer vupload.scoped');
-  assert.equal(requests[3].url, '/api/shelby/uploads/upload-1/complete');
+  assert.equal(JSON.parse(requests[2].options.body).spAcks[0].signature, 'sig');
+  assert.equal(requests[2].url, '/api/shelby/uploads/upload-1/complete');
   assert.doesNotMatch(JSON.stringify(requests), /server-only|SHELBY_API_KEY/);
 });
 
@@ -58,6 +72,8 @@ test('browser upload surfaces a failed Shelby part and never completes it', asyn
       uploadContext: { storageAddress: `0x${'11'.repeat(32)}`, blobName: 'media/file.bin' },
       contractQuote: { quoteId: 'contract-quote' },
       contractSignature: 'signature',
+      registrationUid: '79234787875693568',
+      blobMerkleRoot: `0x${'22'.repeat(32)}`,
       request,
     }),
     (error) => error.code === 'shelby_upload_failed',
