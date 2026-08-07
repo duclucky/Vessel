@@ -670,10 +670,12 @@ function initUpload() {
         } else {
           recovery.advance(record.id, 'recovery_required', { errorCode: 'acknowledgement_timeout' });
           toast('Bytes were resent; Shelby acknowledgement is still pending', 'warn');
+          await renderRecoveryPanel();
         }
       } catch (error) {
         recovery.advance(record.id, 'recovery_required', { errorCode: error.code || 'resume_failed' });
         toast(String(error?.message || error).slice(0, 160), 'error');
+        await renderRecoveryPanel();
       }
     });
   }

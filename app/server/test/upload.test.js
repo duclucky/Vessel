@@ -135,6 +135,18 @@ test('recovery resume renders success when Shelby confirms the recovered artifac
   assert.equal(matchedCheck >= 0 && renderRecovered > matchedCheck && completeRecovered > matchedCheck, true);
 });
 
+test('recovery resume failure restores the visible recovery panel', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(
+    source,
+    /catch \(error\) \{\s*recovery\.advance\(record\.id, 'recovery_required'[\s\S]*toast\(String\(error\?\.message \|\| error\)[\s\S]*await renderRecoveryPanel\(\);/s,
+  );
+  assert.match(
+    source,
+    /recovery\.advance\(record\.id, 'recovery_required', \{ errorCode: 'acknowledgement_timeout' \}\);[\s\S]*toast\('Bytes were resent; Shelby acknowledgement is still pending'[\s\S]*await renderRecoveryPanel\(\);/s,
+  );
+});
+
 test('paid recovery rebuilds the upload context without losing wallet identity', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const paidRecovery = source.slice(
