@@ -65647,6 +65647,7 @@ ${fields.join("\n")}`;
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind,
     expectRegistrationEvidence = true
   }) {
     const signed = await signAptosTransactionWithSolana({
@@ -65666,6 +65667,7 @@ ${fields.join("\n")}`;
       uploadContext,
       contractQuote,
       contractSignature,
+      transactionKind,
       expectRegistrationEvidence
     });
   }
@@ -65688,7 +65690,7 @@ ${fields.join("\n")}`;
     if (!built.transaction) {
       throw new Error("Vessel did not return a Shelby commit transaction");
     }
-    return gr.deserialize(new a5(fromB64(built.transaction)));
+    return lr.deserialize(new a5(fromB64(built.transaction)));
   }
   async function registrationEvidenceFromHash(transactionHash) {
     if (!transactionHash) return {};
@@ -65795,6 +65797,7 @@ ${fields.join("\n")}`;
       uploadContext,
       contractQuote,
       contractSignature,
+      transactionKind: "simple",
       expectRegistrationEvidence: false
     });
     onCheckpoint?.("committed", {
@@ -65889,6 +65892,7 @@ ${fields.join("\n")}`;
       uploadContext,
       contractQuote,
       contractSignature,
+      transactionKind: "simple",
       expectRegistrationEvidence: false
     });
     return {

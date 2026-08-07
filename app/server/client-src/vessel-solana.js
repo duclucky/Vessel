@@ -1,7 +1,7 @@
 // Vessel — Solana DAA ownership with server-authenticated Shelby access.
 // Phantom signs the Aptos DAA registration. Vessel's backend keeps the Shelby and gas-station
 // credentials private, validates the paid contract receipt, and relays bounded blob chunks.
-import { Deserializer, MultiAgentTransaction } from '@aptos-labs/ts-sdk';
+import { Deserializer, MultiAgentTransaction, SimpleTransaction } from '@aptos-labs/ts-sdk';
 import {
   createDefaultErasureCodingProvider,
   generateCommitments,
@@ -102,6 +102,7 @@ async function signAndSponsorAptosTransaction(transaction, {
   uploadContext,
   contractQuote,
   contractSignature,
+  transactionKind,
   expectRegistrationEvidence = true,
 }) {
   const signed = await signAptosTransactionWithSolana({
@@ -121,6 +122,7 @@ async function signAndSponsorAptosTransaction(transaction, {
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind,
     expectRegistrationEvidence,
   });
 }
@@ -144,7 +146,7 @@ async function buildSponsoredCommitTransaction({
   if (!built.transaction) {
     throw new Error('Vessel did not return a Shelby commit transaction');
   }
-  return MultiAgentTransaction.deserialize(new Deserializer(fromB64(built.transaction)));
+  return SimpleTransaction.deserialize(new Deserializer(fromB64(built.transaction)));
 }
 
 async function registrationEvidenceFromHash(transactionHash) {
@@ -277,6 +279,7 @@ async function uploadSponsored(file, {
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind: 'simple',
     expectRegistrationEvidence: false,
   });
   onCheckpoint?.('committed', {
@@ -376,6 +379,7 @@ async function resumeBlobWrite(file, {
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind: 'simple',
     expectRegistrationEvidence: false,
   });
   return {

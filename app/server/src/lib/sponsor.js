@@ -1,5 +1,5 @@
 import { GasStationClient } from '@aptos-labs/gas-station-client';
-import { MultiAgentTransaction, AccountAuthenticator, Deserializer, Network } from '@aptos-labs/ts-sdk';
+import { MultiAgentTransaction, SimpleTransaction, AccountAuthenticator, Deserializer, Network } from '@aptos-labs/ts-sdk';
 import { NetworkToGasStationBaseUrl } from '@shelby-protocol/sdk/node';
 
 export function resolveGasStationNetwork(network = 'testnet') {
@@ -31,8 +31,8 @@ export class SponsorManager {
       apiKey: gasStationApiKey,
       baseUrl: resolveGasStationBaseUrl(net),
     });
-    this._deserialize = deserialize || ((txnB64, senderAuthB64) => ({
-      transaction: MultiAgentTransaction.deserialize(
+    this._deserialize = deserialize || ((txnB64, senderAuthB64, transactionKind = 'multi_agent') => ({
+      transaction: (transactionKind === 'simple' ? SimpleTransaction : MultiAgentTransaction).deserialize(
         new Deserializer(Buffer.from(txnB64, 'base64')),
       ),
       senderAuthenticator: AccountAuthenticator.deserialize(
@@ -41,20 +41,20 @@ export class SponsorManager {
     }));
   }
 
-  deserialize(txnB64, senderAuthB64) {
-    return this._deserialize(txnB64, senderAuthB64);
+  deserialize(txnB64, senderAuthB64, transactionKind) {
+    return this._deserialize(txnB64, senderAuthB64, transactionKind);
   }
 
   /** @param {string} txnB64 base64 of MultiAgentTransaction.bcsToBytes()
    *  @param {string} senderAuthB64 base64 of the sender AccountAuthenticator.bcsToBytes() */
-  async submit(txnB64, senderAuthB64, { expectedSender } = {}) {
+  async submit(txnB64, senderAuthB64, { expectedSender, transactionKind } = {}) {
     if (!expectedSender) {
       throw Object.assign(new Error('Expected sponsored transaction sender is required'), {
         status: 400,
         code: 'sender_required',
       });
     }
-    const { transaction, senderAuthenticator } = this.deserialize(txnB64, senderAuthB64);
+    const { transaction, senderAuthenticator } = this.deserialize(txnB64, senderAuthB64, transactionKind);
     const actualSender = transaction.rawTransaction.sender.toString();
     if (actualSender.toLowerCase() !== String(expectedSender).toLowerCase()) {
       throw Object.assign(

@@ -34,6 +34,8 @@ test('DAA registration and bytes use authenticated Vessel server routes', () => 
   assert.match(source, /registrationUid/);
   assert.match(source, /blobMerkleRoot/);
   assert.match(source, /commitPayload/);
+  assert.match(source, /SimpleTransaction\.deserialize/);
+  assert.match(source, /transactionKind:\s*'simple'/);
   assert.match(source, /expectRegistrationEvidence:\s*false/);
   assert.match(source, /contractQuote/);
   assert.match(source, /contractSignature/);

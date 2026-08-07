@@ -17,7 +17,9 @@ test('Shelby API key stays server-side across register, multipart write, list, a
   }
   assert.match(server, /Authorization: `Bearer \$\{config\.shelbyRpcApiKey\}`/);
   assert.match(server, /validatePaidUploadBody\(req\.body\)/);
-  assert.match(server, /build\.multiAgent\(\{\s*sender:\s*signedQuote\.context\.storageAddress[\s\S]*data:\s*req\.body\?\.commitPayload[\s\S]*withFeePayer:\s*true/s);
+  assert.match(server, /build\.simple\(\{\s*sender:\s*signedQuote\.context\.storageAddress[\s\S]*data:\s*req\.body\?\.commitPayload[\s\S]*withFeePayer:\s*true/s);
+  assert.match(server, /transactionKind:\s*'simple'/);
+  assert.doesNotMatch(server, /data:\s*req\.body\?\.commitPayload[\s\S]{0,160}secondarySignerAddresses/);
   assert.match(server, /express\.raw\(\{ type: 'application\/octet-stream', limit: '3mb' \}\)/);
   assert.match(wallets, /\/api\/shelby\/artifacts\?account=/);
   assert.match(server, /contentType: mimeForKey\(row\.blobNameSuffix\)/);

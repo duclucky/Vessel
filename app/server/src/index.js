@@ -411,14 +411,14 @@ app.post('/api/shelby/commit', async (req, res) => {
     if (!req.body?.commitPayload || typeof req.body.commitPayload !== 'object') {
       return send(res, 400, { error: 'Shelby commit payload is required', code: 'commit_payload_required' });
     }
-    const transaction = await shelbyClient.aptos.transaction.build.multiAgent({
+    const transaction = await shelbyClient.aptos.transaction.build.simple({
       sender: signedQuote.context.storageAddress,
       data: req.body?.commitPayload,
-      secondarySignerAddresses: [config.gasStationAccount],
       withFeePayer: true,
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
+      transactionKind: 'simple',
     });
   } catch (e) { fail(res, e); }
 });
@@ -681,6 +681,7 @@ app.post('/api/sponsor/submit', async (req, res) => {
       uploadContext,
       contractQuote,
       contractSignature,
+      transactionKind,
     } = req.body || {};
     if (!transaction || !senderAuthenticator) return send(res, 400, { error: 'transaction and senderAuthenticator required' });
     const { signedQuote: quote } = validatePaidUploadBody({
@@ -692,6 +693,7 @@ app.post('/api/sponsor/submit', async (req, res) => {
     });
     const r = await sponsor.submit(String(transaction), String(senderAuthenticator), {
       expectedSender: quote.context.storageAddress,
+      transactionKind: transactionKind === 'simple' ? 'simple' : 'multi_agent',
     });
     if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
     const completed = await aptos.waitForTransaction({ transactionHash: r.hash });

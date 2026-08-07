@@ -24,15 +24,20 @@ test('sponsor rejects a transaction whose sender differs from the paid DAA', asy
 });
 
 test('sponsor submits when transaction sender equals the paid DAA', async () => {
+  let seenKind;
   const sponsor = new SponsorManager({
     gasStationClient: { signAndSubmitTransaction: async () => ({ hash: '0xhash' }) },
-    deserialize: () => decoded('0xpaid'),
+    deserialize: (_txn, _auth, transactionKind) => {
+      seenKind = transactionKind;
+      return decoded('0xpaid');
+    },
   });
 
   assert.deepEqual(
-    await sponsor.submit('txn', 'auth', { expectedSender: '0xPAID' }),
+    await sponsor.submit('txn', 'auth', { expectedSender: '0xPAID', transactionKind: 'simple' }),
     { hash: '0xhash' },
   );
+  assert.equal(seenKind, 'simple');
 });
 
 test('sponsor requires a non-empty expected sender', async () => {
