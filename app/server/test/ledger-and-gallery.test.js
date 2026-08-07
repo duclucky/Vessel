@@ -183,6 +183,15 @@ test('Gallery preview treats SVG and legacy image keys as renderable images', ()
   assert.match(source, /src="\$\{url\}"/);
 });
 
+test('Gallery marks already-failed image previews as unavailable', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const listener = source.indexOf("$$('.js-artifact-image', grid)");
+  const completeGuard = source.indexOf('img.complete && img.naturalWidth === 0', listener);
+  const fallbackCopy = source.indexOf('Blob unavailable or expired', completeGuard);
+
+  assert.equal(listener >= 0 && completeGuard > listener && fallbackCopy > completeGuard, true);
+});
+
 test('wallet upload history retains collection-scale batches instead of truncating at 60 files', () => {
   const ledger = createLedger(memoryStorage());
   for (let index = 0; index < 75; index += 1) {
