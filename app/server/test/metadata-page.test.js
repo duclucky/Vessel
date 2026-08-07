@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { publicDir } from './html-test-utils.js';
+import { getIds, publicDir, readPage } from './html-test-utils.js';
 import {
   joinMetadataBaseUri,
   metadataImageMimeType,
@@ -69,7 +69,7 @@ test('single hosting keeps local download enabled while writes are paused', () =
   const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
   assert.match(source, /singleHost\.disabled = isHosting \|\| !\(canHost && walletReady && singleValid\)/);
   assert.match(source, /singleDownload\.disabled = !ready/);
-  assert.match(source, /Shelby testnet hosting is temporarily paused/);
+  assert.match(source, /ShelbyNet beta hosting is temporarily paused/);
 });
 
 test('metadata page sends designer preset fields into schema builders', () => {
@@ -94,4 +94,35 @@ test('batch metadata hosting uses the retryable sequential queue and preserves s
   const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(app, /recovery\.loadForWallet\(session\)/);
   assert.match(app, /walletOwnedUpload\.resume\(file, recoveryRecord/);
+});
+
+test('batch metadata page exposes hosted collection manifest actions', () => {
+  const html = readPage('metadata.html');
+  const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+
+  for (const id of [
+    'batch-manifest-panel',
+    'batch-manifest-summary',
+    'batch-copy-tokenuris',
+    'batch-download-manifest',
+  ]) {
+    assert.equal(getIds(html).has(id), true, `${id} hook should exist`);
+  }
+  assert.match(source, /buildCollectionManifest/);
+  assert.match(source, /batchCopyTokenUris/);
+  assert.match(source, /batchDownloadManifest/);
+  assert.match(source, /copyText\(batchManifest\.copyText\)/);
+  assert.match(source, /downloadBlob\(batchManifest\.csv/);
+  assert.match(source, /saveCollectionManifest\(batchManifest/);
+});
+
+test('app passes collection manifest persistence into metadata page', () => {
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const metadataStart = app.indexOf('async function initMetadata()');
+  const metadataEnd = app.indexOf('/* ------------------------------- boot', metadataStart);
+  const metadata = app.slice(metadataStart, metadataEnd);
+
+  assert.match(metadata, /saveCollectionManifest:/);
+  assert.match(metadata, /ledger\.rememberCollectionManifest/);
+  assert.match(metadata, /storageAddress:.*session\.storageAddress/s);
 });

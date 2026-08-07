@@ -13,13 +13,14 @@ import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 import { initMetadataPage } from './metadata-page.js';
+import { downloadBlob } from './metadata-export.js';
 import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
 const recovery = createRecoveryLedger(localStorage);
-const { loadMine, replaceMine, forgetMine } = ledger;
+const { loadMine, replaceMine, forgetMine, loadCollectionManifests } = ledger;
 
 /* ------------------------------- helpers ------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -850,6 +851,7 @@ async function initGallery() {
   }
   const count = $('#artifact-count');
   if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
+  renderFeeDashboard(items);
   if (!items.length) {
     grid.innerHTML = newSlot() + `<div class="vessel-glass flex min-h-80 flex-col items-center justify-center rounded-vessel p-8 text-center sm:col-span-1 lg:col-span-2"><span class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">deployed_code</span><h2 class="mt-5 font-display text-2xl font-semibold">The vault is waiting</h2><p class="mt-3 max-w-md text-sm leading-6 text-on-surface-variant">Complete one wallet-owned upload to populate your personal artifact collection.</p></div>`;
     return;
@@ -864,6 +866,12 @@ async function initGallery() {
   $$('.js-meta', grid).forEach((b) => (b.onclick = () => {
     ledger.selectArtifact({ key: b.dataset.key, url: b.dataset.url });
     location.href = '/metadata.html';
+  }));
+  $$('.js-proof', grid).forEach((b) => (b.onclick = () => {
+    const proof = new URL('/proof.html', location.origin);
+    proof.searchParams.set('key', b.dataset.key || '');
+    proof.searchParams.set('url', b.dataset.url || '');
+    location.href = proof.pathname + proof.search;
   }));
   $$('.js-del', grid).forEach((b) => (b.onclick = async () => {
     const confirmed = await confirmAction({
@@ -881,14 +889,45 @@ async function initGallery() {
     document.querySelector('#gallery-title')?.focus();
   }));
 }
+function accountingMicro(value) {
+  try {
+    const text = String(value ?? '').trim();
+    return text ? BigInt(text) : 0n;
+  } catch {
+    return 0n;
+  }
+}
+function formatAccountingUsd(micro) {
+  const value = accountingMicro(micro);
+  const whole = value / 1_000_000n;
+  const frac = String(value % 1_000_000n).padStart(6, '0');
+  return `$${whole}.${frac}`;
+}
+function renderFeeDashboard(items) {
+  const totals = (items || []).reduce((sum, item) => ({
+    total: sum.total + accountingMicro(item.totalAccountingMicro || item.quotedAccountingMicro),
+    storage: sum.storage + accountingMicro(item.storageCostAccountingMicro),
+    service: sum.service + accountingMicro(item.serviceFeeAccountingMicro),
+  }), { total: 0n, storage: 0n, service: 0n });
+  const set = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = formatAccountingUsd(value); };
+  set('fee-total-paid', totals.total);
+  set('fee-storage-cost', totals.storage);
+  set('fee-service-fee', totals.service);
+}
 function ttl(expiresAt) {
   const ms = expiresAt - Date.now(); if (ms <= 0) return { t: 'EXPIRED', c: 'text-error' };
   const h = ms / 3600000; if (h < 24) return { t: `${Math.max(1, Math.round(h))}H LEFT`, c: 'text-error' };
   const d = Math.round(h / 24); return { t: `${d}D LEFT`, c: d <= 2 ? 'text-secondary' : 'text-primary' };
 }
+function isRenderableImageArtifact(it) {
+  const type = String(it?.contentType || '').toLowerCase();
+  if (type === 'image/svg+xml') return true;
+  if (type.startsWith('image/')) return true;
+  return /\.(?:avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`);
+}
 function gcard(it) {
   const k = ttl(it.expiresAt);
-  const isImg = (it.contentType || '').startsWith('image/');
+  const isImg = isRenderableImageArtifact(it);
   const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
   const url = safe(it.url); const key = safe(it.key); const type = safe((it.contentType || 'artifact').toUpperCase());
   return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
@@ -897,11 +936,140 @@ function gcard(it) {
       ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full items-center justify-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span></div>` : `<div class="flex h-full w-full items-center justify-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span></div>`}
     </div>
     <div class="flex flex-1 flex-col p-5"><p class="vessel-kicker text-primary-container">Wallet-owned artifact</p><h2 class="vessel-technical mt-3 truncate text-base text-on-surface">${shortMid(key, 10)}</h2><div class="mt-5 border-t border-white/5 pt-4"><div class="flex items-center justify-between gap-4 text-xs"><span class="vessel-technical text-outline">${type}</span><span class="vessel-technical text-on-surface-variant">${(Number(it.size || 0) / 1048576).toFixed(2)} MB</span></div></div>
-      <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-meta flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Build artifact metadata"><span class="material-symbols-outlined" aria-hidden="true">data_object</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
+      <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-meta flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Build artifact metadata"><span class="material-symbols-outlined" aria-hidden="true">data_object</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Share proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
     </div></article>`;
 }
 function newSlot() {
   return `<a class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/25 bg-primary-container/[0.025] p-8 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.05]" href="/upload.html"><span class="flex h-20 w-20 items-center justify-center rounded-full border border-primary-container/20 text-primary"><span class="material-symbols-outlined text-4xl" aria-hidden="true">add</span></span><h2 class="mt-6 font-display text-2xl font-semibold">Upload New</h2><p class="vessel-technical mt-3 text-xs text-outline">Initialize artifact</p></a>`;
+}
+
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function collectionManifestCsv(manifest) {
+  const lines = [
+    ['collection', 'item_name', 'source_path', 'image_url', 'metadata_path', 'metadata_url'],
+    ...(manifest?.rows || []).map((row) => [
+      manifest.name,
+      row.itemName,
+      row.sourcePath,
+      row.imageUrl,
+      row.metadataPath,
+      row.metadataUrl,
+    ]),
+  ].map((row) => row.map(csvCell).join(','));
+  return new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
+}
+
+async function initCollection() {
+  const title = $('#collection-title');
+  const status = $('#collection-status');
+  const count = $('#collection-count');
+  const tokenList = $('#collection-tokenuri-list');
+  const copyTokenUris = $('#collection-copy-tokenuris');
+  const exportManifest = $('#collection-export-manifest');
+  const table = $('#collection-table');
+  if (!title || !table) return;
+
+  const state = walletController()?.getState?.();
+  if (state?.status !== 'ready' || !state.session?.storageAddress) {
+    if (status) status.textContent = 'Connect the wallet that hosted the collection metadata.';
+    table.innerHTML = '<tr><td colspan="3">No connected wallet.</td></tr>';
+    return;
+  }
+  const requested = new URLSearchParams(location.search).get('id') || '';
+  const manifests = loadCollectionManifests(state.session.storageAddress);
+  const manifest = manifests.find((entry) => entry.id === requested) || manifests[0];
+  if (!manifest) {
+    if (status) status.textContent = 'No hosted collection manifest is saved for this wallet yet.';
+    table.innerHTML = '<tr><td colspan="3">Host batch metadata first, then return here.</td></tr>';
+    return;
+  }
+
+  title.textContent = manifest.name;
+  if (status) status.textContent = `Saved manifest for ${shortMid(state.session.storageAddress, 8)}. Export it before the current testnet wipe.`;
+  if (count) count.textContent = `${manifest.rows.length} ${manifest.rows.length === 1 ? 'item' : 'items'}`;
+  const tokenText = manifest.tokenUris.length ? `${manifest.tokenUris.join('\n')}\n` : '';
+  if (tokenList) tokenList.value = tokenText;
+  if (copyTokenUris) {
+    copyTokenUris.disabled = !tokenText;
+    copyTokenUris.onclick = () => {
+      copy(tokenText);
+      toast('Collection TokenURIs copied', 'ok');
+    };
+  }
+  if (exportManifest) {
+    exportManifest.disabled = !manifest.rows.length;
+    exportManifest.onclick = () => downloadBlob(collectionManifestCsv(manifest), `${manifest.id || 'collection'}-manifest.csv`, document);
+  }
+
+  const rows = manifest.rows.map((row) => {
+    const tr = document.createElement('tr');
+    const item = document.createElement('td');
+    item.textContent = row.itemName || row.sourcePath || 'Untitled item';
+    const image = document.createElement('td');
+    const imageLink = document.createElement('a');
+    imageLink.href = row.imageUrl;
+    imageLink.target = '_blank';
+    imageLink.rel = 'noreferrer';
+    imageLink.textContent = row.imageUrl;
+    image.appendChild(imageLink);
+    const metadata = document.createElement('td');
+    const metadataLink = document.createElement('a');
+    metadataLink.href = row.metadataUrl;
+    metadataLink.target = '_blank';
+    metadataLink.rel = 'noreferrer';
+    metadataLink.textContent = row.metadataUrl || 'Not hosted';
+    metadata.appendChild(metadataLink);
+    tr.append(item, image, metadata);
+    return tr;
+  });
+  table.replaceChildren(...rows);
+}
+
+async function initProof() {
+  const params = new URLSearchParams(location.search);
+  const title = $('#proof-title');
+  const status = $('#proof-status');
+  const media = $('#proof-media-url');
+  const tokenUri = $('#proof-tokenuri-url');
+  const collectionList = $('#proof-collection-list');
+  const copyLink = $('#proof-copy-link');
+  const mediaUrl = params.get('url') || '';
+  const tokenUriUrl = params.get('tokenuri') || '';
+  const key = params.get('key') || '';
+  const collectionId = params.get('collection') || '';
+
+  if (media) media.value = mediaUrl;
+  if (tokenUri) tokenUri.value = tokenUriUrl;
+  if (title) title.textContent = collectionId ? 'Collection Proof' : 'Artifact Proof';
+  if (status) {
+    status.textContent = key || mediaUrl || tokenUriUrl || collectionId
+      ? 'These links can be checked directly while the current ShelbyNet testnet data remains available.'
+      : 'No proof parameters were provided. Open a proof link from the Vault or Collection page.';
+  }
+  if (copyLink) copyLink.onclick = () => copy(location.href);
+
+  const state = walletController()?.getState?.();
+  const manifest = collectionId && state?.session?.storageAddress
+    ? loadCollectionManifests(state.session.storageAddress).find((entry) => entry.id === collectionId)
+    : null;
+  if (collectionList && manifest?.rows?.length) {
+    collectionList.replaceChildren(...manifest.rows.slice(0, 100).map((row) => {
+      const item = document.createElement('div');
+      item.className = 'rounded-2xl border border-white/10 bg-surface-lowest/40 p-4';
+      const name = document.createElement('strong');
+      name.className = 'block text-on-surface';
+      name.textContent = row.itemName || row.sourcePath || 'Collection item';
+      const uri = document.createElement('p');
+      uri.className = 'vessel-technical mt-2 break-all text-xs text-primary';
+      uri.textContent = row.metadataUrl;
+      item.append(name, uri);
+      return item;
+    }));
+  }
 }
 
 async function initLatency() {
@@ -1051,6 +1219,17 @@ async function initMetadata() {
     hostingAvailable: cfg.shelbyWritesEnabled === true,
     loadCollections: loadMetadataCollections,
     hostFiles: hostMetadataFiles,
+    saveCollectionManifest: (manifest, { collection } = {}) => {
+      const session = walletController()?.getState?.().session;
+      if (!session?.storageAddress || !manifest?.rows?.length) return;
+      ledger.rememberCollectionManifest({
+        id: collection?.id || manifest.collectionName,
+        name: collection?.name || manifest.collectionName,
+        storageAddress: session.storageAddress,
+        rows: manifest.rows,
+        tokenUris: manifest.tokenUris,
+      });
+    },
     notify: toast,
     copyText: copy,
     origin: window.location.origin,
@@ -1078,7 +1257,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   renderWallet();
   const p = page();
-  ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, latency: initLatency, metadata: initMetadata }[p] || (() => {}))();
+  ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, collection: initCollection, proof: initProof, latency: initLatency, metadata: initMetadata }[p] || (() => {}))();
 });
 
 window.Vessel = { copy, api, walletController };

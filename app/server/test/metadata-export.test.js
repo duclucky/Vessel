@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCollectionManifest,
   buildMetadataZip,
   downloadBlob,
   metadataJsonFile,
@@ -44,6 +45,43 @@ test('single metadata export creates a UTF-8 JSON file', async () => {
   assert.equal(file.type, 'application/json');
   assert.equal(file.name, '001.json');
   assert.equal(await file.text(), `${JSON.stringify(metadata, null, 2)}\n`);
+});
+
+test('collection manifest maps images to hosted metadata TokenURIs as CSV and copy text', async () => {
+  const manifest = buildCollectionManifest([
+    {
+      sourcePath: 'genesis/images/1.png',
+      outputPath: 'metadata/1.json',
+      metadata: {
+        name: 'Genesis #1',
+        image: 'https://vessel.example/api/shelby/blobs/0xabc/media/1.png',
+      },
+    },
+    {
+      sourcePath: 'genesis/images/2.png',
+      outputPath: 'metadata/2.json',
+      metadata: {
+        name: 'Genesis, #2',
+        image: 'https://vessel.example/api/shelby/blobs/0xabc/media/2.png',
+      },
+    },
+  ], [
+    { sourcePath: 'metadata/2.json', url: 'https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json' },
+    { sourcePath: 'metadata/1.json', tokenUri: 'https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json' },
+  ], { collectionName: 'Genesis' });
+
+  assert.equal(manifest.collectionName, 'Genesis');
+  assert.deepEqual(manifest.tokenUris, [
+    'https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json',
+    'https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json',
+  ]);
+  assert.equal(manifest.copyText, `${manifest.tokenUris.join('\n')}\n`);
+  assert.equal(await manifest.csv.text(), [
+    'collection,item_name,source_path,image_url,metadata_path,metadata_url',
+    'Genesis,Genesis #1,genesis/images/1.png,https://vessel.example/api/shelby/blobs/0xabc/media/1.png,metadata/1.json,https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json',
+    'Genesis,"Genesis, #2",genesis/images/2.png,https://vessel.example/api/shelby/blobs/0xabc/media/2.png,metadata/2.json,https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json',
+    '',
+  ].join('\n'));
 });
 
 test('batch ZIP contains deterministic JSON paths and a redacted report', async () => {

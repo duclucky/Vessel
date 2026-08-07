@@ -108,6 +108,15 @@ function basename(value) {
   return String(value || '').replaceAll('\\', '/').split('/').pop() || '';
 }
 
+function csvCell(value) {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function hostedUrl(result) {
+  return String(result?.url || result?.tokenUri || '').trim();
+}
+
 function safeWarnings(input) {
   if (!Array.isArray(input)) return [];
   return input.map((entry) => {
@@ -133,6 +142,49 @@ function makeEntry(path, content) {
 
 export function metadataJsonFile(metadata, fileName = 'metadata.json') {
   return new File([serializeNftMetadata(metadata)], fileName, { type: 'application/json' });
+}
+
+export function buildCollectionManifest(items, hostedResults = [], {
+  collectionName = '',
+} = {}) {
+  const resultsByPath = new Map();
+  for (const result of hostedResults || []) {
+    const path = String(result?.sourcePath || result?.metadataPath || result?.path || '').replaceAll('\\', '/');
+    if (path) resultsByPath.set(path, result);
+  }
+
+  const rows = (items || []).map((item) => {
+    const metadataPath = String(item?.outputPath || '').replaceAll('\\', '/');
+    const result = resultsByPath.get(metadataPath) || resultsByPath.get(basename(metadataPath));
+    return Object.freeze({
+      collection: String(collectionName || ''),
+      itemName: String(item?.metadata?.name || ''),
+      sourcePath: String(item?.sourcePath || ''),
+      imageUrl: String(item?.metadata?.image || ''),
+      metadataPath,
+      metadataUrl: hostedUrl(result),
+    });
+  });
+  const tokenUris = rows.map((row) => row.metadataUrl).filter(Boolean);
+  const csvLines = [
+    ['collection', 'item_name', 'source_path', 'image_url', 'metadata_path', 'metadata_url'],
+    ...rows.map((row) => [
+      row.collection,
+      row.itemName,
+      row.sourcePath,
+      row.imageUrl,
+      row.metadataPath,
+      row.metadataUrl,
+    ]),
+  ].map((row) => row.map(csvCell).join(','));
+
+  return Object.freeze({
+    collectionName: String(collectionName || ''),
+    rows: Object.freeze(rows),
+    tokenUris: Object.freeze(tokenUris),
+    copyText: tokenUris.length ? `${tokenUris.join('\n')}\n` : '',
+    csv: new Blob([`${csvLines.join('\n')}\n`], { type: 'text/csv' }),
+  });
 }
 
 export async function buildMetadataZip(items, report = {}) {

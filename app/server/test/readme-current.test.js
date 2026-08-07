@@ -16,6 +16,9 @@ test('README describes the deployed product and current degraded mode', () => {
     'Solana Program',
     'canonical NFT metadata',
     'batch collection',
+    'mainnet readiness',
+    'weekly wipe',
+    'not permanent storage',
   ]) assert.match(readme, new RegExp(claim, 'i'));
 });
 

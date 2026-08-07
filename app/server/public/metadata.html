@@ -133,6 +133,14 @@
               <p id="batch-host-status" class="mt-4 text-sm leading-6 text-on-surface-variant" aria-live="polite">Ready to host.</p>
               <p id="batch-host-current" class="vessel-technical mt-2 break-all text-xs text-outline">No JSON is uploading.</p>
               <button id="batch-host-retry" class="vessel-button vessel-button-secondary mt-4 hidden w-full" type="button"><span class="material-symbols-outlined" aria-hidden="true">refresh</span>Retry failed JSON</button>
+              <div id="batch-manifest-panel" class="mt-5 hidden rounded-2xl border border-primary-container/20 bg-primary-container/[0.045] p-4">
+                <p class="vessel-kicker text-primary">Collection manifest</p>
+                <p id="batch-manifest-summary" class="mt-2 text-sm leading-6 text-on-surface-variant">No hosted collection manifest yet.</p>
+                <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+                  <button id="batch-copy-tokenuris" class="vessel-button vessel-button-secondary w-full disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled><span class="material-symbols-outlined" aria-hidden="true">content_copy</span>Copy all TokenURIs</button>
+                  <button id="batch-download-manifest" class="vessel-button vessel-button-secondary w-full disabled:cursor-not-allowed disabled:opacity-50" type="button" disabled><span class="material-symbols-outlined" aria-hidden="true">table</span>Download manifest CSV</button>
+                </div>
+              </div>
             </div>
           </section>
           <p id="metadata-hosting-status" class="metadata-hosting-status" role="status" aria-live="polite">Local JSON generation is available. Checking wallet-owned Shelby hosting.</p>
@@ -141,7 +149,7 @@
     </section>
   </main>
 
-  <footer class="border-t border-white/5 bg-surface-lowest/60 py-10"><div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · Shelby testnet · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div></footer>
+  <footer class="border-t border-white/5 bg-surface-lowest/60 py-10"><div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · ShelbyNet beta · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div></footer>
   <script src="/vessel-solana.js"></script>
   <script src="/vessel-wallets.js"></script>
   <script type="module" src="/app.js"></script>

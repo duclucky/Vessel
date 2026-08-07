@@ -5,13 +5,19 @@ Wallet-owned hot storage, cross-chain settlement, and canonical NFT metadata for
 ## Live beta
 
 - Application: [https://vessel-sage.vercel.app](https://vessel-sage.vercel.app)
-- Network: Aptos Testnet, Solana Devnet, Shelby Testnet
+- Network: Aptos Testnet, Solana Devnet, ShelbyNet
 - Status: public testnet beta
 - Source: [github.com/duclucky/Vessel](https://github.com/duclucky/Vessel)
 
 Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued settlement evidence. The application does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
 
 Testnet tokens have no real monetary value. Retention is temporary and the beta does not provide a production availability commitment.
+
+## Mainnet readiness
+
+Vessel is built as a testnet beta, not permanent storage. The current ShelbyNet environment can follow a weekly wipe policy, so every successful run should be exported, copied, or recorded before review. The app keeps media URLs, metadata TokenURIs, collection manifest CSV, public proof links, quote receipts, and fee breakdowns visible so a reviewer can verify the workflow even if the network is reset later.
+
+For mainnet readiness, the important boundary is already in place: storage operations remain behind provider code, wallet approval stays in the browser, server credentials stay server-side, and testnet limitations are surfaced in the UI instead of hidden. When Shelby mainnet durability, pricing, encryption, and retention policies are finalized, those provider and copy layers can be updated without changing the NFT metadata workflow.
 
 ## What Vessel does
 

@@ -8,6 +8,7 @@ import {
   parseMetadataCsv,
 } from './metadata-batch.js';
 import {
+  buildCollectionManifest,
   buildMetadataZip,
   downloadBlob,
   metadataJsonFile,
@@ -93,6 +94,7 @@ export function initMetadataPage({
   hostingAvailable = false,
   loadCollections = async () => [],
   hostFiles = async () => { throw metadataPageError('Wallet-owned metadata hosting is not ready', 'wallet_owned_metadata_host_not_ready'); },
+  saveCollectionManifest = () => {},
   notify = () => {},
   copyText = (value) => globalThis.navigator?.clipboard?.writeText?.(value),
   origin = globalThis.location?.origin || 'http://localhost',
@@ -156,6 +158,10 @@ export function initMetadataPage({
     batchHostCurrent: byId('batch-host-current'),
     batchHostCounts: byId('batch-host-counts'),
     batchHostRetry: byId('batch-host-retry'),
+    batchManifestPanel: byId('batch-manifest-panel'),
+    batchManifestSummary: byId('batch-manifest-summary'),
+    batchCopyTokenUris: byId('batch-copy-tokenuris'),
+    batchDownloadManifest: byId('batch-download-manifest'),
     hostingStatus: byId('metadata-hosting-status'),
   };
 
@@ -175,6 +181,7 @@ export function initMetadataPage({
   let pendingBatchRebuild = 0;
   let isHosting = false;
   let batchHostQueue = null;
+  let batchManifest = null;
 
   const artifactKey = String(selectedArtifact.key || '');
   const artifactUrl = selectedArtifact.url
@@ -349,7 +356,7 @@ export function initMetadataPage({
       element.hostingStatus.textContent = 'Hosting wallet-owned metadata. Keep this tab open and approve the wallet request.';
     } else if (!canHost) {
       element.hostingStatus.dataset.state = 'paused';
-      element.hostingStatus.textContent = 'Shelby testnet hosting is temporarily paused. Local JSON and ZIP export remain available.';
+      element.hostingStatus.textContent = 'ShelbyNet beta hosting is temporarily paused. Local JSON and ZIP export remain available.';
     } else if (!walletReady) {
       element.hostingStatus.dataset.state = 'wallet';
       element.hostingStatus.textContent = 'Connect an Aptos or Solana wallet to host metadata under your wallet-owned storage address.';
@@ -524,6 +531,19 @@ export function initMetadataPage({
     renderHostingState();
   }
 
+  function renderBatchManifest() {
+    if (!element.batchManifestPanel) return;
+    const ready = Boolean(batchManifest?.tokenUris?.length);
+    element.batchManifestPanel.classList.toggle('hidden', !ready);
+    if (element.batchManifestSummary) {
+      element.batchManifestSummary.textContent = ready
+        ? `${batchManifest.tokenUris.length} TokenURI${batchManifest.tokenUris.length === 1 ? '' : 's'} mapped to source image URLs.`
+        : 'No hosted collection manifest yet.';
+    }
+    if (element.batchCopyTokenUris) element.batchCopyTokenUris.disabled = !ready;
+    if (element.batchDownloadManifest) element.batchDownloadManifest.disabled = !ready;
+  }
+
   function renderBatchHosting({ phase = 'ready', item = null, error = null } = {}) {
     if (!batchHostQueue || !element.batchHostResults) return;
     const summary = batchHostQueue.summary();
@@ -564,6 +584,8 @@ export function initMetadataPage({
   async function rebuildBatch() {
     const generation = ++batchGeneration;
     batchHostQueue = null;
+    batchManifest = null;
+    renderBatchManifest();
     element.batchHostResults?.classList.add('hidden');
     const collection = selectedCollection();
     const files = metadataFilesFromCollection(collection, { origin });
@@ -614,6 +636,8 @@ export function initMetadataPage({
     const requestedAddress = currentWallet?.session?.storageAddress || '';
     batchHostQueue = null;
     batchPlan = null;
+    batchManifest = null;
+    renderBatchManifest();
     selectedBatchItemId = '';
     if (!readyWallet(currentWallet)) {
       collections = [];
@@ -737,6 +761,16 @@ export function initMetadataPage({
         error: outcome.error,
       });
       if (outcome.status === 'complete') notify(`${outcome.summary.succeeded} collection TokenURI files hosted`, 'ok');
+      if (outcome.status === 'complete') {
+        batchManifest = buildCollectionManifest(batchPlan.items, batchHostQueue.items
+          .filter((entry) => entry.status === 'succeeded')
+          .map((entry) => ({
+            ...entry.result,
+            sourcePath: entry.relativePath,
+          })), { collectionName: selectedCollection()?.name || element.batchName?.value || 'collection' });
+        saveCollectionManifest(batchManifest, { collection: selectedCollection() });
+        renderBatchManifest();
+      }
       return outcome;
     } finally {
       isHosting = false;
@@ -813,6 +847,15 @@ export function initMetadataPage({
     });
     element.batchHost?.addEventListener('click', () => hostBatch().catch((error) => notify(error.message, 'error')));
     element.batchHostRetry?.addEventListener('click', () => retryFailedBatch().catch((error) => notify(error.message, 'error')));
+    element.batchCopyTokenUris?.addEventListener('click', () => {
+      if (!batchManifest?.copyText) return;
+      copyText(batchManifest.copyText);
+      notify('All collection TokenURIs copied', 'ok');
+    });
+    element.batchDownloadManifest?.addEventListener('click', () => {
+      if (!batchManifest?.csv) return;
+      downloadBlob(batchManifest.csv, `${fileNameStem(batchManifest.collectionName, 'collection')}-manifest.csv`, document);
+    });
   }
 
   function initializeSource() {
@@ -834,11 +877,13 @@ export function initMetadataPage({
     selectedCollectionId = '';
     clearCsvOverrides();
     batchPlan = null;
+    batchManifest = null;
     selectedBatchItemId = '';
     renderTraitRows();
     renderSingle();
     renderCollections();
     renderBatch();
+    renderBatchManifest();
   }
 
   function refreshWallet(next) {
@@ -868,6 +913,7 @@ export function initMetadataPage({
   renderCollections();
   renderBatch();
   renderHostingState();
+  renderBatchManifest();
   refreshCollectionsWithNotice();
 
   return Object.freeze({

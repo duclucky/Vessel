@@ -86,6 +86,9 @@ test('Landing explains both chain paths and honest beta safeguards', () => {
   assert.match(html, /Aptos Multisig Account/i);
   assert.match(html, /Squads/i);
   assert.match(html, /testnet beta/i);
+  assert.match(html, /weekly wipe|wipe policy|wiped/i);
+  assert.match(html, /not permanent/i);
+  assert.match(html, /mainnet readiness/i);
   assert.doesNotMatch(html, /API is paused|public API is not available/i);
   assert.doesNotMatch(html, /permanent storage|production SLA|guaranteed availability|encrypted|immutable blobs/i);
 });

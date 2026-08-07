@@ -112,7 +112,7 @@ export function createWalletOwnedUploadService({
     const config = await request('/api/config', { signal });
     if (config?.shelbyWritesEnabled === false) {
       throw uploadError(
-        'Shelby testnet writes are temporarily paused',
+        'ShelbyNet beta writes are temporarily paused',
         'shelby_writes_paused',
         { retriable: true },
       );
@@ -331,6 +331,10 @@ export function createWalletOwnedUploadService({
         ...(isSolana ? { paidUsdc: Number(validated.quote.solanaAmountMicro) / 1_000_000 } : {}),
         settlementHash: settlement.settlementHash,
         quotedAccountingMicro: validated.quote.totalAccountingMicro,
+        storageCostAccountingMicro: validated.quote.storageAccountingMicro,
+        gasAccountingMicro: validated.quote.gasAccountingMicro,
+        serviceFeeAccountingMicro: validated.quote.serviceFeeAccountingMicro,
+        totalAccountingMicro: validated.quote.totalAccountingMicro,
         lastReconciledAt: now(),
       });
     } catch (error) {

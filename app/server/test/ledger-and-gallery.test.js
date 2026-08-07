@@ -28,6 +28,10 @@ test('successful owned upload records authoritative expiration, cost, and transa
     transactionHash: '0xregister',
     acknowledgementHash: '0xack',
     settlementHash: '0xpayment',
+    storageCostAccountingMicro: '13',
+    gasAccountingMicro: '35000',
+    serviceFeeAccountingMicro: '841',
+    totalAccountingMicro: '35854',
     actualStorageUnits: '4200',
     actualGasUsed: '718',
     sourcePath: 'collection/images/1.png',
@@ -41,6 +45,10 @@ test('successful owned upload records authoritative expiration, cost, and transa
   assert.equal(ledger.loadMine()[0].registerTransactionHash, '0xregister');
   assert.equal(ledger.loadMine()[0].acknowledgementHash, '0xack');
   assert.equal(ledger.loadMine()[0].paymentSignature, '0xpayment');
+  assert.equal(ledger.loadMine()[0].storageCostAccountingMicro, '13');
+  assert.equal(ledger.loadMine()[0].gasAccountingMicro, '35000');
+  assert.equal(ledger.loadMine()[0].serviceFeeAccountingMicro, '841');
+  assert.equal(ledger.loadMine()[0].totalAccountingMicro, '35854');
   assert.equal(ledger.loadMine()[0].actualStorageUnits, '4200');
   assert.equal(ledger.loadMine()[0].sourcePath, 'collection/images/1.png');
 });
@@ -76,8 +84,61 @@ test('Gallery can select an existing wallet-owned artifact for Metadata Atelier'
 test('Gallery retains its grid hook and Vault composition', () => {
   const html = readPage('gallery.html');
   assert.equal(getIds(html).has('gallery-grid'), true);
+  assert.equal(getIds(html).has('fee-total-paid'), true);
+  assert.equal(getIds(html).has('fee-storage-cost'), true);
+  assert.equal(getIds(html).has('fee-service-fee'), true);
   assert.match(html, />\s*The Vault\s*</);
   assert.match(html, /Your wallet-owned artifacts/i);
+});
+
+test('Gallery renders an aggregate fee dashboard from local upload history', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(source, /renderFeeDashboard/);
+  assert.match(source, /fee-total-paid/);
+  assert.match(source, /storageCostAccountingMicro/);
+  assert.match(source, /serviceFeeAccountingMicro/);
+  assert.match(source, /totalAccountingMicro/);
+});
+
+test('Collection detail page exposes NFT set summary and TokenURI actions', () => {
+  const html = readPage('collection.html');
+  const ids = getIds(html);
+  for (const id of [
+    'collection-title',
+    'collection-count',
+    'collection-tokenuri-list',
+    'collection-copy-tokenuris',
+    'collection-export-manifest',
+    'collection-table',
+  ]) {
+    assert.equal(ids.has(id), true, `${id} hook should exist`);
+  }
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(app, /async function initCollection/);
+  assert.match(app, /loadCollectionManifests/);
+  assert.match(app, /collection-copy-tokenuris/);
+  assert.match(app, /collection-export-manifest/);
+  assert.match(app, /collection: initCollection/);
+});
+
+test('Proof page exposes shareable artifact and collection evidence hooks', () => {
+  const html = readPage('proof.html');
+  const ids = getIds(html);
+  for (const id of [
+    'proof-title',
+    'proof-status',
+    'proof-media-url',
+    'proof-tokenuri-url',
+    'proof-copy-link',
+    'proof-collection-list',
+  ]) {
+    assert.equal(ids.has(id), true, `${id} hook should exist`);
+  }
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(app, /async function initProof/);
+  assert.match(app, /proof-copy-link/);
+  assert.match(app, /proof: initProof/);
+  assert.match(app, /Share proof/);
 });
 
 test('Gallery removes local state only after awaited confirmation', () => {
@@ -114,6 +175,14 @@ test('Gallery infers image media types from Shelby blob names for remote preview
   assert.equal(artifact.contentType, 'image/png');
 });
 
+test('Gallery preview treats SVG and legacy image keys as renderable images', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(source, /isRenderableImageArtifact/);
+  assert.match(source, /\(\?:avif\|gif\|jpe\?g\|png\|svg\|webp\)/);
+  assert.match(source, /image\/svg\+xml/);
+  assert.match(source, /src="\$\{url\}"/);
+});
+
 test('wallet upload history retains collection-scale batches instead of truncating at 60 files', () => {
   const ledger = createLedger(memoryStorage());
   for (let index = 0; index < 75; index += 1) {
@@ -133,6 +202,41 @@ test('wallet upload history retains collection-scale batches instead of truncati
   assert.equal(ledger.loadMine()[0].sourcePath, 'collection/74.png');
 });
 
+test('collection manifests are wallet scoped and preserve image to TokenURI mappings', () => {
+  const ledger = createLedger(memoryStorage(), () => 1234);
+  ledger.rememberCollectionManifest({
+    id: 'genesis',
+    name: 'Genesis',
+    storageAddress: '0xabc',
+    rows: [
+      {
+        itemName: 'Genesis #1',
+        sourcePath: 'genesis/1.png',
+        imageUrl: 'https://vessel.example/media/1.png',
+        metadataPath: 'metadata/1.json',
+        metadataUrl: 'https://vessel.example/metadata/1.json',
+      },
+    ],
+    tokenUris: ['https://vessel.example/metadata/1.json'],
+  });
+
+  assert.deepEqual(ledger.loadCollectionManifests('0xabc'), [{
+    id: 'genesis',
+    name: 'Genesis',
+    storageAddress: '0xabc',
+    rows: [{
+      itemName: 'Genesis #1',
+      sourcePath: 'genesis/1.png',
+      imageUrl: 'https://vessel.example/media/1.png',
+      metadataPath: 'metadata/1.json',
+      metadataUrl: 'https://vessel.example/metadata/1.json',
+    }],
+    tokenUris: ['https://vessel.example/metadata/1.json'],
+    updatedAt: 1234,
+  }]);
+  assert.deepEqual(ledger.loadCollectionManifests('0xdef'), []);
+});
+
 test('Metadata hosting commits the wallet-owned JSON result to the same gallery ledger', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const metadataStart = source.indexOf('async function initMetadata()');
@@ -142,6 +246,9 @@ test('Metadata hosting commits the wallet-owned JSON result to the same gallery 
   assert.match(metadata, /walletOwnedUpload\.upload/);
   assert.match(metadata, /ledger\.commitUpload\(result\)/);
   assert.match(metadata, /sourcePath/);
+  const uploader = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
+  assert.match(uploader, /storageCostAccountingMicro: validated\.quote\.storageAccountingMicro/);
+  assert.match(uploader, /serviceFeeAccountingMicro: validated\.quote\.serviceFeeAccountingMicro/);
 });
 
 test('Metadata loader reconciles local collection paths with remote Shelby artifacts', () => {
