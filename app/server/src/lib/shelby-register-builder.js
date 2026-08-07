@@ -1,7 +1,7 @@
 import {
-  ShelbyBlobClient,
   expectedTotalChunksets,
 } from '@shelby-protocol/sdk/node';
+import { createShelbyRegisterBlobPayload } from './shelby-register-payload.js';
 
 const ROOT = /^(?:0x)?[0-9a-f]{64}$/i;
 
@@ -27,7 +27,7 @@ export async function buildSponsoredRegisterTransaction({
   if (!Number.isSafeInteger(paymentTier) || paymentTier < 0) {
     throw registerError('Invalid Shelby payment tier', 'invalid_payment_tier');
   }
-  const payload = ShelbyBlobClient.createRegisterBlobPayload({
+  const payload = createShelbyRegisterBlobPayload({
     account: context.storageAddress,
     blobName: context.blobName,
     blobSize: context.sizeBytes,
@@ -36,14 +36,15 @@ export async function buildSponsoredRegisterTransaction({
     expirationMicros: context.expirationMicros,
     useSponsoredUsdVariant: true,
     encoding: context.encoding,
+    paymentTier,
   });
-  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
+  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 10) {
     throw registerError('Unexpected Shelby register payload shape', 'invalid_register_payload');
   }
-  payload.functionArguments[5] = paymentTier;
   return shelbyClient.aptos.transaction.build.multiAgent({
     sender: context.storageAddress,
     data: payload,
     secondarySignerAddresses: [gasStationAccount],
+    withFeePayer: true,
   });
 }

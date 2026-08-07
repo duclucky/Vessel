@@ -93,18 +93,24 @@ test('native upload registers before RPC byte upload and returns the wallet name
         chunksetInput = { rawSize, chunksetSize };
         return 1;
       },
-      createRegisterPayload: (args) => ({
-        function: 'register',
-        functionArguments: [
-          args.blobName,
-          args.expirationMicros,
-          args.blobMerkleRoot,
-          args.numChunksets,
-          args.blobSize,
-          0,
-          args.encoding,
-        ],
-      }),
+      createRegisterPayload: (args) => {
+        chunksetInput.registerArgs = args;
+        return {
+          function: 'register',
+          functionArguments: [
+            args.blobName,
+            args.selectedLocation,
+            null,
+            args.expirationMicros,
+            args.blobMerkleRoot,
+            args.numChunksets,
+            args.blobSize,
+            args.paymentTier,
+            args.encoding,
+            0,
+          ],
+        };
+      },
       digest: async () => Uint8Array.from({ length: 32 }, () => 0xab).buffer,
     },
   });
@@ -112,10 +118,14 @@ test('native upload registers before RPC byte upload and returns the wallet name
   assert.deepEqual(calls.map(([name]) => name), ['sign', 'wait', 'put']);
   assert.deepEqual(steps, ['encoding', 'signing', 'confirming', 'uploading']);
   assert.equal(calls[0][1].functionArguments[0], `media/${expectedFileHash}.png`);
-  assert.equal(calls[0][1].functionArguments[1], 2_592_001_000_000);
-  assert.equal(calls[0][1].functionArguments[5], 3);
-  assert.equal(calls[0][1].functionArguments[6], 7);
-  assert.deepEqual(chunksetInput, { rawSize: 3, chunksetSize: 6 });
+  assert.equal(calls[0][1].functionArguments[1], 'shelbynet-1');
+  assert.equal(calls[0][1].functionArguments[2], null);
+  assert.equal(calls[0][1].functionArguments[3], 2_592_001_000_000);
+  assert.equal(calls[0][1].functionArguments[7], 3);
+  assert.equal(calls[0][1].functionArguments[8], 7);
+  assert.equal(chunksetInput.rawSize, 3);
+  assert.equal(chunksetInput.chunksetSize, 6);
+  assert.equal(chunksetInput.registerArgs.paymentTier, 3);
   assert.equal(calls[2][1].account, '0xabc');
   assert.equal(calls[2][1].blobName, `media/${expectedFileHash}.png`);
   assert.deepEqual([...calls[2][1].blobData], [1, 2, 3]);

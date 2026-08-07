@@ -1,10 +1,13 @@
 import {
-  ShelbyBlobClient,
   SHELBYUSD_FA_METADATA_ADDRESS,
   createDefaultErasureCodingProvider,
   expectedTotalChunksets,
   generateCommitments,
 } from '@shelby-protocol/sdk/browser';
+import {
+  DEFAULT_SHELBY_LOCATION,
+  createShelbyRegisterBlobPayload,
+} from '../../src/lib/shelby-register-payload.js';
 import { extractShelbyTransactionEvidence } from './transaction-evidence.js';
 import { uploadBlobViaVesselGateway } from './shelby-browser-upload.js';
 
@@ -17,7 +20,7 @@ function defaultDeps() {
     createProvider: createDefaultErasureCodingProvider,
     generateCommitments,
     expectedTotalChunksets,
-    createRegisterPayload: (args) => ShelbyBlobClient.createRegisterBlobPayload(args),
+    createRegisterPayload: (args) => createShelbyRegisterBlobPayload(args),
     now: () => Date.now(),
     digest: sha256,
     async readBalances(address) {
@@ -188,12 +191,13 @@ export async function uploadNativeAptos(file, {
     numChunksets: deps.expectedTotalChunksets(commitments.raw_data_size, chunksetSize),
     expirationMicros,
     blobSize: commitments.raw_data_size,
+    selectedLocation: DEFAULT_SHELBY_LOCATION,
     encoding: provider.config.enumIndex,
+    paymentTier,
   });
-  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 7) {
+  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 10) {
     throw nativeError('Unexpected Shelby register payload shape', 'invalid_register_payload');
   }
-  payload.functionArguments[5] = paymentTier;
 
   onStep?.('signing');
   const submitted = await adapter.signAndSubmitTransaction({ data: payload });
