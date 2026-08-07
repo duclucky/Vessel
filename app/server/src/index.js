@@ -716,6 +716,7 @@ app.post('/api/sponsor/submit', async (req, res) => {
       errorCode: e?.code === 'registration_evidence_missing'
         ? 'acknowledgement_timeout'
         : 'sponsor_failed',
+      errorDetail: `${e?.name || 'Error'} ${e?.status || ''} ${e?.code || ''} ${e?.message || e}`,
     });
     fail(res, e);
   }

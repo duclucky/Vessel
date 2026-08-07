@@ -17,6 +17,10 @@ const sizeBucket = (value) => {
 };
 
 const present = (value) => value !== undefined && value !== null && value !== '';
+const publicDetail = (value) => String(value || '')
+  .replace(/aptoslabs_[A-Za-z0-9_~-]+/g, 'aptoslabs_[redacted]')
+  .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+  .slice(0, 220);
 
 export function createTelemetry({ write, walletSalt, now = Date.now } = {}) {
   const salt = String(walletSalt || '');
@@ -58,6 +62,7 @@ export function createTelemetry({ write, walletSalt, now = Date.now } = {}) {
     if (present(event.driftBps)) row.driftBps = Number(event.driftBps);
     if (present(event.transactionHash)) row.transactionHash = String(event.transactionHash);
     if (present(event.errorCode)) row.errorCode = String(event.errorCode);
+    if (present(event.errorDetail)) row.errorDetail = publicDetail(event.errorDetail);
     emit(Object.freeze(row));
     return row;
   }

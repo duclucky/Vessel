@@ -46,6 +46,22 @@ test('normalized operator errors use error severity without stack traces', () =>
   }
 });
 
+test('operator error details redact API keys and stay bounded', () => {
+  const rows = [];
+  const telemetry = createTelemetry({ write: (row) => rows.push(row), walletSalt: 'salt' });
+  telemetry.operation({
+    stage: 'failed',
+    operation: 'upload',
+    network: 'shelbynet',
+    errorCode: 'sponsor_failed',
+    errorDetail: `Gas station rejected Bearer token aptoslabs_example_secret_${'x'.repeat(300)}`,
+  });
+  assert.equal(rows[0].severity, 'error');
+  assert.match(rows[0].errorDetail, /aptoslabs_\[redacted\]/);
+  assert.equal(rows[0].errorDetail.includes('example_secret'), false);
+  assert.ok(rows[0].errorDetail.length <= 220);
+});
+
 test('settlement telemetry hashes quote IDs and records only public finality metadata', () => {
   const rows = [];
   const telemetry = createTelemetry({ write: (row) => rows.push(row), walletSalt: 'salt' });
