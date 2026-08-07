@@ -725,7 +725,7 @@ function initUpload() {
       : 'SHELBYUSD REQUIRED FOR STORAGE';
     const detail = document.createElement('p');
     detail.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
-    detail.textContent = `Fund ${shortMid(session.sourceAddress)} on Aptos Testnet, then retry.`;
+    detail.textContent = `Fund ${shortMid(session.sourceAddress)} on ShelbyNet, then retry.`;
 
     const actions = document.createElement('div');
     actions.className = 'mt-5 flex flex-wrap gap-3';
@@ -737,7 +737,7 @@ function initUpload() {
     actions.appendChild(button);
     panel.append(title, detail, actions);
     ($('#drop-zone')?.parentElement || document.body).appendChild(panel);
-    toast('Fund your Aptos Testnet wallet, then retry', 'warn');
+    toast('Fund your ShelbyNet wallet, then retry', 'warn');
   }
 
   function showPayGate(quote, have, retryUpload) {

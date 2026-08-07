@@ -12,8 +12,8 @@ export function walletPresentation({
     return {
       connected: false,
       headerLabel: 'Switch network',
-      headerAria: 'Switch wallet to Aptos Testnet',
-      identityLabel: 'SWITCH TO APTOS TESTNET',
+      headerAria: 'Switch wallet to ShelbyNet',
+      identityLabel: 'SWITCH TO SHELBYNET',
       identityDisabled: false,
       chainLabel: 'APTOS',
     };
