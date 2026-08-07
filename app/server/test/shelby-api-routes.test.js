@@ -8,6 +8,7 @@ const wallets = fs.readFileSync(new URL('../client-src/vessel-wallets.js', impor
 test('Shelby API key stays server-side across register, multipart write, list, and read routes', () => {
   for (const route of [
     '/api/shelby/register',
+    '/api/shelby/commit',
     '/api/shelby/uploads',
     '/api/shelby/artifacts',
     '/api/shelby/blobs/:account/*',
@@ -16,6 +17,7 @@ test('Shelby API key stays server-side across register, multipart write, list, a
   }
   assert.match(server, /Authorization: `Bearer \$\{config\.shelbyRpcApiKey\}`/);
   assert.match(server, /validatePaidUploadBody\(req\.body\)/);
+  assert.match(server, /build\.multiAgent\(\{\s*sender:\s*signedQuote\.context\.storageAddress[\s\S]*data:\s*req\.body\?\.commitPayload[\s\S]*withFeePayer:\s*true/s);
   assert.match(server, /express\.raw\(\{ type: 'application\/octet-stream', limit: '3mb' \}\)/);
   assert.match(wallets, /\/api\/shelby\/artifacts\?account=/);
   assert.match(server, /contentType: mimeForKey\(row\.blobNameSuffix\)/);

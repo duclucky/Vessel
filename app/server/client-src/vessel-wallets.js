@@ -141,6 +141,9 @@ window.VesselWallets = {
         uploadContext: record.context,
         contractQuote: record.contractQuote,
         contractSignature: record.contractSignature,
+        registrationUid: record.registrationUid,
+        registerTransactionHash: record.registerTransactionHash,
+        blobMerkleRoot: record.blobMerkleRoot,
       });
     }
     return window.VesselSolana.resumeBlobWrite(file, {
@@ -151,6 +154,9 @@ window.VesselWallets = {
       uploadContext: record.context,
       contractQuote: record.contractQuote,
       contractSignature: record.contractSignature,
+      registrationUid: record.registrationUid,
+      registerTransactionHash: record.registerTransactionHash,
+      blobMerkleRoot: record.blobMerkleRoot,
     });
   },
   upload(file, context = {}) {

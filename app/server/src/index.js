@@ -401,6 +401,28 @@ app.post('/api/shelby/register', async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
+app.post('/api/shelby/commit', async (req, res) => {
+  try {
+    if (!requireShelbyWrites(res)) return;
+    if (!shelbyClient || !sponsor || !config.gasStationAccount) {
+      return send(res, 503, { error: 'Sponsored Shelby commit is unavailable' });
+    }
+    const { signedQuote } = validatePaidUploadBody(req.body);
+    if (!req.body?.commitPayload || typeof req.body.commitPayload !== 'object') {
+      return send(res, 400, { error: 'Shelby commit payload is required', code: 'commit_payload_required' });
+    }
+    const transaction = await shelbyClient.aptos.transaction.build.multiAgent({
+      sender: signedQuote.context.storageAddress,
+      data: req.body?.commitPayload,
+      secondarySignerAddresses: [config.gasStationAccount],
+      withFeePayer: true,
+    });
+    send(res, 200, {
+      transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
+    });
+  } catch (e) { fail(res, e); }
+});
+
 app.post('/api/shelby/uploads', async (req, res) => {
   try {
     if (!requireShelbyWrites(res)) return;
@@ -673,6 +695,14 @@ app.post('/api/sponsor/submit', async (req, res) => {
     });
     if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
     const completed = await aptos.waitForTransaction({ transactionHash: r.hash });
+    if (req.body?.expectRegistrationEvidence === false) {
+      send(res, 200, {
+        ...r,
+        transactionHash: completed.hash || completed.transaction_hash || r.hash,
+        gasUsed: completed.gas_used,
+      });
+      return;
+    }
     const evidence = extractShelbyTransactionEvidence(completed);
     recordQuoteOperation('registered', quote, {
       transactionHash: evidence.transactionHash,

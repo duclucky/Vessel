@@ -29,7 +29,12 @@ test('DAA upload binds the sponsor request to quote, authorization, hash, tier, 
 
 test('DAA registration and bytes use authenticated Vessel server routes', () => {
   assert.match(source, /\/api\/shelby\/register/);
+  assert.match(source, /\/api\/shelby\/commit/);
   assert.match(source, /uploadBlobViaVesselGateway/);
+  assert.match(source, /registrationUid/);
+  assert.match(source, /blobMerkleRoot/);
+  assert.match(source, /commitPayload/);
+  assert.match(source, /expectRegistrationEvidence:\s*false/);
   assert.match(source, /contractQuote/);
   assert.match(source, /contractSignature/);
   assert.doesNotMatch(source, /new ShelbyClient/);

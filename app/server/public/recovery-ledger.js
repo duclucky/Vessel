@@ -22,7 +22,7 @@ const EVIDENCE_FIELDS = [
   'contractQuote', 'contractSignature', 'quotePublicKey', 'settlementDeployment',
   'registerTransactionHash', 'acknowledgementHash', 'actualStorageUnits',
   'actualGasUsed', 'quotedAccountingMicro', 'errorCode',
-  'paymentTier', 'commitTransactionHash',
+  'paymentTier', 'commitTransactionHash', 'registrationUid', 'blobMerkleRoot',
 ];
 
 const pick = (input, fields) => Object.fromEntries(

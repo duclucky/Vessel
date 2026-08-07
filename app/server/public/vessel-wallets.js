@@ -38158,7 +38158,10 @@ Message: ${transactionMessage}.
           paidAuthorization: record2.paidAuthorization,
           uploadContext: record2.context,
           contractQuote: record2.contractQuote,
-          contractSignature: record2.contractSignature
+          contractSignature: record2.contractSignature,
+          registrationUid: record2.registrationUid,
+          registerTransactionHash: record2.registerTransactionHash,
+          blobMerkleRoot: record2.blobMerkleRoot
         });
       }
       return window.VesselSolana.resumeBlobWrite(file, {
@@ -38168,7 +38171,10 @@ Message: ${transactionMessage}.
         paidAuthorization: record2.paidAuthorization,
         uploadContext: record2.context,
         contractQuote: record2.contractQuote,
-        contractSignature: record2.contractSignature
+        contractSignature: record2.contractSignature,
+        registrationUid: record2.registrationUid,
+        registerTransactionHash: record2.registerTransactionHash,
+        blobMerkleRoot: record2.blobMerkleRoot
       });
     },
     upload(file, context = {}) {

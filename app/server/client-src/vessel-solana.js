@@ -15,6 +15,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { getAssociatedTokenAddress } from '@solana/spl-token';
 import { submitSolanaContractSettlement } from './wallets/solana-contract-settlement.js';
 import { uploadBlobViaVesselGateway } from './wallets/shelby-browser-upload.js';
+import { extractShelbyTransactionEvidence } from './wallets/transaction-evidence.js';
 
 const NET = (typeof window !== 'undefined' && window.VESSEL_NETWORK) || 'testnet';
 const authFn = defaultSolanaAuthenticationFunction;
@@ -95,6 +96,69 @@ async function jsonRequest(url, body) {
   return json;
 }
 
+async function signAndSponsorAptosTransaction(transaction, {
+  quoteToken,
+  paidAuthorization,
+  uploadContext,
+  contractQuote,
+  contractSignature,
+  expectRegistrationEvidence = true,
+}) {
+  const signed = await signAptosTransactionWithSolana({
+    solanaWallet: solWallet(),
+    authenticationFunction: authFn,
+    rawTransaction: transaction,
+    domain: DOMAIN,
+  });
+  if (signed.status !== 'Approved' && signed.status !== 'APPROVED') {
+    throw new Error('User rejected the signature');
+  }
+  return jsonRequest('/api/sponsor/submit', {
+    transaction: b64(transaction.bcsToBytes()),
+    senderAuthenticator: b64(signed.args.bcsToBytes()),
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    expectRegistrationEvidence,
+  });
+}
+
+async function buildSponsoredCommitTransaction({
+  quoteToken,
+  paidAuthorization,
+  uploadContext,
+  contractQuote,
+  contractSignature,
+  commitPayload,
+}) {
+  const built = await jsonRequest('/api/shelby/commit', {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    commitPayload,
+  });
+  if (!built.transaction) {
+    throw new Error('Vessel did not return a Shelby commit transaction');
+  }
+  return MultiAgentTransaction.deserialize(new Deserializer(fromB64(built.transaction)));
+}
+
+async function registrationEvidenceFromHash(transactionHash) {
+  if (!transactionHash) return {};
+  const response = await fetch(`/api/shelby/transactions/${encodeURIComponent(transactionHash)}`);
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw Object.assign(new Error(json.error || 'Unable to recover Shelby registration evidence'), {
+      code: json.code,
+    });
+  }
+  return extractShelbyTransactionEvidence(json);
+}
+
 async function uploadSponsored(file, {
   quoteToken,
   paidAuthorization,
@@ -155,20 +219,8 @@ async function uploadSponsored(file, {
   );
 
   onStep?.('signing');
-  const signed = await signAptosTransactionWithSolana({
-    solanaWallet: solWallet(),
-    authenticationFunction: authFn,
-    rawTransaction: transaction,
-    domain: DOMAIN,
-  });
-  if (signed.status !== 'Approved' && signed.status !== 'APPROVED') {
-    throw new Error('User rejected the signature');
-  }
-
   onStep?.('sponsoring');
-  const registered = await jsonRequest('/api/sponsor/submit', {
-    transaction: b64(transaction.bcsToBytes()),
-    senderAuthenticator: b64(signed.args.bcsToBytes()),
+  const registered = await signAndSponsorAptosTransaction(transaction, {
     quoteToken,
     paidAuthorization,
     uploadContext,
@@ -179,11 +231,14 @@ async function uploadSponsored(file, {
     transactionHash: registered.transactionHash || registered.hash,
     actualStorageUnits: registered.actualStorageUnits,
     actualGasUsed: registered.actualGasUsed,
+    registrationUid: registered.registrationUid,
+    blobMerkleRoot: commitments.blob_merkle_root,
   };
   if (
     !registrationEvidence.transactionHash
     || registrationEvidence.actualStorageUnits == null
     || registrationEvidence.actualGasUsed == null
+    || !registrationEvidence.registrationUid
   ) {
     throw Object.assign(new Error('Shelby registration is still finalizing'), {
       code: 'registration_evidence_missing',
@@ -194,13 +249,38 @@ async function uploadSponsored(file, {
   onStep?.('uploading');
   onCheckpoint?.('uploading', {
     registerTransactionHash: registrationEvidence.transactionHash,
+    registrationUid: registrationEvidence.registrationUid,
+    blobMerkleRoot: commitments.blob_merkle_root,
   });
-  await uploadBlobViaVesselGateway(data, {
+  const uploaded = await uploadBlobViaVesselGateway(data, {
     quoteToken,
     paidAuthorization,
     uploadContext,
     contractQuote,
     contractSignature,
+    registrationUid: registrationEvidence.registrationUid,
+    blobMerkleRoot: commitments.blob_merkle_root,
+  });
+  if (!uploaded?.commitPayload) throw new Error('Shelby commit payload is missing');
+  onStep?.('committing');
+  const commitTransaction = await buildSponsoredCommitTransaction({
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    commitPayload: uploaded.commitPayload,
+  });
+  const committed = await signAndSponsorAptosTransaction(commitTransaction, {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    expectRegistrationEvidence: false,
+  });
+  onCheckpoint?.('committed', {
+    commitTransactionHash: committed.transactionHash || committed.hash,
   });
   onCheckpoint?.('finalizing', {
     registerTransactionHash: registrationEvidence.transactionHash,
@@ -253,6 +333,9 @@ async function resumeBlobWrite(file, {
   uploadContext,
   contractQuote,
   contractSignature,
+  registrationUid,
+  registerTransactionHash,
+  blobMerkleRoot,
 } = {}) {
   if (!storageAddr) throw new Error('Reconnect your Solana wallet before recovery');
   const data = new Uint8Array(await file.arrayBuffer());
@@ -263,14 +346,44 @@ async function resumeBlobWrite(file, {
       { code: 'file_changed' },
     );
   }
-  await uploadBlobViaVesselGateway(data, {
+  const erasureProvider = await createDefaultErasureCodingProvider();
+  const commitments = await generateCommitments(erasureProvider, data);
+  const recoveredEvidence = registrationUid
+    ? { registrationUid }
+    : await registrationEvidenceFromHash(registerTransactionHash);
+  const root = blobMerkleRoot || commitments.blob_merkle_root;
+  const uploaded = await uploadBlobViaVesselGateway(data, {
     quoteToken,
     paidAuthorization,
     uploadContext,
     contractQuote,
     contractSignature,
+    registrationUid: recoveredEvidence.registrationUid,
+    blobMerkleRoot: root,
   });
-  return { key: blobName, size: data.length };
+  if (!uploaded?.commitPayload) throw new Error('Shelby commit payload is missing');
+  const commitTransaction = await buildSponsoredCommitTransaction({
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    commitPayload: uploaded.commitPayload,
+  });
+  const committed = await signAndSponsorAptosTransaction(commitTransaction, {
+    quoteToken,
+    paidAuthorization,
+    uploadContext,
+    contractQuote,
+    contractSignature,
+    expectRegistrationEvidence: false,
+  });
+  return {
+    key: blobName,
+    url: readUrl(blobName),
+    size: data.length,
+    commitTransactionHash: committed.transactionHash || committed.hash,
+  };
 }
 
 function readUrl(blobName) {
