@@ -48,6 +48,22 @@ function recoveryQuote(record) {
   });
 }
 
+function sourceNetworkFor(session, config) {
+  if (session.chain === 'aptos') {
+    return config?.shelbyNetwork?.storageNetwork
+      || config?.shelbyNetwork?.active
+      || session.sourceNetwork
+      || 'aptos-testnet';
+  }
+  return 'solana-devnet';
+}
+
+function storageNetworkFor(config) {
+  return config?.shelbyNetwork?.storageNetwork
+    || config?.shelbyNetwork?.active
+    || 'shelby-testnet';
+}
+
 export function createWalletOwnedUploadService({
   request,
   controller,
@@ -115,8 +131,8 @@ export function createWalletOwnedUploadService({
     const fileHash = await sha256FileHex(file);
     const blobName = contentAddressedBlobName(file, fileHash);
     const session = walletState.session;
-    const sourceNetwork = session.chain === 'aptos' ? 'aptos-testnet' : 'solana-devnet';
-    const storageNetwork = 'shelby-testnet';
+    const sourceNetwork = sourceNetworkFor(session, config);
+    const storageNetwork = storageNetworkFor(config);
     const signedQuote = await request('/api/quotes/upload', {
       method: 'POST',
       signal,

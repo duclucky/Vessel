@@ -30,7 +30,12 @@ const availableRegistry = {
     ]);
     return applyFamilyCapabilities(wallets, publicConfig.walletFamilies).map((wallet) => {
       if (wallet.chain === 'aptos' && wallet.enabled) {
-        adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
+        adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor, {
+          targetNetwork: {
+            ...publicConfig.shelbyNetwork?.aptos,
+            displayName: publicConfig.shelbyNetwork?.displayName,
+          },
+        }));
         return wallet;
       }
       if (wallet.chain === 'solana' && wallet.enabled) {

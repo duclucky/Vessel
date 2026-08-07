@@ -10849,13 +10849,24 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   // client-src/wallets/aptos-adapter.js
   init_process();
   init_buffer();
-  var TESTNET = { name: "testnet", chainId: 2 };
+  var DEFAULT_TARGET_NETWORK = Object.freeze({
+    name: "testnet",
+    chainId: 2,
+    displayName: "Aptos Testnet"
+  });
   var walletError = (message, code) => Object.assign(new Error(message), { code });
-  function normalizeAptosError(error, walletName = "Aptos wallet") {
+  function normalizeTargetNetwork(input = DEFAULT_TARGET_NETWORK) {
+    const name = String(input?.name || DEFAULT_TARGET_NETWORK.name).toLowerCase();
+    const chainId = Number(input?.chainId || DEFAULT_TARGET_NETWORK.chainId);
+    const displayName = input?.displayName || (name === "shelbynet" ? "ShelbyNet" : DEFAULT_TARGET_NETWORK.displayName);
+    return Object.freeze({ name, chainId, displayName });
+  }
+  function normalizeAptosError(error, walletName = "Aptos wallet", targetNetwork = DEFAULT_TARGET_NETWORK) {
+    const target = normalizeTargetNetwork(targetNetwork);
     const raw = String(error?.message || error || "");
     if (["user_rejected", "wrong_network", "switch_unsupported", "provider_unavailable"].includes(error?.code)) return error;
     if (error?.session) {
-      return walletError("Switch your wallet to Aptos Testnet", "wrong_network");
+      return walletError(`Switch your wallet to ${target.displayName}`, "wrong_network");
     }
     if (/PetraApiError/i.test(raw) || walletName === "Petra" && !raw.trim()) {
       return walletError("Petra could not connect. Unlock Petra and try again.", "provider_unavailable");
@@ -10872,9 +10883,10 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     return response.args;
   };
   var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
-  var isTestnet = (network) => String(network?.name || "").toLowerCase() === TESTNET.name && Number(network?.chainId) === TESTNET.chainId;
-  function createAptosAdapter(descriptor) {
+  var isTargetNetwork = (network, target) => String(network?.name || "").toLowerCase() === target.name && Number(network?.chainId) === target.chainId;
+  function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInput } = {}) {
     const wallet = descriptor.provider;
+    const targetNetwork = normalizeTargetNetwork(targetNetworkInput);
     const listeners2 = /* @__PURE__ */ new Set();
     let session = null;
     let eventsBound = false;
@@ -10893,23 +10905,26 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         walletId: descriptor.id,
         walletName: descriptor.name,
         sourceAddress: address,
-        sourceNetwork: "testnet",
+        sourceNetwork: targetNetwork.name,
         storageAddress: address,
         mode: "native"
       };
     };
     const ensureNetwork = async () => {
       const current = await feature("aptos:network", "network").network();
-      if (isTestnet(current)) return current;
+      if (isTargetNetwork(current, targetNetwork)) return current;
       const changer = feature("aptos:changeNetwork", "changeNetwork", { optional: true });
       if (!changer) {
-        throw walletError("Switch your wallet to Aptos Testnet", "switch_unsupported");
+        throw walletError(`Switch your wallet to ${targetNetwork.displayName}`, "switch_unsupported");
       }
-      const changed = approvedArgs(await changer.changeNetwork(TESTNET), "wrong_network");
+      const changed = approvedArgs(
+        await changer.changeNetwork({ name: targetNetwork.name, chainId: targetNetwork.chainId }),
+        "wrong_network"
+      );
       if (!changed?.success) {
         throw walletError(changed?.reason || "Unable to switch network", "wrong_network");
       }
-      return TESTNET;
+      return targetNetwork;
     };
     const bindEvents = () => {
       if (eventsBound) return;
@@ -10926,8 +10941,8 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         }
       });
       void networkEvents.onNetworkChange((network) => {
-        if (!isTestnet(network)) {
-          emit2({ session, status: "network_required", error: "Switch your wallet to Aptos Testnet" });
+        if (!isTargetNetwork(network, targetNetwork)) {
+          emit2({ session, status: "network_required", error: `Switch your wallet to ${targetNetwork.displayName}` });
           return;
         }
         emit2({ session, status: session ? "ready" : "disconnected", error: "" });
@@ -10949,7 +10964,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           }
           return session;
         } catch (error) {
-          const normalized = normalizeAptosError(error, descriptor.name);
+          const normalized = normalizeAptosError(error, descriptor.name, targetNetwork);
           if (error?.session) normalized.session = error.session;
           throw normalized;
         }
@@ -39911,7 +39926,12 @@ Message: ${transactionMessage}.
       ]);
       return applyFamilyCapabilities(wallets2, publicConfig.walletFamilies).map((wallet) => {
         if (wallet.chain === "aptos" && wallet.enabled) {
-          adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor));
+          adapters.set(wallet.id, (descriptor) => createAptosAdapter(descriptor, {
+            targetNetwork: {
+              ...publicConfig.shelbyNetwork?.aptos,
+              displayName: publicConfig.shelbyNetwork?.displayName
+            }
+          }));
           return wallet;
         }
         if (wallet.chain === "solana" && wallet.enabled) {

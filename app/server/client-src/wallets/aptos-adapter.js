@@ -1,13 +1,25 @@
-const TESTNET = { name: 'testnet', chainId: 2 };
+const DEFAULT_TARGET_NETWORK = Object.freeze({
+  name: 'testnet',
+  chainId: 2,
+  displayName: 'Aptos Testnet',
+});
 
 const walletError = (message, code) => Object.assign(new Error(message), { code });
 
-export function normalizeAptosError(error, walletName = 'Aptos wallet') {
+function normalizeTargetNetwork(input = DEFAULT_TARGET_NETWORK) {
+  const name = String(input?.name || DEFAULT_TARGET_NETWORK.name).toLowerCase();
+  const chainId = Number(input?.chainId || DEFAULT_TARGET_NETWORK.chainId);
+  const displayName = input?.displayName || (name === 'shelbynet' ? 'ShelbyNet' : DEFAULT_TARGET_NETWORK.displayName);
+  return Object.freeze({ name, chainId, displayName });
+}
+
+export function normalizeAptosError(error, walletName = 'Aptos wallet', targetNetwork = DEFAULT_TARGET_NETWORK) {
+  const target = normalizeTargetNetwork(targetNetwork);
   const raw = String(error?.message || error || '');
   if (['user_rejected', 'wrong_network', 'switch_unsupported', 'provider_unavailable']
     .includes(error?.code)) return error;
   if (error?.session) {
-    return walletError('Switch your wallet to Aptos Testnet', 'wrong_network');
+    return walletError(`Switch your wallet to ${target.displayName}`, 'wrong_network');
   }
   if (/PetraApiError/i.test(raw) || (walletName === 'Petra' && !raw.trim())) {
     return walletError('Petra could not connect. Unlock Petra and try again.', 'provider_unavailable');
@@ -27,13 +39,14 @@ const approvedArgs = (response, code = 'user_rejected') => {
 
 const addressOf = (account) => account?.address?.toString?.() || String(account?.address || '');
 
-const isTestnet = (network) => (
-  String(network?.name || '').toLowerCase() === TESTNET.name
-  && Number(network?.chainId) === TESTNET.chainId
+const isTargetNetwork = (network, target) => (
+  String(network?.name || '').toLowerCase() === target.name
+  && Number(network?.chainId) === target.chainId
 );
 
-export function createAptosAdapter(descriptor) {
+export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInput } = {}) {
   const wallet = descriptor.provider;
+  const targetNetwork = normalizeTargetNetwork(targetNetworkInput);
   const listeners = new Set();
   let session = null;
   let eventsBound = false;
@@ -55,7 +68,7 @@ export function createAptosAdapter(descriptor) {
       walletId: descriptor.id,
       walletName: descriptor.name,
       sourceAddress: address,
-      sourceNetwork: 'testnet',
+      sourceNetwork: targetNetwork.name,
       storageAddress: address,
       mode: 'native',
     };
@@ -63,17 +76,20 @@ export function createAptosAdapter(descriptor) {
 
   const ensureNetwork = async () => {
     const current = await feature('aptos:network', 'network').network();
-    if (isTestnet(current)) return current;
+    if (isTargetNetwork(current, targetNetwork)) return current;
 
     const changer = feature('aptos:changeNetwork', 'changeNetwork', { optional: true });
     if (!changer) {
-      throw walletError('Switch your wallet to Aptos Testnet', 'switch_unsupported');
+      throw walletError(`Switch your wallet to ${targetNetwork.displayName}`, 'switch_unsupported');
     }
-    const changed = approvedArgs(await changer.changeNetwork(TESTNET), 'wrong_network');
+    const changed = approvedArgs(
+      await changer.changeNetwork({ name: targetNetwork.name, chainId: targetNetwork.chainId }),
+      'wrong_network',
+    );
     if (!changed?.success) {
       throw walletError(changed?.reason || 'Unable to switch network', 'wrong_network');
     }
-    return TESTNET;
+    return targetNetwork;
   };
 
   const bindEvents = () => {
@@ -91,8 +107,8 @@ export function createAptosAdapter(descriptor) {
       }
     });
     void networkEvents.onNetworkChange((network) => {
-      if (!isTestnet(network)) {
-        emit({ session, status: 'network_required', error: 'Switch your wallet to Aptos Testnet' });
+      if (!isTargetNetwork(network, targetNetwork)) {
+        emit({ session, status: 'network_required', error: `Switch your wallet to ${targetNetwork.displayName}` });
         return;
       }
       emit({ session, status: session ? 'ready' : 'disconnected', error: '' });
@@ -115,7 +131,7 @@ export function createAptosAdapter(descriptor) {
         }
         return session;
       } catch (error) {
-        const normalized = normalizeAptosError(error, descriptor.name);
+        const normalized = normalizeAptosError(error, descriptor.name, targetNetwork);
         if (error?.session) normalized.session = error.session;
         throw normalized;
       }

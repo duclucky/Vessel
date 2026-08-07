@@ -158,7 +158,7 @@ async function initIdentity() {
       status.textContent = walletStatus === 'identity_required'
         ? 'Updating the derived Aptos storage identity'
         : walletStatus === 'network_required'
-        ? 'Switch your wallet to Aptos Testnet'
+        ? next.error || 'Switch your wallet to the required Aptos network'
         : session
         ? 'Wallet connected · storage identity ready'
         : 'Choose an Aptos or Solana wallet';

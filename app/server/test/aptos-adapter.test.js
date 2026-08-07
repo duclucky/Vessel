@@ -113,6 +113,26 @@ test('wrong network requests Aptos Testnet when changeNetwork exists', async () 
   assert.deepEqual(requested, { name: 'testnet', chainId: 2 });
 });
 
+test('runtime target network can request ShelbyNet instead of Aptos Testnet', async () => {
+  let requested;
+  const provider = wallet({
+    network: { name: 'testnet', chainId: 2 },
+    changeNetwork: async (input) => {
+      requested = input;
+      return approved({ success: true });
+    },
+  });
+  const adapter = createAptosAdapter(
+    { id: 'aptos:petra:1', name: 'Petra', provider },
+    { targetNetwork: { name: 'shelbynet', chainId: 118, displayName: 'ShelbyNet' } },
+  );
+
+  const session = await adapter.connect({ silent: false });
+
+  assert.deepEqual(requested, { name: 'shelbynet', chainId: 118 });
+  assert.equal(session.sourceNetwork, 'shelbynet');
+});
+
 test('wrong network without changeNetwork exposes manual switch state', async () => {
   const adapter = createAptosAdapter({
     id: 'aptos:petra:1',
@@ -159,6 +179,26 @@ test('Petra API failure while switching networks becomes a manual Testnet reques
     (error) => error.code === 'wrong_network'
       && error.message === 'Switch your wallet to Aptos Testnet'
       && error.session?.sourceAddress === '0xabc',
+  );
+});
+
+test('ShelbyNet target reports ShelbyNet in manual switch errors and network events', async () => {
+  const provider = wallet({
+    network: { name: 'mainnet', chainId: 1 },
+    changeNetwork: async () => {
+      throw Object.assign(new Error('PetraApiError'), { code: -30_001 });
+    },
+  });
+  const adapter = createAptosAdapter(
+    { id: 'aptos:petra:1', name: 'Petra', provider },
+    { targetNetwork: { name: 'shelbynet', chainId: 118, displayName: 'ShelbyNet' } },
+  );
+
+  await assert.rejects(
+    () => adapter.connect({ silent: false }),
+    (error) => error.code === 'wrong_network'
+      && error.message === 'Switch your wallet to ShelbyNet'
+      && error.session?.sourceNetwork === 'shelbynet',
   );
 });
 

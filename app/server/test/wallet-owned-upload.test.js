@@ -19,7 +19,7 @@ const sessionFor = (chain = 'aptos') => Object.freeze({
   walletName: chain === 'aptos' ? 'Petra' : 'Phantom',
 });
 
-function fixture({ chain = 'aptos', writes = true, pendingOnce = false } = {}) {
+function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNetwork } = {}) {
   let session = sessionFor(chain);
   const requests = [];
   const recoveryCalls = [];
@@ -72,6 +72,7 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false } = {}) {
     if (path === '/api/config') return {
       shelbyWritesEnabled: writes,
       maxUploadBytes: 25 * 1024 * 1024,
+      shelbyNetwork,
       sponsored: true,
       settlementContracts: {
         enabled: true,
@@ -150,6 +151,24 @@ test('service settles, registers, and writes one immutable Aptos file context', 
   assert.equal(flow.settlementCalls, 1);
   assert.equal(flow.walletUploadCalls, 1);
   assert.deepEqual(flow.recoveryCalls.at(-1), ['complete']);
+});
+
+test('quote context follows the active ShelbyNet runtime instead of Aptos Testnet labels', async () => {
+  const flow = fixture({
+    shelbyNetwork: {
+      active: 'shelbynet',
+      storageNetwork: 'shelbynet',
+      aptos: { name: 'shelbynet', chainId: 118 },
+    },
+  });
+
+  const quoted = await flow.service.quote(file, { days: 30 });
+  const body = flow.requests.find((entry) => entry.path === '/api/quotes/upload').options.body;
+
+  assert.equal(body.sourceNetwork, 'shelbynet');
+  assert.equal(body.storageNetwork, 'shelbynet');
+  assert.equal(quoted.intent.sourceNetwork, 'shelbynet');
+  assert.equal(quoted.intent.storageNetwork, 'shelbynet');
 });
 
 test('wallet changes invalidate a quote before validation', async () => {
