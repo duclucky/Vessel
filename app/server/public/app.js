@@ -597,21 +597,43 @@ function initUpload() {
       }
       panel.remove();
       if (record.stage === 'paid') {
+        const recoveredSettlementNetwork = record.context.chain === 'solana'
+          ? 'Solana Devnet'
+          : record.context.sourceNetwork === 'shelbynet' ? 'ShelbyNet' : 'Aptos Testnet';
+        const recoveredSettlementToken = record.context.chain === 'solana'
+          ? 'Devnet USDC'
+          : record.context.sourceNetwork === 'shelbynet' ? 'APT + ShelbyUSD' : 'APT + ShelbyUSD';
+        const recoveredExpirationMs = Math.floor(Number(record.context.expirationMicros || 0) / 1000);
+        const config = await api('/api/config').catch(() => ({}));
         const quote = Object.freeze({
           ...record.context,
           quoteId: record.quoteId,
           quoteToken: record.quoteToken,
           tierId: record.paymentTier,
           totalAccountingMicro: record.quotedAccountingMicro,
+          storageAccountingMicro: 0,
+          gasAccountingMicro: 0,
+          serviceFeeAccountingMicro: 0,
+          settlementToken: recoveredSettlementToken,
+          settlementNetwork: recoveredSettlementNetwork,
+          targetExpirationUtc: new Date(recoveredExpirationMs).toISOString(),
+          expiresAtMs: Date.now() + 300_000,
           solanaAmountMicro: record.quotedAccountingMicro,
           contractQuote: record.contractQuote,
           contractSignature: record.contractSignature,
           quotePublicKey: record.quotePublicKey,
+          settlementDeployment: record.settlementDeployment,
         });
         const recoveredContext = Object.freeze({
           file,
           intent: Object.freeze({ ...record.context }),
           quote,
+          config: Object.freeze({ ...config }),
+          walletKey: [
+            record.context.chain,
+            record.context.sourceAddress,
+            record.context.storageAddress,
+          ].join(':').toLowerCase(),
           settlement: Object.freeze({
             paidAuthorization: record.paidAuthorization,
             settlementHash: record.settlementHash,

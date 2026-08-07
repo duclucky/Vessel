@@ -135,6 +135,20 @@ test('recovery resume renders success when Shelby confirms the recovered artifac
   assert.equal(matchedCheck >= 0 && renderRecovered > matchedCheck && completeRecovered > matchedCheck, true);
 });
 
+test('paid recovery rebuilds the upload context without losing wallet identity', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const paidRecovery = source.slice(
+    source.indexOf("if (record.stage === 'paid')"),
+    source.indexOf('const outcome = await doUpload(file, recoveredContext);'),
+  );
+
+  assert.match(paidRecovery, /walletKey:\s*\[/);
+  assert.match(paidRecovery, /config:\s*Object\.freeze/);
+  assert.match(paidRecovery, /settlementDeployment:\s*record\.settlementDeployment/);
+  assert.match(paidRecovery, /settlementNetwork:\s*recoveredSettlementNetwork/);
+  assert.match(paidRecovery, /targetExpirationUtc:\s*new Date\(recoveredExpirationMs\)\.toISOString\(\)/);
+});
+
 test('folder uploads run through the existing quote and settlement path sequentially', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);
