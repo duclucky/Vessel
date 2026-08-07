@@ -5,11 +5,15 @@ Wallet-owned hot storage, cross-chain settlement, and canonical NFT metadata for
 ## Live beta
 
 - Application: [https://vessel-sage.vercel.app](https://vessel-sage.vercel.app)
-- Network: Aptos Testnet, Solana Devnet, ShelbyNet
+- Supported storage runtimes: Aptos Testnet and ShelbyNet
+- Currently available runtime: ShelbyNet
+- Settlement networks: Aptos Testnet and Solana Devnet
 - Status: public testnet beta
 - Source: [github.com/duclucky/Vessel](https://github.com/duclucky/Vessel)
 
 Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued settlement evidence. The application does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
+
+The codebase and configuration support both Aptos Testnet and ShelbyNet storage runtimes. The production beta currently exposes ShelbyNet as the live route. Aptos Testnet is implemented, retained, and intentionally disabled from the public entry so it can be re-enabled for fallback, regression checks, or a runtime switch without deleting the testnet path.
 
 Testnet tokens have no real monetary value. Retention is temporary and the beta does not provide a production availability commitment.
 
@@ -34,17 +38,19 @@ Vessel currently combines these journeys in one web application:
 
 ## Current network status
 
-**Shelby public API is temporarily paused.** Production currently runs with `SHELBY_WRITES_ENABLED=false`.
+**ShelbyNet is the currently available production beta runtime.** Vessel also supports Aptos Testnet, but that public entry is disabled while the ShelbyNet route is live.
 
-While this gate is disabled:
+Current behavior:
 
-- New Shelby upload and metadata-hosting operations are blocked before a wallet transaction is requested.
-- Single NFT JSON can still be generated and downloaded locally.
-- Batch collection JSON and ZIP export can use unexpired **browser-local Vault history** for the connected storage address.
-- The application labels that batch source as local Vault cache and does not claim a fresh remote or on-chain reconciliation.
-- Only collections previously recorded by the same browser can be reconstructed while the indexer is unavailable.
+- ShelbyNet is the default storage runtime for the public Vercel deployment.
+- Aptos Testnet runtime values and tests remain in the repository and deployment manifest.
+- Aptos wallet users connect natively to the active Aptos-family runtime.
+- Solana users settle through the Solana Devnet program and authorize a deterministic Aptos storage identity for Shelby.
+- Single NFT JSON can be generated, downloaded locally, and hosted through the active Shelby runtime when writes are enabled.
+- Batch collection JSON and ZIP export can use active Shelby artifacts or unexpired **browser-local Vault history** for the connected storage address.
+- The application labels local Vault cache separately and does not claim a fresh remote or on-chain reconciliation when it is using browser-local history.
 
-When Shelby restores public writes and indexing, setting `SHELBY_WRITES_ENABLED=true` restores remote artifact listing and reconciliation without changing the metadata workflow.
+If the upstream write gate is intentionally disabled for maintenance, `SHELBY_WRITES_ENABLED=false` blocks new upload and metadata-hosting operations before a wallet transaction is requested. Re-enabling the gate restores remote artifact listing and reconciliation without changing the metadata workflow.
 
 ## User journeys
 
@@ -61,7 +67,7 @@ Wallet state is restored silently when the extension supports it. Selecting a co
 
 Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, network and protocol cost, sponsored gas, a 2% Vessel service fee, and a USD 0.01 minimum.
 
-The current Shelby write gate prevents submission while the upstream API is paused. The UI remains usable for inspection and does not present a disabled network as a successful upload.
+When the active ShelbyNet write gate is enabled, the user reviews the quote, approves the settlement transaction, and receives wallet-owned storage evidence. If the gate is disabled for maintenance, the UI remains usable for inspection and does not present a disabled network as a successful upload.
 
 ### 3. Use the Vault
 
@@ -74,7 +80,7 @@ Metadata supports two modes:
 - **Single NFT**: choose a Vault asset, enter name, description, optional external URL, collection details, and traits, then download canonical JSON.
 - **Batch collection**: select a collection already recorded in the Shelby Vault, optionally apply a CSV metadata override, review every item, and download a metadata ZIP.
 
-Hosting the generated JSON on Shelby remains disabled until Shelby writes reopen.
+Hosting the generated JSON uses the same active Shelby runtime and write gate as media upload.
 
 ### 5. Inspect latency
 
@@ -219,7 +225,7 @@ Start from `app/server/.env.example`. Never commit the resulting `.env` file.
 | `STORAGE_BACKEND` | `mock` or `shelby` |
 | `MAX_UPLOAD_BYTES` | Per-file server upload limit |
 | `DEFAULT_STORAGE_DAYS` | Default retention selection |
-| `SHELBY_NETWORK` | Shelby network name, currently `testnet` |
+| `SHELBY_NETWORK` | Shelby storage runtime, `shelbynet` for the public beta and `testnet` for the retained Aptos Testnet path |
 | `SHELBY_WRITES_ENABLED` | Required boolean in production; use `false` during the API pause |
 | `SHELBY_API_KEY` | Server-only Shelby API credential |
 | `SHELBY_SOLANA_SECRET_KEY` | Server-only managed Solana DAA key for fallback provider operations |
@@ -308,7 +314,7 @@ Never paste `.env`, wallet secrets, private keys, seed phrases, API tokens, or b
 
 ## Beta limitations
 
-- Shelby public writes and indexing are currently unavailable, so upload and hosted metadata are gated off in production.
+- ShelbyNet is the available production beta runtime. Aptos Testnet is implemented and retained, but its public entry is disabled while ShelbyNet is live.
 - Browser-local Vault history is device and browser specific. It is not a replacement for remote Shelby reconciliation.
 - Testnet artifacts expire according to their selected retention and may also be affected by network resets.
 - Vessel does not mint NFTs or provide marketplace listing services.

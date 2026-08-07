@@ -7,10 +7,14 @@ import { fileURLToPath } from 'node:url';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const readme = fs.readFileSync(path.resolve(here, '../../..', 'README.md'), 'utf8');
 
-test('README describes the deployed product and current degraded mode', () => {
+test('README describes the deployed product and current network availability', () => {
   for (const claim of [
     'https://vessel-sage.vercel.app',
-    'Shelby public API is temporarily paused',
+    'Supported storage runtimes',
+    'Aptos Testnet and ShelbyNet',
+    'Currently available runtime',
+    'ShelbyNet',
+    'Aptos Testnet is implemented',
     'browser-local Vault history',
     'Aptos Move contract',
     'Solana Program',
@@ -20,6 +24,9 @@ test('README describes the deployed product and current degraded mode', () => {
     'weekly wipe',
     'not permanent storage',
   ]) assert.match(readme, new RegExp(claim, 'i'));
+
+  assert.doesNotMatch(readme, /Shelby public API is temporarily paused/i);
+  assert.doesNotMatch(readme, /Production currently runs with `SHELBY_WRITES_ENABLED=false`/i);
 });
 
 test('README exposes current testnet deployments and verification commands', () => {

@@ -32,15 +32,18 @@ test('Landing CTAs route users into the app and the workflow explanation', () =>
 
 test('Landing exposes ShelbyNet live and leaves Aptos Testnet in maintenance', () => {
   const html = readPage('index.html');
+  assert.match(html, /Supported runtimes:\s*Aptos Testnet and ShelbyNet/i);
+  assert.match(html, /Currently available:\s*ShelbyNet/i);
   assert.match(html, /data-network-option="aptos-testnet"/);
   assert.match(html, /data-network-status="maintenance"/);
   assert.match(html, /Aptos Testnet/i);
-  assert.match(html, /Maintenance/i);
+  assert.match(html, /Implemented\s*\/\s*disabled/i);
   assert.match(html, /aria-disabled="true"/);
   assert.match(html, /data-network-option="shelbynet"/);
   assert.match(html, /data-network-status="live"/);
   assert.match(html, /ShelbyNet/i);
   assert.match(html, /Live/i);
+  assert.doesNotMatch(html, /remains in the codebase/i);
 });
 
 test('dApp wallet actions no longer use the legacy MetaMask ownership path', () => {
