@@ -72,6 +72,12 @@ export function normalizeUploadQuoteContext(input = {}) {
 const encode = (value) => Buffer.from(value).toString('base64url');
 const decode = (value) => Buffer.from(value, 'base64url').toString('utf8');
 const canonicalContext = (context) => JSON.stringify(normalizeUploadQuoteContext(context));
+const settlementNetworkName = (context) => {
+  if (context.chain === 'solana') return 'Solana Devnet';
+  return String(context.sourceNetwork || '').toLowerCase() === 'shelbynet'
+    ? 'ShelbyNet'
+    : 'Aptos Testnet';
+};
 
 function contextToPayload(context) {
   return {
@@ -134,7 +140,7 @@ function publicQuote({ token, payload, context }) {
     expiresAtMs: payload.exp,
     serverTimeMs: Math.trunc(context.expirationMicros / 1_000) - context.days * RETENTION_DAY_MS,
     settlementToken: aptos ? 'APT + ShelbyUSD' : 'Devnet USDC',
-    settlementNetwork: aptos ? 'Aptos Testnet' : 'Solana Devnet',
+    settlementNetwork: settlementNetworkName(context),
     solanaAmountMicro: aptos ? '0' : breakdown.totalAccountingMicro,
     nativeServiceFeeShelbyUsdUnits: aptos ? serviceFeeUnits : '0',
     notice: 'Test tokens — no real monetary value',

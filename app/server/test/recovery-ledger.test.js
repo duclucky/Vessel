@@ -42,13 +42,14 @@ test('recovery ledger advances allowlisted upload stages without storing file or
     settlementDeployment: { moduleAddress: `0x${'88'.repeat(32)}` },
   });
 
-  for (const stage of ['settlement_submitted', 'paid', 'registered', 'uploading', 'finalizing', 'active', 'recovery_required']) {
+  for (const stage of ['settlement_submitted', 'paid', 'registered', 'uploading', 'committed', 'finalizing', 'active', 'recovery_required']) {
     current += 1_000;
     ledger.advance(record.id, stage, {
       paidAuthorization: 'vpaid.signed',
       settlementHash: '0xsettled',
       settlementTransactionId: '0xcontract-transaction',
       registerTransactionHash: '0xregistered',
+      commitTransactionHash: '0xcommitted',
       fileBytes: [9, 9, 9],
       privateKey: 'secret',
     });
@@ -61,6 +62,7 @@ test('recovery ledger advances allowlisted upload stages without storing file or
   assert.equal(serialized.includes('privateKey'), false);
   assert.equal(ledger.loadForWallet(identity)[0].paidAuthorization, 'vpaid.signed');
   assert.equal(ledger.loadForWallet(identity)[0].registerTransactionHash, '0xregistered');
+  assert.equal(ledger.loadForWallet(identity)[0].commitTransactionHash, '0xcommitted');
   assert.equal(ledger.loadForWallet(identity)[0].settlementTransactionId, '0xcontract-transaction');
   assert.equal(ledger.loadForWallet(identity)[0].contractQuote.amount, '84100');
   assert.equal(ledger.loadForWallet(identity)[0].contractSignature, '66'.repeat(64));

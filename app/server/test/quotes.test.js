@@ -118,6 +118,21 @@ test('native Aptos quote itemizes direct protocol cost and Vessel fee', async ()
   assert.equal(quote.solanaAmountMicro, '0');
 });
 
+test('native ShelbyNet quote reports ShelbyNet as the settlement network', async () => {
+  const manager = QuoteManager.forTest({ secret: SECRET, pricing: async () => breakdown });
+  const quote = await manager.issueUpload({
+    ...baseContext,
+    chain: 'aptos',
+    sourceNetwork: 'shelbynet',
+    storageNetwork: 'shelbynet',
+    sourceAddress: '0xaptos',
+    storageAddress: '0xaptos',
+  });
+
+  assert.equal(quote.settlementToken, 'APT + ShelbyUSD');
+  assert.equal(quote.settlementNetwork, 'ShelbyNet');
+});
+
 test('production quote manager refuses missing or weak signing secrets', () => {
   for (const secret of ['', 'short-secret']) {
     assert.throws(

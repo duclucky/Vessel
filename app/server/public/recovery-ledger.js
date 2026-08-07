@@ -6,6 +6,7 @@ const STAGES = new Set([
   'paid',
   'registered',
   'uploading',
+  'committed',
   'finalizing',
   'active',
   'recovery_required',
@@ -21,7 +22,7 @@ const EVIDENCE_FIELDS = [
   'contractQuote', 'contractSignature', 'quotePublicKey', 'settlementDeployment',
   'registerTransactionHash', 'acknowledgementHash', 'actualStorageUnits',
   'actualGasUsed', 'quotedAccountingMicro', 'errorCode',
-  'paymentTier',
+  'paymentTier', 'commitTransactionHash',
 ];
 
 const pick = (input, fields) => Object.fromEntries(
