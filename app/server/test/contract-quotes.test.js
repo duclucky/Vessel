@@ -112,6 +112,52 @@ test('precomputed contract quote reuses the server breakdown without another pri
   assert.equal(manager.verifySignature(result), true);
 });
 
+test('Aptos contract quote uses the deployed runtime chain ID', async () => {
+  const { privateKey, publicKey } = keys();
+  const manager = ContractQuoteManager.forTest({
+    privateKey,
+    publicKey,
+    now: () => 1_000_000n,
+    pricing: async () => breakdown,
+    aptosNetwork: 118,
+  });
+
+  const result = await manager.issueUpload({
+    ...aptosContext,
+    sourceNetwork: 'shelbynet',
+    storageNetwork: 'shelbynet',
+  });
+  const signedQuote = {
+    context: {
+      ...aptosContext,
+      sourceNetwork: 'shelbynet',
+      storageNetwork: 'shelbynet',
+    },
+    breakdown,
+  };
+  const deployments = {
+    configVersion: '1',
+    aptos: { acceptedAsset: `0x${'44'.repeat(32)}`, chainId: 118 },
+    solana: { acceptedMint: bs58.encode(Buffer.from('66'.repeat(32), 'hex')) },
+  };
+
+  assert.equal(result.contractQuote.chain, 1);
+  assert.equal(result.contractQuote.network, 118);
+  assert.doesNotThrow(() => assertContractQuoteMatchesContext(
+    result.contractQuote,
+    signedQuote,
+    deployments,
+  ));
+  assert.throws(
+    () => assertContractQuoteMatchesContext(
+      { ...result.contractQuote, network: 2 },
+      signedQuote,
+      deployments,
+    ),
+    (error) => error.code === 'quote_context_mismatch',
+  );
+});
+
 test('contract overlap validation binds every Solana context field before RPC', async () => {
   const { privateKey, publicKey } = keys();
   const manager = ContractQuoteManager.forTest({

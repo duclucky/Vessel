@@ -10,7 +10,7 @@ import { normalizeUploadQuoteContext } from '../quotes.js';
 import { quoteDigest } from './quote-v1.js';
 
 const CHAIN = Object.freeze({ aptos: 1, solana: 2 });
-const NETWORK = Object.freeze({ aptos: 2, solana: 1 });
+const DEFAULT_NETWORK = Object.freeze({ aptos: 2, solana: 1 });
 const HEX_32 = /^[0-9a-f]{64}$/;
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
@@ -63,7 +63,9 @@ export function assertContractQuoteMatchesContext(contractQuote, signedQuote, de
   const context = normalizeUploadQuoteContext(signedQuote?.context);
   const breakdown = signedQuote?.breakdown || {};
   const chain = CHAIN[context.chain];
-  const network = NETWORK[context.chain];
+  const network = context.chain === 'aptos'
+    ? Number(deployments?.aptos?.chainId || DEFAULT_NETWORK.aptos)
+    : DEFAULT_NETWORK.solana;
   const acceptedAsset = context.chain === 'aptos'
     ? addressBytes32(deployments?.aptos?.acceptedAsset, 'aptos')
     : addressBytes32(deployments?.solana?.acceptedMint, 'solana');
@@ -127,6 +129,7 @@ export class ContractQuoteManager {
     priceUpload,
     aptosAssetHex,
     solanaMintHex,
+    aptosNetwork = DEFAULT_NETWORK.aptos,
     configVersion,
     now = Date.now,
     randomBytes = secureRandomBytes,
@@ -145,6 +148,10 @@ export class ContractQuoteManager {
     this.priceUpload = priceUpload;
     this.aptosAssetHex = normalizeAsset(aptosAssetHex, 'Aptos asset');
     this.solanaMintHex = normalizeAsset(solanaMintHex, 'Solana mint');
+    this.aptosNetwork = Number(aptosNetwork);
+    if (!Number.isSafeInteger(this.aptosNetwork) || this.aptosNetwork <= 0) {
+      throw new RangeError('aptosNetwork must be a positive chain ID');
+    }
     this.configVersion = BigInt(configVersion);
     if (this.configVersion <= 0n) throw new RangeError('configVersion must be positive');
     this.now = now;
@@ -159,6 +166,7 @@ export class ContractQuoteManager {
     randomBytes,
     aptosAssetHex = '44'.repeat(32),
     solanaMintHex = '66'.repeat(32),
+    aptosNetwork = DEFAULT_NETWORK.aptos,
     configVersion = 1,
   }) {
     return new ContractQuoteManager({
@@ -169,6 +177,7 @@ export class ContractQuoteManager {
       randomBytes,
       aptosAssetHex,
       solanaMintHex,
+      aptosNetwork,
       configVersion,
     });
   }
@@ -189,7 +198,7 @@ export class ContractQuoteManager {
     const contractQuote = Object.freeze({
       version: 1,
       chain: CHAIN[uploadContext.chain],
-      network: NETWORK[uploadContext.chain],
+      network: uploadContext.chain === 'aptos' ? this.aptosNetwork : DEFAULT_NETWORK.solana,
       quoteId: quoteId.toString('hex'),
       payer: addressBytes32(uploadContext.sourceAddress, uploadContext.chain),
       storageAddress: addressBytes32(uploadContext.storageAddress, 'aptos'),

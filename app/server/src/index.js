@@ -104,6 +104,7 @@ try {
         throw new Error('Contract quotes must reuse the signed server breakdown');
       },
       aptosAssetHex: settlementDeployments.aptos.acceptedAsset,
+      aptosNetwork: settlementDeployments.aptos.chainId,
       solanaMintHex: new PublicKey(settlementDeployments.solana.acceptedMint)
         .toBuffer()
         .toString('hex'),
@@ -248,7 +249,9 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
     const data = new Uint8Array(req.file.buffer);
     const mime = req.file.mimetype || 'application/octet-stream';
     const key = contentKey(data, mime);
-    const expiresInSec = req.body?.expiresInSec ? Number(req.body.expiresInSec) : undefined;
+    const expiresInSec = req.body?.expiresInSec
+      ? Number(req.body.expiresInSec)
+      : config.defaultStorageDays * 86_400;
     const result = await store.put(key, data, { contentType: mime, owner: req.body?.owner, expiresInSec });
     send(res, 200, result);
   } catch (e) { fail(res, e); }
