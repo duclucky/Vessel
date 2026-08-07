@@ -31,6 +31,12 @@ test('deployment manifest paths resolve from the app root, not the serverless cw
   assert.equal(fs.existsSync(defaultSettlementDeploymentsFile), true);
 });
 
+test('default settlement manifest path follows the configured Shelby runtime', () => {
+  assert.match(config, /defaultSettlementDeploymentsFileForNetwork/);
+  assert.match(config, /vessel-settlement\.\$\{runtime\.name\}\.json/);
+  assert.match(config, /defaultSettlementDeploymentsFileForNetwork\(shelbyRuntime\)/);
+});
+
 test('public config exposes server-gated wallet families without secrets', () => {
   assert.match(config, /walletAptosEnabled/);
   assert.match(config, /walletSolanaEnabled/);

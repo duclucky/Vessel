@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "environment": "shelbynet",
+  "quotePublicKey": "596f2b0952d1320aa6a36de45dadef35f27255e457611094552d8fc1fe10edf7",
+  "configVersion": "1",
+  "aptos": {
+    "chainId": 118,
+    "moduleAddress": "0xf3e5975047cdb86d660597219e445dbd9285af740e7ef78bd227a2ec7ca2864b",
+    "vaultAddress": "0xcc78b6b170098c65a5a3d425b555615af2b6e2769a1f3867e2f22672f6388ce0",
+    "multisigAddress": "0xf3e5975047cdb86d660597219e445dbd9285af740e7ef78bd227a2ec7ca2864b",
+    "acceptedAsset": "0x1b18363a9f1fe5e6ebf247daba5cc1c18052bb232efdc4c50f556053922d98e1",
+    "deploymentTransaction": "0x07cc4b9983eeeb7e8a0ed912d042b6b4ac34c157fb556215e3239a26cdcf628e",
+    "timelockSeconds": null
+  },
+  "solana": {
+    "cluster": "devnet",
+    "programId": "G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx",
+    "configPda": "cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA",
+    "vaultAta": "Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7",
+    "squadsMultisig": "GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh",
+    "acceptedMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+    "deploymentSignature": "49KFbqx2eEUTMLfG7CGPvSvgswtu4ye2mJ1vxDmxPJwCSrKpGMK9ngdZqMChGzvhmKPYcen4pY1WFQZ3mE2SXAja",
+    "timelockSeconds": 0
+  }
+}

@@ -6,6 +6,10 @@ import bundledTestnetManifest from './bundled-testnet-manifest.js';
 const HEX_32 = /^[0-9a-f]{64}$/;
 const APTOS_ADDRESS = /^0x[0-9a-f]{64}$/;
 const SOLANA_BETA_TIMELOCK_SECONDS = 0;
+const APTOS_CHAIN_IDS = Object.freeze({
+  testnet: 2,
+  shelbynet: 118,
+});
 
 const deploymentError = (message) => Object.assign(new Error(message), {
   code: 'invalid_settlement_deployment',
@@ -91,8 +95,8 @@ export function loadSettlementDeployments({
     }
     manifest = bundledTestnetManifest;
   }
-  if (manifest.schemaVersion !== 1 || manifest.environment !== 'testnet') {
-    throw deploymentError('Settlement manifest must target the version 1 testnet schema');
+  if (manifest.schemaVersion !== 1 || !Object.hasOwn(APTOS_CHAIN_IDS, manifest.environment)) {
+    throw deploymentError('Settlement manifest must target a supported version 1 network schema');
   }
 
   const configuredQuoteKey = requiredHex32(quotePublicKey, 'Configured quote public key');
@@ -103,11 +107,14 @@ export function loadSettlementDeployments({
 
   const configVersion = BigInt(manifest.configVersion || 0);
   if (configVersion <= 0n) throw deploymentError('configVersion must be positive');
-  if (manifest.aptos?.chainId !== 2) throw deploymentError('Aptos deployment must use Testnet chain ID 2');
+  const aptosChainId = APTOS_CHAIN_IDS[manifest.environment];
+  if (manifest.aptos?.chainId !== aptosChainId) {
+    throw deploymentError(`Aptos deployment must use ${manifest.environment} chain ID ${aptosChainId}`);
+  }
   if (manifest.solana?.cluster !== 'devnet') throw deploymentError('Solana deployment must use Devnet');
 
   const aptos = Object.freeze({
-    chainId: 2,
+    chainId: aptosChainId,
     moduleAddress: requiredAptosAddress(manifest.aptos.moduleAddress, 'Aptos module address'),
     vaultAddress: requiredAptosAddress(manifest.aptos.vaultAddress, 'Aptos vault address'),
     multisigAddress: requiredAptosAddress(manifest.aptos.multisigAddress, 'Aptos multisig address'),
@@ -134,7 +141,7 @@ export function loadSettlementDeployments({
 
   return Object.freeze({
     enabled: true,
-    environment: 'testnet',
+    environment: manifest.environment,
     quotePublicKey: manifestQuoteKey,
     configVersion: configVersion.toString(),
     aptos,

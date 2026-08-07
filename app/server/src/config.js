@@ -11,6 +11,12 @@ export const defaultSettlementDeploymentsFile = fileURLToPath(
   new URL('../deployments/vessel-settlement.testnet.json', import.meta.url),
 );
 
+export function defaultSettlementDeploymentsFileForNetwork(runtime) {
+  return fileURLToPath(
+    new URL(`../deployments/vessel-settlement.${runtime.name}.json`, import.meta.url),
+  );
+}
+
 export function resolveProjectFile(value) {
   return path.isAbsolute(value) ? value : path.resolve(projectRoot, value);
 }
@@ -64,7 +70,7 @@ export const config = {
   dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',
   settlementContractsEnabled: process.env.SETTLEMENT_CONTRACTS_ENABLED === 'true',
   settlementDeploymentsFile: resolveProjectFile(
-    process.env.SETTLEMENT_DEPLOYMENTS_FILE || defaultSettlementDeploymentsFile,
+    process.env.SETTLEMENT_DEPLOYMENTS_FILE || defaultSettlementDeploymentsFileForNetwork(shelbyRuntime),
   ),
   quoteSignerPrivateKeyBase64: process.env.QUOTE_SIGNER_PRIVATE_KEY_B64 || '',
   quoteSignerPublicKeyHex: process.env.QUOTE_SIGNER_PUBLIC_KEY_HEX || '',

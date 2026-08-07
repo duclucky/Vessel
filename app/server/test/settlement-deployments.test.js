@@ -60,6 +60,24 @@ test('enabled settlement registry loads and freezes complete chain deployments',
   assert.equal(Object.isFrozen(result.aptos), true);
 });
 
+test('enabled settlement registry loads a ShelbyNet Aptos deployment without deleting Testnet', () => {
+  const manifest = validManifest();
+  manifest.environment = 'shelbynet';
+  manifest.aptos.chainId = 118;
+
+  const result = loadSettlementDeployments({
+    file: manifestFile(manifest),
+    quotePublicKey,
+    enabled: true,
+    environment: 'test',
+  });
+
+  assert.equal(result.enabled, true);
+  assert.equal(result.environment, 'shelbynet');
+  assert.equal(result.aptos.chainId, 118);
+  assert.equal(result.solana.cluster, 'devnet');
+});
+
 test('enabled settlement registry rejects undeployed or inconsistent records', () => {
   const invalid = [
     (value) => { value.aptos.moduleAddress = '0x0'; },
@@ -107,6 +125,9 @@ test('Vercel runtime manifest stays identical to the repository deployment recor
   const runtime = JSON.parse(readFileSync('deployments/vessel-settlement.testnet.json', 'utf8'));
   assert.deepEqual(runtime, repository);
   assert.deepEqual(bundledTestnetManifest, repository);
+  const shelbynetRepository = JSON.parse(readFileSync('../../deployments/vessel-settlement.shelbynet.json', 'utf8'));
+  const shelbynetRuntime = JSON.parse(readFileSync('deployments/vessel-settlement.shelbynet.json', 'utf8'));
+  assert.deepEqual(shelbynetRuntime, shelbynetRepository);
   const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
   const apiBuild = vercel.builds.find((build) => build.src === 'api/index.js');
   assert.ok(apiBuild.config.includeFiles.includes('deployments/**'));
