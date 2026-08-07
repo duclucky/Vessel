@@ -10,6 +10,7 @@ const DEFAULT_TTL_MS = 60 * 60_000;
 const ADDRESS = /^0x[0-9a-f]{64}$/i;
 const UPLOAD_ID = /^[A-Za-z0-9_-]{1,200}$/;
 const UINT_DECIMAL = /^[0-9]+$/;
+const HEX_BYTES = /^0x(?:[0-9a-f]{2})+$/i;
 
 const gatewayError = (message, code, status) => Object.assign(
   new Error(message),
@@ -18,6 +19,11 @@ const gatewayError = (message, code, status) => Object.assign(
 
 function normalizeWalletArgument(value) {
   if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'string' && HEX_BYTES.test(value)) {
+    const hex = value.slice(2);
+    return Array.from(hex.match(/../g), (byte) => Number.parseInt(byte, 16));
+  }
+  if (ArrayBuffer.isView(value)) return Array.from(value);
   if (Array.isArray(value)) return value.map((item) => normalizeWalletArgument(item));
   if (
     value
@@ -31,7 +37,36 @@ function normalizeWalletArgument(value) {
   ) {
     return normalizeWalletArgument(value.value);
   }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, normalizeWalletArgument(item)]),
+    );
+  }
   return value;
+}
+
+function storageAckSignature(value) {
+  if (ArrayBuffer.isView(value)) return new Uint8Array(value);
+  if (Array.isArray(value)) return Uint8Array.from(value);
+  if (typeof value === 'string' && HEX_BYTES.test(value)) {
+    return Uint8Array.from(value.slice(2).match(/../g), (byte) => Number.parseInt(byte, 16));
+  }
+  if (value && typeof value === 'object') {
+    const numericEntries = Object.entries(value)
+      .filter(([key]) => /^\d+$/.test(key))
+      .sort(([a], [b]) => Number(a) - Number(b));
+    if (numericEntries.length > 0) {
+      return Uint8Array.from(numericEntries.map(([, byte]) => Number(byte)));
+    }
+  }
+  throw gatewayError('Invalid storage provider acknowledgement signature', 'invalid_storage_ack', 400);
+}
+
+function normalizeStorageAcksForSdk(spAcks) {
+  return spAcks.map((ack) => ({
+    ...ack,
+    signature: storageAckSignature(ack?.signature),
+  }));
 }
 
 function normalizeWalletPayload(payload) {
@@ -211,7 +246,7 @@ export class ShelbyUploadGateway {
     });
     return Object.freeze({
       uploadedBytes: bytes.byteLength,
-      spAcks: result?.spAcks || [],
+      spAcks: normalizeWalletArgument(result?.spAcks || []),
     });
   }
 
@@ -225,7 +260,7 @@ export class ShelbyUploadGateway {
         uid: scope.registrationUid,
         blobName: scope.blobName,
         overwrite: true,
-        storageProviderAcks: spAcks,
+        storageProviderAcks: normalizeStorageAcksForSdk(spAcks),
       })),
     });
   }

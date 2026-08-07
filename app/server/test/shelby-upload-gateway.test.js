@@ -6,6 +6,7 @@ const SECRET = 'test-upload-secret-that-is-at-least-32-bytes';
 
 test('Shelby upload gateway keeps the private API key upstream and scopes every chunk', async () => {
   const uploads = [];
+  const storageSignature = Uint8Array.from({ length: 64 }, (_, index) => index);
   const gateway = new ShelbyUploadGateway({
     apiKey: 'server-only-key',
     rpcBaseUrl: 'https://api.testnet.shelby.xyz/shelby',
@@ -13,7 +14,7 @@ test('Shelby upload gateway keeps the private API key upstream and scopes every 
     rpcClient: {
       putBlobChunksets: async (args) => {
         uploads.push(args);
-        return { spAcks: [{ slot: 2, signature: 'sig-2' }] };
+        return { spAcks: [{ slot: 2, signature: storageSignature }] };
       },
     },
     createProvider: async () => ({ config: { erasure_n: 16, erasure_k: 10, chunkSizeBytes: 1 } }),
@@ -53,9 +54,10 @@ test('Shelby upload gateway keeps the private API key upstream and scopes every 
   assert.equal(uploads[0].accountAddress, `0x${'11'.repeat(32)}`);
   assert.equal(uploads[0].uid, '79234787875693568');
   assert.deepEqual([...uploads[0].blobData], [1, 2, 3]);
-  assert.deepEqual(uploaded.spAcks, [{ slot: 2, signature: 'sig-2' }]);
+  assert.deepEqual(uploaded.spAcks, [{ slot: 2, signature: Array.from(storageSignature) }]);
   assert.match(completed.commitPayload.function, /::blob_metadata::commit_object$/);
   assert.equal(typeof completed.commitPayload.functionArguments[4], 'number');
+  assert.deepEqual(completed.commitPayload.functionArguments[5][0], Array.from(storageSignature));
 });
 
 test('Shelby upload gateway rejects token replay and oversized chunks before upstream I/O', async () => {
