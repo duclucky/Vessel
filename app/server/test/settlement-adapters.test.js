@@ -102,3 +102,40 @@ test('registry rejects unsupported chains and raw RPC-shaped receipts', async ()
     transactionId: receiptFixture().transactionId,
   }));
 });
+
+test('registry accepts an EVM Sepolia settlement receipt from the selected adapter', async () => {
+  const evmQuote = Object.freeze({
+    ...contractQuote,
+    chain: 3,
+    network: 11155111,
+    payer: '0000000000000000000000001234567890abcdef1234567890abcdef12345678',
+    asset: 'ee'.repeat(32),
+    amount: '841',
+  });
+  const deploymentId = '0x1234567890abcdef1234567890abcdef12345678';
+  const transactionId = `0x${'ab'.repeat(32)}`;
+  const registry = new SettlementAdapterRegistry({
+    evm: {
+      deploymentId,
+      verify: async () => receiptFixture({
+        chain: 'evm',
+        network: 11155111,
+        deploymentId,
+        payer: evmQuote.payer,
+        asset: evmQuote.asset,
+        amount: evmQuote.amount,
+        transactionId,
+      }),
+    },
+  });
+
+  const receipt = await registry.verify({
+    chain: 'evm',
+    quote: { contractQuote: evmQuote },
+    transactionId,
+  });
+
+  assert.equal(receipt.chain, 'evm');
+  assert.equal(receipt.network, 11155111);
+  assert.equal(receipt.deploymentId, deploymentId);
+});

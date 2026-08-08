@@ -3,7 +3,7 @@ import {
   settlementReceiptError,
 } from './receipt.js';
 
-const CHAIN_NUMBER = Object.freeze({ aptos: 1, solana: 2 });
+const CHAIN_NUMBER = Object.freeze({ aptos: 1, solana: 2, evm: 3 });
 
 const expectedQuote = (quote) => quote?.contractQuote || quote;
 
@@ -12,6 +12,7 @@ export class SettlementAdapterRegistry {
     this.adapters = Object.freeze({
       aptos: adapters.aptos,
       solana: adapters.solana,
+      evm: adapters.evm,
     });
   }
 

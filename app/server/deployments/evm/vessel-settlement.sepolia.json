@@ -1,0 +1,11 @@
+{
+  "chainId": 11155111,
+  "contractAddress": "0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64",
+  "vaultAddress": "0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64",
+  "multisigAddress": "0xF670Ee2611Afb7633508B525bA43398C6fc898A8",
+  "acceptedAsset": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "deploymentTransaction": "0xab46bc0bec95ae028eaa5054b4614c700000ce2d2505b76799dd89bad280b2ad",
+  "deploymentBlock": 11446679,
+  "deployerAddress": "0xF670Ee2611Afb7633508B525bA43398C6fc898A8",
+  "timelockSeconds": 0
+}

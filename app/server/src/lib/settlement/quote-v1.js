@@ -41,7 +41,7 @@ export function normalizeQuoteV1(input = {}) {
 
   if (
     quote.version !== 1
-    || ![1, 2].includes(quote.chain)
+    || ![1, 2, 3].includes(quote.chain)
     || !Number.isSafeInteger(quote.network)
     || quote.network < 0
     || quote.network > 0xffff_ffff

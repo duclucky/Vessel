@@ -70,9 +70,9 @@ function copy(text) { navigator.clipboard?.writeText(text).then(() => toast('Cop
 
 function settlementExplorerUrl(chain, transactionId) {
   const id = encodeURIComponent(String(transactionId || ''));
-  return chain === 'aptos'
-    ? `https://explorer.aptoslabs.com/txn/${id}?network=testnet`
-    : `https://explorer.solana.com/tx/${id}?cluster=devnet`;
+  if (chain === 'aptos') return `https://explorer.aptoslabs.com/txn/${id}?network=testnet`;
+  if (chain === 'evm') return `https://sepolia.etherscan.io/tx/${id}`;
+  return `https://explorer.solana.com/tx/${id}?cluster=devnet`;
 }
 
 /* ------------------------------- wallet ------------------------------- */

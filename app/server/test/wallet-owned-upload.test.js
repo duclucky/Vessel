@@ -14,9 +14,11 @@ const file = Object.freeze({
 const sessionFor = (chain = 'aptos') => Object.freeze({
   chain,
   mode: chain === 'aptos' ? 'native' : 'daa',
-  sourceAddress: chain === 'aptos' ? `0x${'22'.repeat(32)}` : 'solana-wallet',
+  sourceAddress: chain === 'aptos'
+    ? `0x${'22'.repeat(32)}`
+    : chain === 'evm' ? '0x1234567890abcdef1234567890abcdef12345678' : 'solana-wallet',
   storageAddress: STORAGE,
-  walletName: chain === 'aptos' ? 'Petra' : 'Phantom',
+  walletName: chain === 'aptos' ? 'Petra' : chain === 'evm' ? 'MetaMask' : 'Phantom',
 });
 
 function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNetwork } = {}) {
@@ -45,7 +47,9 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
     contractSignature: 'signature',
     quotePublicKey: 'public-key',
     settlementDeployment: {
-      chain: chain === 'aptos' ? { moduleAddress: `0x${'44'.repeat(32)}` } : { programId: 'program' },
+      chain: chain === 'aptos'
+        ? { moduleAddress: `0x${'44'.repeat(32)}` }
+        : chain === 'evm' ? { contractAddress: '0x1234567890abcdef1234567890abcdef12345678' } : { programId: 'program' },
       configVersion: '1',
       quotePublicKey: 'public-key',
     },
@@ -54,6 +58,7 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
     getState: () => ({ status: 'ready', session }),
     getAptosSettlementClient: () => ({ chain: 'aptos' }),
     getSolanaSettlementClient: () => ({ chain: 'solana' }),
+    getEvmSettlementClient: () => ({ chain: 'evm' }),
     upload: async (_file, options) => {
       walletUploadCalls += 1;
       options.onCheckpoint('registered', { registerTransactionHash: 'register-tx' });
@@ -62,6 +67,7 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
         url: `https://example.test/api/shelby/blobs/${STORAGE}/media/${HASH}.json`,
         size: file.size,
         transactionHash: 'register-tx',
+        paymentMode: chain === 'evm' ? 'evm-sepolia' : chain === 'solana' ? 'solana-usdc' : 'native-aptos',
       };
     },
   };
@@ -196,6 +202,21 @@ test('Solana DAA routes through the Solana settlement client and wallet-owned up
   );
   assert.equal(result.account, STORAGE);
   assert.equal(result.paidUsdc, 0.01);
+  assert.equal(flow.settlementCalls, 1);
+  assert.equal(flow.walletUploadCalls, 1);
+});
+
+test('Ethereum DAA uses Sepolia settlement and sponsored ShelbyNet upload', async () => {
+  const flow = fixture({ chain: 'evm' });
+
+  const quoted = await flow.service.quote(file, { days: 30 });
+  const body = flow.requests.find((entry) => entry.path === '/api/quotes/upload').options.body;
+  const result = await flow.service.upload(await flow.service.validate(quoted));
+
+  assert.equal(body.chain, 'evm');
+  assert.equal(body.sourceNetwork, 'sepolia');
+  assert.equal(result.account, STORAGE);
+  assert.equal(result.paymentMode, 'evm-sepolia');
   assert.equal(flow.settlementCalls, 1);
   assert.equal(flow.walletUploadCalls, 1);
 });

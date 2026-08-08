@@ -63,8 +63,10 @@ export const config = {
   // Contract settlement uses the public testnet mint; no receiver key is held by the app.
   solanaRpc: process.env.SOLANA_RPC || 'https://api.devnet.solana.com',
   usdcMint: process.env.USDC_MINT || '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
+  evmRpc: process.env.EVM_RPC || process.env.SEPOLIA_RPC || 'https://ethereum-sepolia-rpc.publicnode.com',
   walletAptosEnabled: process.env.WALLET_APTOS_ENABLED !== 'false',
   walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
+  walletEvmEnabled: process.env.WALLET_EVM_ENABLED === 'true',
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
   dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',

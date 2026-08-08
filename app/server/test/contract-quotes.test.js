@@ -92,6 +92,47 @@ test('Solana quote collects the total accounting amount and expires after five m
   assert.equal(manager.verifySignature(result), true);
 });
 
+test('Ethereum DAA quote targets Sepolia settlement while storage stays on ShelbyNet', async () => {
+  const { privateKey, publicKey } = keys();
+  const manager = ContractQuoteManager.forTest({
+    privateKey,
+    publicKey,
+    now: () => 1_000_000n,
+    pricing: async () => breakdown,
+    evmAssetHex: 'ee'.repeat(32),
+    evmNetwork: 11155111,
+  });
+  const context = {
+    ...aptosContext,
+    chain: 'evm',
+    sourceNetwork: 'sepolia',
+    storageNetwork: 'shelbynet',
+    sourceAddress: '0x1234567890abcdef1234567890abcdef12345678',
+  };
+
+  const result = await manager.issueUpload(context);
+  const signedQuote = { context, breakdown };
+  const deployments = {
+    configVersion: '1',
+    aptos: { acceptedAsset: `0x${'44'.repeat(32)}` },
+    solana: { acceptedMint: bs58.encode(Buffer.from('66'.repeat(32), 'hex')) },
+    evm: { chainId: 11155111, acceptedAsset: `0x${'ee'.repeat(32)}` },
+  };
+
+  assert.equal(result.contractQuote.chain, 3);
+  assert.equal(result.contractQuote.network, 11155111);
+  assert.equal(result.contractQuote.payer, '0000000000000000000000001234567890abcdef1234567890abcdef12345678');
+  assert.equal(result.contractQuote.storageAddress, '33'.repeat(32));
+  assert.equal(result.contractQuote.asset, 'ee'.repeat(32));
+  assert.equal(result.contractQuote.amount, breakdown.serviceFeeAccountingMicro);
+  assert.equal(manager.verifySignature(result), true);
+  assert.doesNotThrow(() => assertContractQuoteMatchesContext(
+    result.contractQuote,
+    signedQuote,
+    deployments,
+  ));
+});
+
 test('precomputed contract quote reuses the server breakdown without another pricing read', async () => {
   const { privateKey, publicKey } = keys();
   let pricingCalls = 0;

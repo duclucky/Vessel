@@ -30,7 +30,9 @@ export function walletPresentation({
   }
   const connected = status === 'ready' && Boolean(session?.sourceAddress);
   const shortAddress = shortWallet(session?.sourceAddress || '');
-  const chainLabel = session?.mode === 'daa' ? 'SOLANA DAA' : 'APTOS';
+  const chainLabel = session?.chain === 'evm'
+    ? 'ETHEREUM DAA'
+    : session?.mode === 'daa' ? 'SOLANA DAA' : 'APTOS';
   return {
     connected,
     headerLabel: connected ? shortAddress : 'Connect',

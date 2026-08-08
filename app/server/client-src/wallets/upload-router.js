@@ -1,4 +1,4 @@
-export function createUploadRouter({ aptosUpload, solanaUpload }) {
+export function createUploadRouter({ aptosUpload, solanaUpload, evmUpload }) {
   return {
     async upload(file, context = {}) {
       const { session } = context;
@@ -8,6 +8,9 @@ export function createUploadRouter({ aptosUpload, solanaUpload }) {
       }
       if (session.chain === 'solana' && session.mode === 'daa') {
         return solanaUpload(file, context);
+      }
+      if (session.chain === 'evm' && session.mode === 'daa' && typeof evmUpload === 'function') {
+        return evmUpload(file, context);
       }
       throw new Error(`Uploads are unavailable for ${session.chain || 'this wallet'}`);
     },

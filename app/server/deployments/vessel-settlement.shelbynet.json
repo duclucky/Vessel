@@ -21,5 +21,14 @@
     "acceptedMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
     "deploymentSignature": "49KFbqx2eEUTMLfG7CGPvSvgswtu4ye2mJ1vxDmxPJwCSrKpGMK9ngdZqMChGzvhmKPYcen4pY1WFQZ3mE2SXAja",
     "timelockSeconds": 0
+  },
+  "evm": {
+    "chainId": 11155111,
+    "contractAddress": "0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64",
+    "vaultAddress": "0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64",
+    "multisigAddress": "0xF670Ee2611Afb7633508B525bA43398C6fc898A8",
+    "acceptedAsset": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "deploymentTransaction": "0xab46bc0bec95ae028eaa5054b4614c700000ce2d2505b76799dd89bad280b2ad",
+    "timelockSeconds": 0
   }
 }

@@ -4,6 +4,9 @@ import { createWalletController } from './wallets/session.js';
 import { createAptosAdapter } from './wallets/aptos-adapter.js';
 import { submitAptosContractSettlement } from './wallets/aptos-contract-settlement.js';
 import { resumeNativeBlobWrite, uploadNativeAptos } from './wallets/aptos-upload.js';
+import { createEvmDaaAdapter } from './wallets/evm-adapter.js';
+import { submitEvmContractSettlement } from './wallets/evm-contract-settlement.js';
+import { resumeEvmBlobWrite, uploadSponsoredEvm } from './wallets/evm-upload.js';
 import { createUploadRouter } from './wallets/upload-router.js';
 import { createSolanaDaaAdapter } from './wallets/solana-adapter.js';
 import { reconcileArtifacts } from './wallets/artifact-reconciler.js';
@@ -42,6 +45,13 @@ const availableRegistry = {
         adapters.set(wallet.id, (descriptor) => createSolanaDaaAdapter({
           descriptor,
           daaClient: window.VesselSolana,
+        }));
+        return wallet;
+      }
+      if (wallet.chain === 'evm' && wallet.enabled) {
+        adapters.set(wallet.id, (descriptor) => createEvmDaaAdapter({
+          descriptor,
+          domain: publicConfig.domain,
         }));
         return wallet;
       }
@@ -86,6 +96,11 @@ const uploadRouter = createUploadRouter({
       onCheckpoint: context.onCheckpoint,
     });
   },
+  evmUpload: (file, context) => uploadSponsoredEvm(file, {
+    ...context,
+    adapter: controller.getActiveAdapter(),
+    session: controller.getState().session,
+  }),
 });
 const { getActiveAdapter: _getActiveAdapter, ...publicController } = controller;
 
@@ -115,6 +130,16 @@ window.VesselWallets = {
       }),
     };
   },
+  getEvmSettlementClient(deployment) {
+    return {
+      submit: ({ contractQuote, contractSignature }) => submitEvmContractSettlement({
+        provider: controller.getActiveAdapter()?.provider,
+        deployment,
+        contractQuote,
+        contractSignature,
+      }),
+    };
+  },
   async listArtifacts() {
     const session = controller.getState().session;
     if (!session?.storageAddress) return [];
@@ -134,6 +159,22 @@ window.VesselWallets = {
     if (session.chain === 'aptos') {
       return resumeNativeBlobWrite(file, {
         session,
+        expectedFileHash: record.context.fileHash,
+        blobName: record.context.blobName,
+        quoteToken: record.quoteToken,
+        paidAuthorization: record.paidAuthorization,
+        uploadContext: record.context,
+        contractQuote: record.contractQuote,
+        contractSignature: record.contractSignature,
+        registrationUid: record.registrationUid,
+        registerTransactionHash: record.registerTransactionHash,
+        blobMerkleRoot: record.blobMerkleRoot,
+      });
+    }
+    if (session.chain === 'evm') {
+      return resumeEvmBlobWrite(file, {
+        session,
+        adapter: controller.getActiveAdapter(),
         expectedFileHash: record.context.fileHash,
         blobName: record.context.blobName,
         quoteToken: record.quoteToken,

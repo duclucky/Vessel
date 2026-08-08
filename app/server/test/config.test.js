@@ -42,7 +42,8 @@ test('public config exposes server-gated wallet families without secrets', () =>
   assert.match(config, /walletSolanaEnabled/);
   assert.match(server, /walletFamilies/);
   assert.match(publicConfigRoute, /shelbyWritesEnabled:\s*config\.shelbyWritesEnabled/);
-  assert.match(server, /evm:\s*false/);
+  assert.match(config, /walletEvmEnabled/);
+  assert.match(server, /evm:\s*config\.walletEvmEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*!!settlementDeployments\.evm/);
   assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*settlementDeployments\.enabled/);
   assert.doesNotMatch(publicConfigRoute, /gasStationApiKey:\s*config\.gasStationApiKey/);
   assert.doesNotMatch(publicConfigRoute, /paySecret:\s*config\.paySecret/);

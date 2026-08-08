@@ -9,8 +9,8 @@ import bs58 from 'bs58';
 import { normalizeUploadQuoteContext } from '../quotes.js';
 import { quoteDigest } from './quote-v1.js';
 
-const CHAIN = Object.freeze({ aptos: 1, solana: 2 });
-const DEFAULT_NETWORK = Object.freeze({ aptos: 2, solana: 1 });
+const CHAIN = Object.freeze({ aptos: 1, solana: 2, evm: 3 });
+const DEFAULT_NETWORK = Object.freeze({ aptos: 2, solana: 1, evm: 11155111 });
 const HEX_32 = /^[0-9a-f]{64}$/;
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 
@@ -40,6 +40,11 @@ function addressBytes32(value, chain) {
     if (decoded.length !== 32) throw new TypeError('Solana payer must be a 32-byte public key');
     return decoded.toString('hex');
   }
+  if (chain === 'evm') {
+    const text = String(value || '').replace(/^0x/, '').toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(text)) throw new TypeError('EVM payer must be a 20-byte address');
+    return text.padStart(64, '0');
+  }
 
   const text = String(value || '').replace(/^0x/, '').toLowerCase();
   if (!/^[0-9a-f]{1,64}$/.test(text)) throw new TypeError('Aptos address is invalid');
@@ -47,9 +52,9 @@ function addressBytes32(value, chain) {
 }
 
 function settlementAmount(chain, breakdown) {
-  return chain === 'aptos'
-    ? (BigInt(breakdown.serviceFeeAccountingMicro) * 100n).toString()
-    : String(breakdown.totalAccountingMicro);
+  if (chain === 'aptos') return (BigInt(breakdown.serviceFeeAccountingMicro) * 100n).toString();
+  if (chain === 'evm') return String(breakdown.serviceFeeAccountingMicro);
+  return String(breakdown.totalAccountingMicro);
 }
 
 function quoteContextError() {
@@ -65,10 +70,14 @@ export function assertContractQuoteMatchesContext(contractQuote, signedQuote, de
   const chain = CHAIN[context.chain];
   const network = context.chain === 'aptos'
     ? Number(deployments?.aptos?.chainId || DEFAULT_NETWORK.aptos)
-    : DEFAULT_NETWORK.solana;
+    : context.chain === 'evm'
+      ? Number(deployments?.evm?.chainId || DEFAULT_NETWORK.evm)
+      : DEFAULT_NETWORK.solana;
   const acceptedAsset = context.chain === 'aptos'
     ? addressBytes32(deployments?.aptos?.acceptedAsset, 'aptos')
-    : addressBytes32(deployments?.solana?.acceptedMint, 'solana');
+    : context.chain === 'evm'
+      ? normalizeAsset(deployments?.evm?.acceptedAsset, 'EVM accepted asset')
+      : addressBytes32(deployments?.solana?.acceptedMint, 'solana');
   const comparisons = [
     [Number(contractQuote?.chain), chain],
     [Number(contractQuote?.network), network],
@@ -129,7 +138,9 @@ export class ContractQuoteManager {
     priceUpload,
     aptosAssetHex,
     solanaMintHex,
+    evmAssetHex,
     aptosNetwork = DEFAULT_NETWORK.aptos,
+    evmNetwork = DEFAULT_NETWORK.evm,
     configVersion,
     now = Date.now,
     randomBytes = secureRandomBytes,
@@ -148,9 +159,14 @@ export class ContractQuoteManager {
     this.priceUpload = priceUpload;
     this.aptosAssetHex = normalizeAsset(aptosAssetHex, 'Aptos asset');
     this.solanaMintHex = normalizeAsset(solanaMintHex, 'Solana mint');
+    this.evmAssetHex = normalizeAsset(evmAssetHex || 'ee'.repeat(32), 'EVM asset');
     this.aptosNetwork = Number(aptosNetwork);
     if (!Number.isSafeInteger(this.aptosNetwork) || this.aptosNetwork <= 0) {
       throw new RangeError('aptosNetwork must be a positive chain ID');
+    }
+    this.evmNetwork = Number(evmNetwork);
+    if (!Number.isSafeInteger(this.evmNetwork) || this.evmNetwork <= 0) {
+      throw new RangeError('evmNetwork must be a positive chain ID');
     }
     this.configVersion = BigInt(configVersion);
     if (this.configVersion <= 0n) throw new RangeError('configVersion must be positive');
@@ -166,7 +182,9 @@ export class ContractQuoteManager {
     randomBytes,
     aptosAssetHex = '44'.repeat(32),
     solanaMintHex = '66'.repeat(32),
+    evmAssetHex = 'ee'.repeat(32),
     aptosNetwork = DEFAULT_NETWORK.aptos,
+    evmNetwork = DEFAULT_NETWORK.evm,
     configVersion = 1,
   }) {
     return new ContractQuoteManager({
@@ -177,7 +195,9 @@ export class ContractQuoteManager {
       randomBytes,
       aptosAssetHex,
       solanaMintHex,
+      evmAssetHex,
       aptosNetwork,
+      evmNetwork,
       configVersion,
     });
   }
@@ -198,11 +218,15 @@ export class ContractQuoteManager {
     const contractQuote = Object.freeze({
       version: 1,
       chain: CHAIN[uploadContext.chain],
-      network: uploadContext.chain === 'aptos' ? this.aptosNetwork : DEFAULT_NETWORK.solana,
+      network: uploadContext.chain === 'aptos'
+        ? this.aptosNetwork
+        : uploadContext.chain === 'evm' ? this.evmNetwork : DEFAULT_NETWORK.solana,
       quoteId: quoteId.toString('hex'),
       payer: addressBytes32(uploadContext.sourceAddress, uploadContext.chain),
       storageAddress: addressBytes32(uploadContext.storageAddress, 'aptos'),
-      asset: uploadContext.chain === 'aptos' ? this.aptosAssetHex : this.solanaMintHex,
+      asset: uploadContext.chain === 'aptos'
+        ? this.aptosAssetHex
+        : uploadContext.chain === 'evm' ? this.evmAssetHex : this.solanaMintHex,
       amount: settlementAmount(uploadContext.chain, breakdown),
       fileHash: uploadContext.fileHash,
       retentionDays: uploadContext.days,

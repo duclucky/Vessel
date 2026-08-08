@@ -38,7 +38,7 @@ test('QuoteV1 BCS bytes and digest remain stable', () => {
 test('QuoteV1 rejects non-canonical fields', () => {
   for (const patch of [
     { version: 2 },
-    { chain: 3 },
+    { chain: 4 },
     { network: -1 },
     { retentionDays: 0 },
     { retentionDays: 366 },

@@ -1,4 +1,4 @@
-const CHAINS = new Set(['aptos', 'solana']);
+const CHAINS = new Set(['aptos', 'solana', 'evm']);
 const HEX_32 = /^[0-9a-f]{64}$/;
 
 const receiptError = (message) => Object.assign(new Error(message), {

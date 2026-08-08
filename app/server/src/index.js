@@ -29,6 +29,7 @@ import { loadSettlementDeployments } from './lib/settlement/deployments.js';
 import { SettlementAdapterRegistry } from './lib/settlement/adapters.js';
 import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
 import { SolanaSettlementAdapter } from './lib/settlement/solana-adapter.js';
+import { EvmSettlementAdapter } from './lib/settlement/evm-adapter.js';
 import { publicNetworkDescriptor } from './lib/shelby-network.js';
 import {
   assertContractQuoteMatchesContext,
@@ -110,6 +111,8 @@ try {
       solanaMintHex: new PublicKey(settlementDeployments.solana.acceptedMint)
         .toBuffer()
         .toString('hex'),
+      evmAssetHex: settlementDeployments.evm?.acceptedAsset || 'ee'.repeat(32),
+      evmNetwork: settlementDeployments.evm?.chainId || 11155111,
       configVersion: settlementDeployments.configVersion,
     });
     settlementAdapters = new SettlementAdapterRegistry({
@@ -126,6 +129,13 @@ try {
         acceptedMint: settlementDeployments.solana.acceptedMint,
         network: 1,
       }),
+      ...(settlementDeployments.evm ? {
+        evm: new EvmSettlementAdapter({
+          rpcUrl: config.evmRpc,
+          contractAddress: settlementDeployments.evm.contractAddress,
+          network: settlementDeployments.evm.chainId,
+        }),
+      } : {}),
     });
   }
 } catch (error) {
@@ -570,6 +580,7 @@ app.get('/api/config', (_req, res) => {
       configVersion: settlementDeployments.configVersion,
       aptos: settlementDeployments.aptos,
       solana: settlementDeployments.solana,
+      ...(settlementDeployments.evm ? { evm: settlementDeployments.evm } : {}),
     } : { enabled: false },
     sponsored: !!sponsor
       && !!paidAuthorizations
@@ -581,7 +592,10 @@ app.get('/api/config', (_req, res) => {
         && !!sponsor
         && !!paidAuthorizations
         && settlementDeployments.enabled,
-      evm: false,
+      evm: config.walletEvmEnabled
+        && !!sponsor
+        && !!paidAuthorizations
+        && !!settlementDeployments.evm,
     },
     maxUploadBytes: config.maxUploadBytes,
   });
@@ -764,7 +778,7 @@ app.post('/api/settlements/verify', async (req, res) => {
       network: signedQuote.context.sourceNetwork,
       deploymentId: signedQuote.context.chain === 'aptos'
         ? `${chainDeployment.moduleAddress}::vessel_settlement`
-        : chainDeployment.programId,
+        : signedQuote.context.chain === 'evm' ? chainDeployment.contractAddress : chainDeployment.programId,
       wallet: signedQuote.context.sourceAddress,
       storageAddress: signedQuote.context.storageAddress,
       quoteId: contractQuote.quoteId,

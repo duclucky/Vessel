@@ -5,6 +5,7 @@ import bundledTestnetManifest from './bundled-testnet-manifest.js';
 
 const HEX_32 = /^[0-9a-f]{64}$/;
 const APTOS_ADDRESS = /^0x[0-9a-f]{64}$/;
+const EVM_ADDRESS = /^0x[0-9a-f]{40}$/;
 const SOLANA_BETA_TIMELOCK_SECONDS = 0;
 const APTOS_CHAIN_IDS = Object.freeze({
   testnet: 2,
@@ -23,6 +24,30 @@ function requiredAptosAddress(value, field) {
     throw deploymentError(`${field} must be a deployed Aptos address`);
   }
   return normalized;
+}
+
+function requiredEvmAddress(value, field) {
+  const normalized = String(value || '').toLowerCase();
+  if (!EVM_ADDRESS.test(normalized) || /^0x0+$/.test(normalized)) {
+    throw deploymentError(`${field} must be a deployed EVM address`);
+  }
+  return normalized;
+}
+
+function optionalEvmDeployment(value) {
+  if (!value) return null;
+  if (Number(value.chainId) !== 11155111) {
+    throw deploymentError('EVM deployment must use Sepolia chain ID 11155111');
+  }
+  return Object.freeze({
+    chainId: 11155111,
+    contractAddress: requiredEvmAddress(value.contractAddress, 'EVM contract address'),
+    vaultAddress: requiredEvmAddress(value.vaultAddress, 'EVM vault address'),
+    multisigAddress: requiredEvmAddress(value.multisigAddress, 'EVM multisig address'),
+    acceptedAsset: requiredHex32(value.acceptedAsset, 'EVM accepted asset'),
+    deploymentTransaction: requiredHex32(value.deploymentTransaction, 'EVM deployment transaction'),
+    timelockSeconds: Number(value.timelockSeconds || 0),
+  });
 }
 
 function requiredSolanaKey(value, field) {
@@ -138,6 +163,7 @@ export function loadSettlementDeployments({
     ),
     timelockSeconds: requireTimelock(manifest.solana.timelockSeconds, 'Solana timelock'),
   });
+  const evm = optionalEvmDeployment(manifest.evm);
 
   return Object.freeze({
     enabled: true,
@@ -146,5 +172,6 @@ export function loadSettlementDeployments({
     configVersion: configVersion.toString(),
     aptos,
     solana,
+    ...(evm ? { evm } : {}),
   });
 }

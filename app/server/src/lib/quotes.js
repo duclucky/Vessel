@@ -5,7 +5,7 @@ const QUOTE_PREFIX = 'vquote';
 const QUOTE_TTL_MS = 5 * 60_000;
 const RETENTION_DAY_MS = 86_400_000;
 const HEX_64 = /^[0-9a-f]{64}$/;
-const CHAINS = new Set(['aptos', 'solana']);
+const CHAINS = new Set(['aptos', 'solana', 'evm']);
 
 const quoteError = (message, code = 'invalid_quote', status = 400) => Object.assign(
   new Error(message),
@@ -48,7 +48,9 @@ export function normalizeUploadQuoteContext(input = {}) {
   const days = normalizeRetentionDays(input.days);
   const expirationMicros = safePositiveInteger(input.expirationMicros, 'expirationMicros');
   const sourceNetwork = requiredText(
-    input.sourceNetwork || (chain === 'aptos' ? 'aptos-testnet' : 'solana-devnet'),
+    input.sourceNetwork || (chain === 'aptos'
+      ? 'aptos-testnet'
+      : chain === 'evm' ? 'sepolia' : 'solana-devnet'),
     'sourceNetwork',
   );
 
@@ -74,6 +76,7 @@ const decode = (value) => Buffer.from(value, 'base64url').toString('utf8');
 const canonicalContext = (context) => JSON.stringify(normalizeUploadQuoteContext(context));
 const settlementNetworkName = (context) => {
   if (context.chain === 'solana') return 'Solana Devnet';
+  if (context.chain === 'evm') return 'Ethereum Sepolia';
   return String(context.sourceNetwork || '').toLowerCase() === 'shelbynet'
     ? 'ShelbyNet'
     : 'Aptos Testnet';
@@ -118,6 +121,7 @@ function payloadToContext(payload) {
 function publicQuote({ token, payload, context }) {
   const breakdown = payload.br;
   const aptos = context.chain === 'aptos';
+  const solana = context.chain === 'solana';
   const serviceFeeUnits = (BigInt(breakdown.serviceFeeAccountingMicro) * 100n).toString();
   return Object.freeze({
     quoteId: payload.qid,
@@ -139,9 +143,10 @@ function publicQuote({ token, payload, context }) {
     issuedAtMs: payload.iat,
     expiresAtMs: payload.exp,
     serverTimeMs: Math.trunc(context.expirationMicros / 1_000) - context.days * RETENTION_DAY_MS,
-    settlementToken: aptos ? 'APT + ShelbyUSD' : 'Devnet USDC',
+    settlementToken: aptos ? 'APT + ShelbyUSD' : solana ? 'Devnet USDC' : 'Sepolia ETH',
     settlementNetwork: settlementNetworkName(context),
-    solanaAmountMicro: aptos ? '0' : breakdown.totalAccountingMicro,
+    solanaAmountMicro: solana ? breakdown.totalAccountingMicro : '0',
+    evmAmountWei: context.chain === 'evm' ? breakdown.serviceFeeAccountingMicro : '0',
     nativeServiceFeeShelbyUsdUnits: aptos ? serviceFeeUnits : '0',
     notice: 'Test tokens — no real monetary value',
     ...breakdown,

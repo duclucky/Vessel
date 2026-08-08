@@ -22,7 +22,11 @@ export class MockProvider {
     const existing = this.store.get(key);
     if (existing && existing.sha !== sha) throw new OverwriteConflictError();
     const contentType = opts.contentType || 'application/octet-stream';
-    const expiresAt = Date.now() + (opts.expiresInSec ?? 7 * 24 * 3600) * 1000;
+    const expiresInSec = Number(opts.expiresInSec);
+    if (!Number.isSafeInteger(expiresInSec) || expiresInSec <= 0) {
+      throw new TypeError('expiresInSec is required for hot storage');
+    }
+    const expiresAt = Date.now() + expiresInSec * 1000;
     this.store.set(key, { data, contentType, createdAt: Date.now(), expiresAt, owner: opts.owner, sha });
     return { key, url: this.urlFor(key), size: data.length, contentType, etag: sha, expiresAt };
   }

@@ -58,6 +58,7 @@ function sourceNetworkFor(session, config) {
       || session.sourceNetwork
       || 'aptos-testnet';
   }
+  if (session.chain === 'evm') return 'sepolia';
   return 'solana-devnet';
 }
 
@@ -272,7 +273,9 @@ export function createWalletOwnedUploadService({
       if (!deployment) throw uploadError('Vessel settlement contract is not configured', 'settlement_unavailable');
       const chainClient = session.chain === 'aptos'
         ? controllerInstance.getAptosSettlementClient(deployment)
-        : controllerInstance.getSolanaSettlementClient(deployment);
+        : session.chain === 'evm'
+          ? controllerInstance.getEvmSettlementClient(deployment)
+          : controllerInstance.getSolanaSettlementClient(deployment);
       const verified = await settleContractQuote({
         quote: {
           ...validated.quote,
@@ -307,7 +310,8 @@ export function createWalletOwnedUploadService({
     const isAptos = session.chain === 'aptos' && session.mode === 'native';
     const solana = getSolana?.();
     const isSolana = session.chain === 'solana' && solana?.available?.() && config.sponsored;
-    if (!isAptos && !isSolana) {
+    const isEvm = session.chain === 'evm' && session.mode === 'daa' && config.sponsored;
+    if (!isAptos && !isSolana && !isEvm) {
       throw uploadError(`Uploads are unavailable for ${session.walletName || session.chain}`, 'upload_unavailable');
     }
     callbacks.onStep?.(isAptos ? 'encoding' : 'signing');
@@ -340,6 +344,7 @@ export function createWalletOwnedUploadService({
         ownedByYou: true,
         account: session.storageAddress,
         ...(isSolana ? { paidUsdc: Number(validated.quote.solanaAmountMicro) / 1_000_000 } : {}),
+        ...(isEvm ? { paidWei: String(validated.quote.evmAmountWei || '0') } : {}),
         settlementHash: settlement.settlementHash,
         quotedAccountingMicro: validated.quote.totalAccountingMicro,
         storageCostAccountingMicro: validated.quote.storageAccountingMicro,

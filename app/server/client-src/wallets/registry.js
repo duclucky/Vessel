@@ -24,7 +24,6 @@ const idFor = (chain, wallet) => `${chain}:${wallet.name}:${wallet.version || '1
 
 export function applyFamilyCapabilities(wallets, families = {}) {
   return wallets.map((wallet) => {
-    if (wallet.chain === 'evm') return wallet;
     if (!families[wallet.chain]) {
       return { ...wallet, enabled: false, status: 'unavailable' };
     }
@@ -85,9 +84,9 @@ export function createWalletRegistry({ aptosSource, standardSource, eventTarget 
       icon: info.icon,
       chain: 'evm',
       installed: true,
-      enabled: false,
-      status: 'beta',
-      capabilities: [],
+      enabled: true,
+      status: 'ready',
+      capabilities: ['eip6963:provider', 'eth_requestAccounts', 'personal_sign'],
       provider,
     }));
 

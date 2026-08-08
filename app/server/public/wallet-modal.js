@@ -3,6 +3,7 @@ const GROUP_LABELS = {
   solana: 'SOLANA',
   evm: 'EVM · BETA',
 };
+GROUP_LABELS.evm = 'ETHEREUM SEPOLIA';
 
 const focusable = (root) => [
   ...root.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'),
@@ -73,7 +74,7 @@ export function mountWalletUi({ controller, document }) {
         <div><p class="vessel-kicker wallet-dialog-kicker">Wallet identity</p><h2 id="wallet-dialog-title">Connect a wallet</h2></div>
         <button type="button" class="wallet-icon-button" data-wallet-close aria-label="Close wallet dialog">×</button>
       </header>
-      <p class="wallet-dialog-copy">Choose an installed wallet. Aptos and Solana identities remain separate.</p>
+      <p class="wallet-dialog-copy">Choose an installed wallet. Aptos, Solana, and Ethereum DAA identities remain separate.</p>
       <p id="wallet-dialog-error" class="wallet-dialog-error" aria-live="polite"></p>
       <div id="wallet-groups" class="wallet-groups"></div>
       <button type="button" data-wallet-rescan class="vessel-button vessel-button-secondary wallet-rescan">SCAN AGAIN</button>
@@ -154,13 +155,13 @@ export function mountWalletUi({ controller, document }) {
     }
 
     const hasReadyWallet = wallets.some(
-      (wallet) => wallet.enabled && (wallet.chain === 'aptos' || wallet.chain === 'solana'),
+      (wallet) => wallet.enabled && (wallet.chain === 'aptos' || wallet.chain === 'solana' || wallet.chain === 'evm'),
     );
     if (!hasReadyWallet) {
       const empty = document.createElement('aside');
       empty.className = 'wallet-install-help';
       const copy = document.createElement('p');
-      copy.textContent = 'No supported Aptos or Solana wallet is ready.';
+      copy.textContent = 'No supported Aptos, Solana, or Ethereum wallet is ready.';
       const petra = document.createElement('a');
       petra.href = 'https://petra.app/';
       petra.target = '_blank';
@@ -207,6 +208,9 @@ export function mountWalletUi({ controller, document }) {
     header.className = 'wallet-account-header';
     const heading = document.createElement('h2');
     heading.textContent = `${session.walletName} · ${session.mode === 'daa' ? 'SOLANA DAA' : 'APTOS'}`;
+    heading.textContent = `${session.walletName} · ${
+      session.chain === 'evm' ? 'ETHEREUM DAA' : session.mode === 'daa' ? 'SOLANA DAA' : 'APTOS'
+    }`;
     const closeAccountButton = document.createElement('button');
     closeAccountButton.type = 'button';
     closeAccountButton.className = 'wallet-icon-button';

@@ -65,7 +65,7 @@ test('a multi-chain extension appears once in Aptos and once in Solana', async (
   ]);
 });
 
-test('EIP-6963 providers are visible but disabled Beta', async () => {
+test('EIP-6963 providers are ready when the EVM family is enabled', async () => {
   const target = eventTarget();
   const registry = createWalletRegistry({
     aptosSource: { get: () => [], on: () => () => {} },
@@ -88,8 +88,8 @@ test('EIP-6963 providers are visible but disabled Beta', async () => {
   const rows = await registry.scan();
 
   assert.equal(rows[0].chain, 'evm');
-  assert.equal(rows[0].enabled, false);
-  assert.equal(rows[0].status, 'beta');
+  assert.equal(rows[0].enabled, true);
+  assert.equal(rows[0].status, 'ready');
 });
 
 test('Solana providers without legacy transaction support are incompatible', async () => {
@@ -118,12 +118,12 @@ test('server family flags can disable a discovered wallet without hiding it', ()
   const rows = applyFamilyCapabilities([
     { id: 'aptos:petra', chain: 'aptos', enabled: true, status: 'ready' },
     { id: 'solana:phantom', chain: 'solana', enabled: true, status: 'ready' },
-    { id: 'evm:beta', chain: 'evm', enabled: false, status: 'beta' },
+    { id: 'evm:metamask', chain: 'evm', enabled: true, status: 'ready' },
   ], { aptos: false, solana: true, evm: false });
 
   assert.deepEqual(rows.map(({ enabled, status }) => ({ enabled, status })), [
     { enabled: false, status: 'unavailable' },
     { enabled: true, status: 'ready' },
-    { enabled: false, status: 'beta' },
+    { enabled: false, status: 'unavailable' },
   ]);
 });

@@ -55,12 +55,16 @@ export class ShelbyProvider {
 
   async put(key, data, opts = {}) {
     const contentType = opts.contentType || mimeForKey(key);
-    const expirationMicros = Date.now() * 1000 + (opts.expiresInSec ?? 7 * 24 * 3600) * 1_000_000;
+    const expiresInSec = Number(opts.expiresInSec);
+    if (!Number.isSafeInteger(expiresInSec) || expiresInSec <= 0) {
+      throw new TypeError('expiresInSec is required for hot storage');
+    }
+    const expirationMicros = Date.now() * 1000 + expiresInSec * 1_000_000;
     let lastErr;
     for (let attempt = 1; attempt <= 5; attempt++) {
       try {
         await this.client.upload({ blobData: data, signer: this.account, blobName: key, expirationMicros });
-        break; // testnet contract: no location arg
+        break; // SDK upload API owns network-specific registration details.
       } catch (e) {
         const msg = String(e?.message || e);
         if (isBlobAlreadyExistsError?.(msg)) break;

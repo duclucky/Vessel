@@ -4,7 +4,7 @@ import { normalizeSettlementReceipt } from './settlement/receipt.js';
 
 const PREFIX = 'vpaid';
 const TTL_MS = 24 * 60 * 60_000;
-const CHAIN_NUMBER = Object.freeze({ aptos: 1, solana: 2 });
+const CHAIN_NUMBER = Object.freeze({ aptos: 1, solana: 2, evm: 3 });
 
 const paidError = (message, code = 'invalid_paid_authorization', status = 401) => Object.assign(
   new Error(message),
@@ -105,7 +105,7 @@ export class PaidAuthorizationManager {
     );
     const chain = String(settlementChain || '');
     const hash = String(settlementHash || '');
-    if (!['solana', 'aptos'].includes(chain) || !hash) {
+    if (!['solana', 'aptos', 'evm'].includes(chain) || !hash) {
       throw paidError('Settlement chain and hash are required', 'invalid_settlement', 400);
     }
     const issuedAtMs = this.now();
