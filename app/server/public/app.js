@@ -342,6 +342,44 @@ function initUpload() {
       ? `${(bytes / 1073741824).toFixed(2)} GB`
       : `${(bytes / 1048576).toFixed(2)} MB`
   );
+  const waitForBatchReceiptFinality = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function findUploadRecoveryRecordForFile(file) {
+    const session = walletController().getState().session;
+    if (!session || !file) return null;
+    const fileHash = await sha256FileHex(file);
+    const blobName = contentAddressedBlobName(file, fileHash);
+    return recovery.loadForWallet(session).find((record) => (
+      record.context?.fileHash === fileHash
+      && record.context?.blobName === blobName
+      && !['quoted', 'active'].includes(record.stage)
+    )) || null;
+  }
+
+  async function resumePendingBatchUpload(file, recoveryRecord, item) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      renderBatchState({ phase: 'receiptPending', item });
+      if (attempt > 0) await waitForBatchReceiptFinality(Math.min(1200 + attempt * 700, 4000));
+      try {
+        const result = await walletOwnedUpload.resume(file, recoveryRecord, {
+          signal: pendingWalletWork.signal,
+          onStep: setStep,
+        });
+        activeUploadContext = null;
+        $('#upload-recovery')?.remove();
+        return result;
+      } catch (error) {
+        if (error?.code !== 'receipt_pending') throw error;
+        lastError = error;
+        recoveryRecord = await findUploadRecoveryRecordForFile(file) || recoveryRecord;
+      }
+    }
+    throw Object.assign(
+      new Error('Settlement receipt is still finalizing. No second payment is required. Use Check Payment Status or retry this batch later.'),
+      { code: 'receipt_pending', retriable: true, cause: lastError },
+    );
+  }
 
   function renderBatchState({ phase = 'ready', item = null, error = null } = {}) {
     if (!batchQueue || !batchSummary) return;
@@ -364,6 +402,8 @@ function initUpload() {
     if (batchStatus) {
       batchStatus.textContent = phase === 'uploading'
         ? 'Keep this tab open. Complete each wallet approval as it appears.'
+        : phase === 'receiptPending'
+          ? 'Contract receipt is finalizing. Vessel is checking automatically. No second payment is required.'
         : phase === 'complete'
           ? `Batch complete. ${summary.succeeded} files are active on Shelby.`
           : phase === 'failed'
@@ -438,6 +478,13 @@ function initUpload() {
     selectedFile = item.file;
     if (selectedName) selectedName.textContent = item.relativePath;
     if (selectedDetails) selectedDetails.textContent = `${formatBytes(item.size)} · batch item`;
+    const recoveryRecord = await findUploadRecoveryRecordForFile(item.file);
+    if (recoveryRecord) {
+      const resumed = await resumePendingBatchUpload(item.file, recoveryRecord, item);
+      const result = Object.freeze({ ...resumed, sourcePath: item.relativePath });
+      ledger.commitUpload(result);
+      return result;
+    }
     let current = activeUploadContext?.file === item.file ? activeUploadContext : null;
     if (!current || Date.now() >= current.quote.expiresAtMs) current = await requestQuote(item.file);
     if (!current) throw Object.assign(new Error('A signed quote could not be prepared'), { code: 'quote_unavailable' });
@@ -457,8 +504,15 @@ function initUpload() {
     }
 
     const outcome = await doUpload(item.file, validated.context);
-    if (!outcome?.ok) throw outcome?.error || new Error('Upload did not complete');
-    const result = Object.freeze({ ...outcome.result, sourcePath: item.relativePath });
+    let uploaded = outcome?.result;
+    if (!outcome?.ok && outcome.error?.code === 'receipt_pending') {
+      const pendingRecord = await findUploadRecoveryRecordForFile(item.file);
+      if (!pendingRecord) throw outcome.error;
+      uploaded = await resumePendingBatchUpload(item.file, pendingRecord, item);
+    } else if (!outcome?.ok) {
+      throw outcome?.error || new Error('Upload did not complete');
+    }
+    const result = Object.freeze({ ...uploaded, sourcePath: item.relativePath });
     ledger.commitUpload(result);
     return result;
   }

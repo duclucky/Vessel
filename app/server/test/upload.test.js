@@ -178,6 +178,20 @@ test('folder uploads run through the existing quote and settlement path sequenti
   assert.match(source, /batchQueue\.retryFailed\(\)/);
 });
 
+test('folder uploads auto-resume pending settlement receipts without failing the batch item', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const uploadStart = source.indexOf('function initUpload()');
+  const uploadEnd = source.indexOf('function initGallery()', uploadStart);
+  const upload = source.slice(uploadStart, uploadEnd);
+
+  assert.match(upload, /function findUploadRecoveryRecordForFile/);
+  assert.match(upload, /async function resumePendingBatchUpload/);
+  assert.match(upload, /outcome\.error\?\.code === 'receipt_pending'/);
+  assert.match(upload, /walletOwnedUpload\.resume\(file, recoveryRecord/);
+  assert.match(upload, /phase: 'receiptPending'/);
+  assert.match(upload, /No second payment/);
+});
+
 test('batch progress uses the Vessel palette in Chromium and Firefox', () => {
   const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
   assert.match(css, /#batch-progress\s*\{/);
