@@ -1181,6 +1181,8 @@ function animate(el, from, to, dur) {
 async function initMetadata() {
   let cfg = {};
   try { cfg = await api('/api/config'); } catch (error) { toast(error.message, 'warn'); }
+  const waitForReceiptFinality = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
   async function loadMetadataCollections() {
     const controller = walletController();
     const state = controller?.getState?.();
@@ -1200,6 +1202,52 @@ async function initMetadata() {
       now: Date.now(),
     });
   }
+
+  function findMetadataRecoveryRecord(session, fileHash, blobName) {
+    if (!session || !fileHash) return null;
+    return recovery.loadForWallet(session).find((record) => (
+      record.context?.fileHash === fileHash
+      && (!blobName || record.context?.blobName === blobName)
+      && !['quoted', 'active'].includes(record.stage)
+    )) || null;
+  }
+
+  async function resumePendingMetadataReceipt(file, record, {
+    session,
+    fileHash,
+    blobName,
+    index,
+    total,
+    path,
+    onUpdate,
+  } = {}) {
+    let recoveryRecord = record;
+    let lastError = null;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      onUpdate?.({
+        phase: 'receiptPending',
+        index,
+        total,
+        path,
+        attempt: attempt + 1,
+      });
+      await waitForReceiptFinality(Math.min(1200 + attempt * 700, 4000));
+      try {
+        return await walletOwnedUpload.resume(file, recoveryRecord, {
+          onStep: (step) => onUpdate?.({ phase: step, index, total, path }),
+        });
+      } catch (error) {
+        if (error?.code !== 'receipt_pending') throw error;
+        lastError = error;
+        recoveryRecord = findMetadataRecoveryRecord(session, fileHash, blobName) || recoveryRecord;
+      }
+    }
+    throw Object.assign(
+      new Error('Settlement receipt is still finalizing. No second settlement will be requested. Wait a moment, then host this TokenURI again to resume.'),
+      { code: 'receipt_pending', retriable: true, cause: lastError },
+    );
+  }
+
   async function hostMetadataFiles(files, { days, sourcePath, sourcePaths, onUpdate } = {}) {
     const results = [];
     for (let index = 0; index < files.length; index += 1) {
@@ -1219,13 +1267,17 @@ async function initMetadata() {
         onUpdate?.({ phase: 'succeeded', index, total: files.length, path, result: existing });
         continue;
       }
-      const recoveryRecord = session && recovery.loadForWallet(session).find((record) => (
-        record.context?.fileHash === fileHash && !['quoted', 'active'].includes(record.stage)
-      ));
+      const recoveryRecord = findMetadataRecoveryRecord(session, fileHash, blobName);
       if (recoveryRecord) {
         onUpdate?.({ phase: 'resuming', index, total: files.length, path });
-        const resumed = await walletOwnedUpload.resume(file, recoveryRecord, {
-          onStep: (step) => onUpdate?.({ phase: step, index, total: files.length, path }),
+        const resumed = await resumePendingMetadataReceipt(file, recoveryRecord, {
+          session,
+          fileHash,
+          blobName,
+          index,
+          total: files.length,
+          path,
+          onUpdate,
         });
         const result = Object.freeze({ ...resumed, sourcePath: path });
         ledger.commitUpload(result);
@@ -1261,9 +1313,25 @@ async function initMetadata() {
         validated = Object.freeze({ ...quoted, requiresConfirmation: false });
       }
       onUpdate?.({ phase: 'uploading', index, total: files.length, path });
-      const hosted = await walletOwnedUpload.upload(validated, {
-        onStep: (step) => onUpdate?.({ phase: step, index, total: files.length, path }),
-      });
+      let hosted;
+      try {
+        hosted = await walletOwnedUpload.upload(validated, {
+          onStep: (step) => onUpdate?.({ phase: step, index, total: files.length, path }),
+        });
+      } catch (error) {
+        if (error?.code !== 'receipt_pending') throw error;
+        const pendingRecord = findMetadataRecoveryRecord(session, fileHash, blobName);
+        if (!pendingRecord) throw error;
+        hosted = await resumePendingMetadataReceipt(file, pendingRecord, {
+          session,
+          fileHash,
+          blobName,
+          index,
+          total: files.length,
+          path,
+          onUpdate,
+        });
+      }
       const result = Object.freeze({ ...hosted, sourcePath: path });
       ledger.commitUpload(result);
       results.push(result);

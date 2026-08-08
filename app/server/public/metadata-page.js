@@ -386,6 +386,27 @@ export function initMetadataPage({
     return { metadata, validation, ready };
   }
 
+  function renderSingleHostingProgress(update = {}) {
+    if (!element.singleValidation) return;
+    if (update.phase === 'receiptPending') {
+      element.singleValidation.dataset.state = 'pending';
+      element.singleValidation.textContent = 'Settlement receipt is reaching finality. Vessel is checking it automatically; do not approve again.';
+      return;
+    }
+    if (update.phase === 'resuming') {
+      element.singleValidation.dataset.state = 'pending';
+      element.singleValidation.textContent = 'Resuming the submitted settlement receipt. No new wallet approval is required.';
+      return;
+    }
+    if (update.phase === 'succeeded') {
+      element.singleValidation.dataset.state = 'valid';
+      element.singleValidation.textContent = 'TokenURI hosted. Copy it below or open the proof from Gallery.';
+      return;
+    }
+    element.singleValidation.dataset.state = 'loading';
+    element.singleValidation.textContent = 'Hosting TokenURI metadata through your wallet-owned Shelby identity.';
+  }
+
   function makeTraitRow(trait) {
     const row = document.createElement('div');
     row.className = 'metadata-trait-row';
@@ -711,6 +732,7 @@ export function initMetadataPage({
       const results = await hostFiles([file], {
         days: Number(element.singleDays?.value || 30),
         sourcePath: file.name,
+        onUpdate: renderSingleHostingProgress,
       });
       const result = Array.isArray(results) ? results[0] : results;
       const tokenUri = result?.url || result?.tokenUri;

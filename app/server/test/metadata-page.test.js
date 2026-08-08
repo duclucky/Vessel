@@ -65,6 +65,32 @@ test('single hosting serializes canonical JSON and delegates to wallet-owned upl
   assert.doesNotMatch(app, /api\('\/api\/metadata/);
 });
 
+test('single metadata hosting shows receipt finality progress instead of raw pending toast', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  const singleStart = source.indexOf('async function hostSingle()');
+  const singleEnd = source.indexOf('async function hostBatch()', singleStart);
+  const single = source.slice(singleStart, singleEnd);
+
+  assert.match(source, /function renderSingleHostingProgress/);
+  assert.match(single, /onUpdate:\s*renderSingleHostingProgress/);
+  assert.match(source, /Vessel is checking it automatically/);
+  assert.match(source, /do not approve again/);
+});
+
+test('metadata hosting auto-resumes pending settlement receipts without another approval', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const metadataStart = source.indexOf('async function initMetadata()');
+  const metadataEnd = source.indexOf('const metadataPage = initMetadataPage', metadataStart);
+  const metadata = source.slice(metadataStart, metadataEnd);
+
+  assert.match(metadata, /function findMetadataRecoveryRecord/);
+  assert.match(metadata, /async function resumePendingMetadataReceipt/);
+  assert.equal(metadata.includes("error?.code !== 'receipt_pending'"), true);
+  assert.match(metadata, /walletOwnedUpload\.resume\(file, recoveryRecord/);
+  assert.match(metadata, /No second settlement/);
+  assert.match(metadata, /phase: 'receiptPending'/);
+});
+
 test('single hosting keeps local download enabled while writes are paused', () => {
   const source = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
   assert.match(source, /singleHost\.disabled = isHosting \|\| !\(canHost && walletReady && singleValid\)/);
