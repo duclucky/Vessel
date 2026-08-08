@@ -16,8 +16,8 @@ test('README describes the deployed product and current network availability', (
     'ShelbyNet',
     'Aptos Testnet is implemented',
     'browser-local Vault history',
-    'Aptos Move contract',
-    'Solana Program',
+    'Aptos Move fee contract',
+    'Solana fee program',
     'canonical NFT metadata',
     'batch collection',
     'mainnet readiness',
@@ -32,7 +32,10 @@ test('README describes the deployed product and current network availability', (
 test('README documents the current one percent Vessel fee policy', () => {
   assert.match(readme, /1% Vessel service fee/i);
   assert.match(readme, /USD 0\.01 minimum/i);
+  assert.match(readme, /source-chain Vessel charge/i);
+  assert.match(readme, /sponsored ShelbyNet gas/i);
   assert.doesNotMatch(readme, /2% Vessel service fee/i);
+  assert.doesNotMatch(readme, /holds only the Vessel service fee/i);
 });
 
 test('README exposes current testnet deployments and verification commands', () => {

@@ -55,12 +55,12 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   }
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Wallet-owned upload/i);
-  assert.match(html, /Vessel contract fee/i);
+  assert.match(html, /source-chain Vessel charge/i);
   assert.match(html, /Vessel service fee \(1%\)/i);
-  assert.match(html, /APT \+ ShelbyUSD protocol costs/i);
-  assert.match(html, /Solana wallets use sponsored DAA/i);
-  assert.match(html, /testnet USDC/i);
-  assert.match(html, /Vessel Program vault/i);
+  assert.match(html, /Shelby storage cost/i);
+  assert.match(html, /sponsored ShelbyNet gas/i);
+  assert.match(html, /Vessel fee receipt/i);
+  assert.doesNotMatch(html, /Aptos sends the Vessel contract fee/i);
   assert.match(html, /Test tokens — no real monetary value/);
   assert.match(html, /role="radiogroup"[^>]*aria-labelledby="retention-title"/);
   assert.match(html, /id="custom-days"[^>]*min="1"[^>]*max="365"[^>]*step="1"/);
@@ -88,7 +88,7 @@ test('Upload routes through wallet sessions without funding links or server-mana
   assert.match(service, /getAptosSettlementClient/);
   assert.match(service, /getSolanaSettlementClient/);
   assert.match(source, /settlementTransactionId/);
-  assert.match(source, /CHECK PAYMENT STATUS/);
+  assert.match(source, /CHECK FEE RECEIPT/);
   assert.doesNotMatch(source, /settleQuote\(\{/);
   assert.doesNotMatch(source, /VERIFYING USDC|treasury wallet|direct transfer/i);
   assert.doesNotMatch(source, /\/api\/upload/);
@@ -183,7 +183,7 @@ test('folder uploads run through the existing quote and settlement path sequenti
   assert.match(source, /batchQueue\.retryFailed\(\)/);
 });
 
-test('folder uploads auto-resume pending settlement receipts without failing the batch item', () => {
+test('folder uploads auto-resume pending Vessel fee receipts without failing the batch item', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const uploadStart = source.indexOf('function initUpload()');
   const uploadEnd = source.indexOf('function initGallery()', uploadStart);

@@ -75,9 +75,12 @@ test('single metadata hosting shows receipt finality progress instead of raw pen
   assert.match(single, /onUpdate:\s*renderSingleHostingProgress/);
   assert.match(source, /Vessel is checking it automatically/);
   assert.match(source, /do not approve again/);
+  assert.match(source, /Vessel fee receipt/);
+  assert.doesNotMatch(source, /Vessel settlement receipt/);
+  assert.doesNotMatch(source, /No second settlement/);
 });
 
-test('metadata hosting auto-resumes pending settlement receipts without another approval', () => {
+test('metadata hosting auto-resumes pending Vessel fee receipts without another approval', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const metadataStart = source.indexOf('async function initMetadata()');
   const metadataEnd = source.indexOf('const metadataPage = initMetadataPage', metadataStart);
@@ -87,7 +90,7 @@ test('metadata hosting auto-resumes pending settlement receipts without another 
   assert.match(metadata, /async function resumePendingMetadataReceipt/);
   assert.equal(metadata.includes("error?.code !== 'receipt_pending'"), true);
   assert.match(metadata, /walletOwnedUpload\.resume\(file, recoveryRecord/);
-  assert.match(metadata, /No second settlement/);
+  assert.match(metadata, /No second payment/);
   assert.match(metadata, /phase: 'receiptPending'/);
 });
 

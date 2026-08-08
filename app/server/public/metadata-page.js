@@ -363,7 +363,7 @@ export function initMetadataPage({
       element.hostingStatus.textContent = 'Connect an Aptos or Solana wallet to host metadata under your wallet-owned storage address.';
     } else {
       element.hostingStatus.dataset.state = 'ready';
-      element.hostingStatus.textContent = 'Wallet-owned Shelby hosting is ready. Every hosted JSON uses a Vessel settlement receipt.';
+      element.hostingStatus.textContent = 'Wallet-owned Shelby hosting is ready. Every hosted JSON uses a Vessel fee receipt.';
     }
   }
 
@@ -583,11 +583,11 @@ export function initMetadataPage({
     if (element.batchHostStatus && phase !== 'controls') {
       const activePhase = !['ready', 'complete', 'failed'].includes(phase);
       element.batchHostStatus.textContent = phase === 'uploading' || activePhase
-        ? `Approve item ${summary.completed + 1} of ${summary.total}. Each JSON receives its own Vessel settlement receipt.`
+        ? `Approve item ${summary.completed + 1} of ${summary.total}. Each JSON receives its own Vessel fee receipt.`
         : phase === 'complete'
           ? `${summary.succeeded} TokenURI file${summary.succeeded === 1 ? '' : 's'} hosted successfully.`
           : phase === 'failed' && error?.code === 'receipt_pending'
-            ? 'Paused while the current contract receipt reaches finality. No second settlement will be requested.'
+            ? 'Paused while the current fee receipt reaches finality. No second payment will be requested.'
             : phase === 'failed'
               ? `Paused after ${summary.succeeded} success${summary.succeeded === 1 ? '' : 'es'}: ${String(error?.message || error).slice(0, 140)}`
               : `${summary.total} wallet approvals expected. Pricing is estimated until each live quote is validated; the minimum service charge is $0.01.`;

@@ -56,7 +56,7 @@ test('Landing presents the implemented platform scale and workflow', () => {
   const html = readPage('index.html');
   assert.match(html, /Wallet-owned hot storage for NFT media/i);
   assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Wallet ecosystems/i);
-  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Settlement contracts/i);
+  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Fee receipt contracts/i);
   assert.match(html, />\s*1\s*<[^>]*>[\s\S]*Canonical NFT schema/i);
   assert.match(html, /id="how-it-works"/);
   for (const label of ['Connect', 'Store', 'Publish']) {
@@ -74,7 +74,7 @@ test('Landing names current storage, metadata, and proof capabilities', () => {
     'Collection JSON export',
     'Latency proof',
     'Flexible retention',
-    'Contract receipts',
+    'Vessel fee receipts',
   ]) {
     assert.match(html, new RegExp(claim, 'i'));
   }

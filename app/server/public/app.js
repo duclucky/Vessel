@@ -230,8 +230,8 @@ function initUpload() {
   const stepMsg = {
     encoding: 'ENCODING COMMITMENTS',
     signing: 'SIGNING OWNERSHIP',
-    settlementApproval: 'APPROVE VESSEL CONTRACT FEE',
-    settlementPending: 'CONFIRMING CONTRACT RECEIPT',
+    settlementApproval: 'APPROVE VESSEL FEE RECEIPT',
+    settlementPending: 'CONFIRMING FEE RECEIPT',
     receiptVerified: 'VESSEL RECEIPT VERIFIED',
     confirming: 'REGISTERING ON APTOS',
     sponsoring: 'SPONSORING APTOS',
@@ -383,7 +383,7 @@ function initUpload() {
       }
     }
     throw Object.assign(
-      new Error('Settlement receipt is still finalizing. No second payment is required. Use Check Payment Status or retry this batch later.'),
+      new Error('Vessel fee receipt is still finalizing. No second payment is required. Use Check Payment Status or retry this batch later.'),
       { code: 'receipt_pending', retriable: true, cause: lastError },
     );
   }
@@ -569,14 +569,14 @@ function initUpload() {
     title.id = 'upload-recovery-title';
     title.className = 'mt-2 font-display text-xl font-semibold';
     title.textContent = record.stage === 'settlement_submitted'
-      ? 'Contract submitted — receipt pending'
+      ? 'Vessel fee submitted — receipt pending'
       : record.stage === 'paid'
         ? 'Payment verified — finish this upload'
         : 'Finish writing the registered artifact';
     const copyText = document.createElement('p');
     copyText.className = 'mt-3 text-sm leading-6 text-on-surface-variant';
     copyText.textContent = record.stage === 'settlement_submitted'
-      ? 'Your wallet transaction is saved. Vessel will only check its existing receipt; it will not request another payment.'
+      ? 'Your wallet transaction is saved. Vessel will only check its existing fee receipt; it will not request another payment.'
       : `Reselect ${record.context.blobName}. Vessel will verify its SHA-256 before any irreversible action.`;
     panel.append(kicker, title, copyText);
 
@@ -595,7 +595,7 @@ function initUpload() {
       const check = document.createElement('button');
       check.type = 'button';
       check.className = 'vessel-button vessel-button-secondary mt-4 min-h-11 px-5 py-3';
-      check.textContent = 'CHECK PAYMENT STATUS';
+      check.textContent = 'CHECK FEE RECEIPT';
       panel.append(explorer, status, check);
       quoteRoot?.parentElement?.appendChild(panel);
 
@@ -622,7 +622,7 @@ function initUpload() {
             paymentSignature: settlementHash,
           });
           status.textContent = 'Vessel receipt verified. Reselect the file to finish writing it.';
-          toast('Vessel contract receipt verified', 'ok');
+          toast('Vessel fee receipt verified', 'ok');
           await renderRecoveryPanel();
         } catch (error) {
           if (error?.code === 'receipt_pending') {
@@ -794,7 +794,7 @@ function initUpload() {
           retry: () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()),
         });
       } else if (error?.code === 'receipt_pending') {
-        toast('Contract submitted. Receipt is pending; no new payment is required.', 'warn');
+        toast('Vessel fee submitted. Receipt is pending; no new payment is required.', 'warn');
         await renderRecoveryPanel();
       } else {
         const message = error?.code === 'user_rejected'
@@ -1667,7 +1667,7 @@ async function initMetadata() {
       }
     }
     throw Object.assign(
-      new Error('Settlement receipt is still finalizing. No second settlement will be requested. Wait a moment, then host this TokenURI again to resume.'),
+      new Error('Vessel fee receipt is still finalizing. No second payment will be requested. Wait a moment, then host this TokenURI again to resume.'),
       { code: 'receipt_pending', retriable: true, cause: lastError },
     );
   }
@@ -1715,7 +1715,7 @@ async function initMetadata() {
         opener: $('#single-host-shelby') || $('#batch-host-shelby'),
         kicker: files.length > 1 ? `METADATA ${index + 1} OF ${files.length}` : 'TOKENURI QUOTE',
         title: `Host ${file.name} for ${quoted.quote.days} days?`,
-        message: `${total} total, including Shelby network costs, sponsored gas, and the Vessel service fee. Your connected wallet will approve the Vessel settlement receipt.`,
+        message: `${total} total, including Shelby storage cost, sponsored ShelbyNet gas, and the Vessel service fee. Your connected wallet will approve the Vessel fee receipt.`,
         cancelLabel: 'NOT NOW',
         confirmLabel: 'APPROVE & HOST',
       });

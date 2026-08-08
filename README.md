@@ -1,17 +1,17 @@
 # Vessel
 
-Wallet-owned hot storage, cross-chain settlement, and canonical NFT metadata for Aptos and Solana, powered by Shelby.
+Wallet-owned hot storage, cross-chain fee receipts, and canonical NFT metadata for Aptos and Solana, powered by Shelby.
 
 ## Live beta
 
 - Application: [https://vessel-sage.vercel.app](https://vessel-sage.vercel.app)
 - Supported storage runtimes: Aptos Testnet and ShelbyNet
 - Currently available runtime: ShelbyNet
-- Settlement networks: Aptos Testnet and Solana Devnet
+- Fee receipt networks: Aptos Testnet and Solana Devnet
 - Status: public testnet beta
 - Source: [github.com/duclucky/Vessel](https://github.com/duclucky/Vessel)
 
-Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued settlement evidence. The application does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
+Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued Vessel fee receipt evidence. The application does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
 
 The codebase and configuration support both Aptos Testnet and ShelbyNet storage runtimes. The production beta currently exposes ShelbyNet as the live route. Aptos Testnet is implemented, retained, and intentionally disabled from the public entry so it can be re-enabled for fallback, regression checks, or a runtime switch without deleting the testnet path.
 
@@ -34,7 +34,7 @@ Vessel currently combines these journeys in one web application:
 5. **Canonical NFT metadata**: creates cross-chain JSON for one NFT, including traits and media fields.
 6. **Collection metadata export**: groups an uploaded collection from Vault history, reuses its Shelby media URLs, and exports deterministic JSON files as a ZIP.
 7. **Latency evidence**: compares a real Shelby read with a configured public IPFS gateway and reports unavailable measurements honestly.
-8. **Contract settlement**: validates a signed quote and accepts a contract receipt from the supported chain instead of treating a transfer to an ordinary wallet as payment evidence.
+8. **Vessel fee receipt**: validates a signed quote and accepts a contract receipt from the supported chain instead of treating a transfer to an ordinary wallet as payment evidence.
 
 ## Current network status
 
@@ -58,16 +58,16 @@ If the upstream write gate is intentionally disabled for maintenance, `SHELBY_WR
 
 Open Identity and choose a compatible wallet from the in-page wallet picker.
 
-- **Aptos**: the connected Aptos account is the storage identity and settlement sender.
-- **Solana**: the wallet authorizes a deterministic Aptos Derived Account Abstraction identity for Shelby, while the Vessel service settlement stays on Solana.
+- **Aptos**: the connected Aptos account is the storage identity and fee receipt sender.
+- **Solana**: the wallet authorizes a deterministic Aptos Derived Account Abstraction identity for Shelby, while the Vessel fee receipt stays on Solana.
 
 Wallet state is restored silently when the extension supports it. Selecting a connected address opens an account menu with copy, switch, and logout actions.
 
 ### 2. Prepare storage
 
-Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, network and protocol cost, sponsored gas, a 1% Vessel service fee, and a USD 0.01 minimum.
+Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, Shelby storage cost, sponsored ShelbyNet gas, a 1% Vessel service fee, and a USD 0.01 minimum as one source-chain Vessel charge.
 
-When the active ShelbyNet write gate is enabled, the user reviews the quote, approves the settlement transaction, and receives wallet-owned storage evidence. If the gate is disabled for maintenance, the UI remains usable for inspection and does not present a disabled network as a successful upload.
+When the active ShelbyNet write gate is enabled, the user reviews the quote, approves the fee receipt transaction, and receives wallet-owned storage evidence. If the gate is disabled for maintenance, the UI remains usable for inspection and does not present a disabled network as a successful upload.
 
 ### 3. Use the Vault
 
@@ -98,8 +98,8 @@ Supported wallet
   |                                              |
   +-- chain-specific signed quote                +--> media URL
       |                                          +--> NFT metadata
-      +-- Aptos Move contract receipt
-      +-- Solana Program receipt
+      +-- Aptos Move fee receipt
+      +-- Solana Program fee receipt
 ```
 
 The browser owns wallet interaction and user approval. Server routes provide public configuration, quote signing and validation, storage coordination, transaction verification, and protected provider credentials. Client-facing secrets are never embedded in the browser bundles.
@@ -111,32 +111,32 @@ Storage code remains behind provider boundaries:
 - `app/server/client-src/`: wallet-native Aptos and Solana browser clients bundled into `public/`.
 - `app/server/public/ledger.js`: wallet-scoped browser history and recovery state.
 
-## Settlement contracts
+## Fee receipt contracts
 
-Vessel deploys one settlement contract or program for each supported chain. Both consume the same public-key-signed `QuoteV1` model and issue a single-use receipt.
+Vessel deploys one fee contract or program for each supported chain. Both consume the same public-key-signed `QuoteV1` model and issue a single-use Vessel fee receipt. The source-chain Vessel charge includes Shelby storage cost, sponsored ShelbyNet gas or gas-station cost, and the 1% Vessel service fee.
 
 ### Aptos Testnet
 
 | Item | Value |
 |---|---|
-| Aptos Move contract and multisig | `0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15` |
+| Aptos Move fee contract and multisig | `0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15` |
 | Service-fee vault | `0x2025257c90ced758ea49e1492d60a903dbc8c4d5915657611f968b7a27cf3f8a` |
 | Deployment transaction | `0xbdc7f3ea07c5c2fbac06cb7e9a07db58ef1b93dfe0e41575379e564c6386a8a4` |
 | Governance | 2-of-3 Aptos Multisig Account |
 
-The Aptos Move contract holds only the Vessel service fee. APT gas and Shelby protocol or storage charges remain direct network costs in the registration flow.
+The Aptos Move fee contract records the source-chain Vessel charge in the contract vault. For non-Aptos wallet paths, Vessel sponsors ShelbyNet gas and storage first, then recovers those costs plus the 1% service fee through the source-chain receipt.
 
 ### Solana Devnet
 
 | Item | Value |
 |---|---|
-| Solana Program | `G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx` |
+| Solana fee program | `G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx` |
 | Config PDA | `cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA` |
 | Vault ATA | `Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7` |
 | Squads multisig | `GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh` |
 | Accepted mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
-The Solana Program vault holds the Vessel service fee. DAA registration sponsorship and Shelby protocol costs remain separate.
+The Solana fee program vault records the source-chain Vessel charge. Solana users do not need APT or ShelbyUSD; they approve the Solana-side receipt while Vessel sponsors ShelbyNet-side gas and storage.
 
 The public source of truth for all addresses is [`deployments/vessel-settlement.testnet.json`](deployments/vessel-settlement.testnet.json). Contract-specific operating instructions live in [`contracts/aptos/vessel_settlement/README.md`](contracts/aptos/vessel_settlement/README.md) and [`contracts/solana/vessel-settlement/README.md`](contracts/solana/vessel-settlement/README.md).
 
