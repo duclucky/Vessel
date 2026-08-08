@@ -94,12 +94,28 @@ test('single metadata hosting links the TokenURI back to the source artifact', (
     expirationMicros: 2_592_001_000_000,
   });
 
-  ledger.attachTokenUriToArtifact('media/source.png', 'https://shelby.example/metadata/source.json');
+  ledger.commitUpload({
+    key: 'media/source.json',
+    url: 'https://shelby.example/metadata/source.json',
+    size: 420,
+    contentType: 'application/json',
+    sourcePath: 'source.json',
+    ownedByYou: true,
+    account: '0xabc',
+    expirationMicros: 2_592_001_000_000,
+  });
 
-  assert.equal(ledger.loadMine()[0].key, 'media/source.png');
-  assert.equal(ledger.loadMine()[0].tokenUri, 'https://shelby.example/metadata/source.json');
-  assert.equal(ledger.loadMine()[0].metadataUrl, 'https://shelby.example/metadata/source.json');
-  assert.equal(ledger.loadMine()[0].tokenUriUpdatedAt, 9_999);
+  ledger.attachTokenUriToArtifact('media/source.png', 'https://shelby.example/metadata/source.json', {
+    metadataKey: 'media/source.json',
+  });
+
+  const source = ledger.loadMine().find((entry) => entry.key === 'media/source.png');
+  const metadata = ledger.loadMine().find((entry) => entry.key === 'media/source.json');
+  assert.equal(source.tokenUri, 'https://shelby.example/metadata/source.json');
+  assert.equal(source.metadataUrl, 'https://shelby.example/metadata/source.json');
+  assert.equal(source.tokenUriUpdatedAt, 9_999);
+  assert.equal(metadata.sourceArtifactKey, 'media/source.png');
+  assert.equal(metadata.sourceArtifactUrl, 'https://shelby.example/media/source.png');
 });
 
 test('Gallery retains its grid hook and Vault composition', () => {
@@ -322,12 +338,17 @@ test('Gallery proof links include a hosted TokenURI when metadata is attached', 
   const cardStart = source.indexOf('function gcard');
   const cardEnd = source.indexOf('function newSlot', cardStart);
   const card = source.slice(cardStart, cardEnd);
+  const metadataCardStart = source.indexOf('function metadataCard');
+  const metadataCardEnd = source.indexOf('function newSlot', metadataCardStart);
+  const metadataCard = source.slice(metadataCardStart, metadataCardEnd);
   const proofHandler = source.slice(
     source.indexOf("$$('.js-proof', grid)"),
     source.indexOf("$$('.js-del', grid)"),
   );
 
   assert.match(card, /data-tokenuri="\$\{tokenUri\}"/);
+  assert.match(metadataCard, /sourceArtifactUrl/);
+  assert.match(metadataCard, /data-url="\$\{mediaUrl\}"/);
   assert.match(proofHandler, /proof\.searchParams\.set\('tokenuri', b\.dataset\.tokenuri \|\| ''\)/);
 });
 
@@ -338,6 +359,20 @@ test('Proof page explains when an artifact has no hosted TokenURI yet', () => {
   assert.equal(getIds(html).has('proof-tokenuri-helper'), true);
   assert.match(html, /Create TokenURI/);
   assert.match(source, /No TokenURI has been attached to this artifact yet/);
+});
+
+test('Proof page can recover a missing Media URL from the TokenURI JSON', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const proofStart = source.indexOf('async function initProof()');
+  const proofEnd = source.indexOf('async function initLatency()', proofStart);
+  const proof = source.slice(proofStart, proofEnd);
+
+  assert.match(source, /async function resolveProofMediaUrlFromTokenUri/);
+  assert.match(source, /json\?\.image/);
+  assert.match(source, /json\?\.animation_url/);
+  assert.match(source, /properties\?\.files/);
+  assert.match(proof, /!mediaUrl && tokenUriUrl/);
+  assert.match(proof, /history\.replaceState/);
 });
 
 test('Metadata loader reconciles local collection paths with remote Shelby artifacts', () => {

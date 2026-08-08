@@ -29,15 +29,31 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     storage.setItem(LS.mine, JSON.stringify(list.slice(0, UPLOAD_HISTORY_LIMIT)));
   }
 
-  function attachTokenUriToArtifact(key, tokenUri) {
+  function attachTokenUriToArtifact(key, tokenUri, options = {}) {
     const artifactKey = String(key || '').trim();
     const uri = String(tokenUri || '').trim();
     if (!artifactKey || !uri) throw new TypeError('Artifact key and TokenURI are required');
-    storage.setItem(LS.mine, JSON.stringify(loadMine().map((entry) => (
-      entry.key === artifactKey
-        ? { ...entry, tokenUri: uri, metadataUrl: uri, tokenUriUpdatedAt: now() }
-        : entry
-    )).slice(0, UPLOAD_HISTORY_LIMIT)));
+    const list = loadMine();
+    const source = list.find((entry) => entry.key === artifactKey);
+    const metadataKey = String(options?.metadataKey || options?.result?.key || '').trim();
+    const sourceArtifactUrl = String(options?.mediaUrl || source?.url || '').trim();
+    const metadataUrl = String(options?.metadataUrl || options?.result?.url || uri).trim();
+    storage.setItem(LS.mine, JSON.stringify(list.map((entry) => {
+      if (entry.key === artifactKey) {
+        return { ...entry, tokenUri: uri, metadataUrl: uri, tokenUriUpdatedAt: now() };
+      }
+      if (metadataKey && entry.key === metadataKey) {
+        return {
+          ...entry,
+          tokenUri: metadataUrl,
+          metadataUrl,
+          sourceArtifactKey: artifactKey,
+          sourceArtifactUrl,
+          sourceArtifactUpdatedAt: now(),
+        };
+      }
+      return entry;
+    }).slice(0, UPLOAD_HISTORY_LIMIT)));
   }
 
   function forgetMine(key) {

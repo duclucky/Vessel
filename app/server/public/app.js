@@ -1182,11 +1182,11 @@ function folderCollectionCard(collection) {
 }
 function metadataCard(it) {
   const k = ttl(it.expiresAt);
-  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || it.url); const name = safeHtml(sourceDisplayName(it));
+  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || it.url); const name = safeHtml(sourceDisplayName(it)); const mediaUrl = safeHtml(it.sourceArtifactUrl || it.sourceMediaUrl || it.imageUrl || ''); const proofKey = safeHtml(it.sourceArtifactKey || it.key);
   return `<article class="vessel-glass flex flex-col gap-4 rounded-3xl p-5">
     <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="vessel-kicker text-secondary">Metadata TokenURI</p><h2 class="mt-2 truncate font-display text-xl font-semibold text-on-surface" title="${name}">${name}</h2><p class="vessel-technical mt-2 truncate text-xs text-outline">${shortMid(key, 10)}</p></div><span class="vessel-technical shrink-0 rounded-full border border-white/10 px-3 py-2 text-[10px] ${k.c}">${k.t}</span></div>
     <label class="block"><span class="vessel-kicker text-outline">TokenURI / JSON URL</span><input class="vessel-input mt-2 text-xs" readonly value="${tokenUri}"></label>
-    <div class="flex gap-2"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${tokenUri}" aria-label="Copy TokenURI"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open metadata JSON"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="" data-tokenuri="${tokenUri}" aria-label="Share TokenURI proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove metadata from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
+    <div class="flex gap-2"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${tokenUri}" aria-label="Copy TokenURI"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open metadata JSON"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${proofKey}" data-url="${mediaUrl}" data-tokenuri="${tokenUri}" aria-label="Share TokenURI proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove metadata from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
   </article>`;
 }
 function newSlot() {
@@ -1279,6 +1279,27 @@ async function initCollection() {
   table.replaceChildren(...rows);
 }
 
+async function resolveProofMediaUrlFromTokenUri(tokenUriUrl) {
+  const href = String(tokenUriUrl || '').trim();
+  if (!href) return '';
+  try {
+    const response = await fetch(href, { headers: { accept: 'application/json' } });
+    if (!response.ok) return '';
+    const json = await response.json();
+    const files = Array.isArray(json?.properties?.files) ? json.properties.files : [];
+    const fileUri = files.map((file) => file?.uri || file?.url || file?.src).find(Boolean);
+    const candidate = json?.image || json?.animation_url || fileUri || '';
+    if (!candidate) return '';
+    try {
+      return new URL(String(candidate), href).href;
+    } catch {
+      return String(candidate);
+    }
+  } catch {
+    return '';
+  }
+}
+
 async function initProof() {
   const params = new URLSearchParams(location.search);
   const title = $('#proof-title');
@@ -1287,10 +1308,18 @@ async function initProof() {
   const tokenUri = $('#proof-tokenuri-url');
   const collectionList = $('#proof-collection-list');
   const copyLink = $('#proof-copy-link');
-  const mediaUrl = params.get('url') || '';
+  let mediaUrl = params.get('url') || '';
   const tokenUriUrl = params.get('tokenuri') || '';
   const key = params.get('key') || '';
   const collectionId = params.get('collection') || '';
+  if (!mediaUrl && tokenUriUrl) {
+    const recoveredMediaUrl = await resolveProofMediaUrlFromTokenUri(tokenUriUrl);
+    if (recoveredMediaUrl) {
+      mediaUrl = recoveredMediaUrl;
+      params.set('url', mediaUrl);
+      history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+    }
+  }
 
   if (media) media.value = mediaUrl;
   if (tokenUri) tokenUri.value = tokenUriUrl;
@@ -1553,8 +1582,12 @@ async function initMetadata() {
     hostingAvailable: cfg.shelbyWritesEnabled === true,
     loadCollections: loadMetadataCollections,
     hostFiles: hostMetadataFiles,
-    saveArtifactTokenUri: ({ key, tokenUri }) => {
-      attachTokenUriToArtifact(key, tokenUri);
+    saveArtifactTokenUri: ({ key, tokenUri, result }) => {
+      attachTokenUriToArtifact(key, tokenUri, {
+        metadataKey: result?.key,
+        metadataUrl: result?.url || tokenUri,
+        result,
+      });
     },
     saveCollectionManifest: (manifest, { collection } = {}) => {
       const session = walletController()?.getState?.().session;
