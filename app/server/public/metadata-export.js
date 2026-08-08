@@ -108,9 +108,17 @@ function basename(value) {
   return String(value || '').replaceAll('\\', '/').split('/').pop() || '';
 }
 
-function csvCell(value) {
-  const text = String(value ?? '');
+function csvSafeCell(value) {
+  let text = String(value ?? '');
+  if (text.startsWith('=') || text.startsWith('+') || text.startsWith('-') || text.startsWith('@')) {
+    text = `'${text}`;
+  }
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+}
+
+function csvBlob(rows) {
+  const body = rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n');
+  return new Blob([`\uFEFF${body}\r\n`], { type: 'text/csv;charset=utf-8' });
 }
 
 function hostedUrl(result) {
@@ -166,8 +174,8 @@ export function buildCollectionManifest(items, hostedResults = [], {
     });
   });
   const tokenUris = rows.map((row) => row.metadataUrl).filter(Boolean);
-  const csvLines = [
-    ['collection', 'item_name', 'source_path', 'image_url', 'metadata_path', 'metadata_url'],
+  const csvRows = [
+    ['Collection', 'File Name', 'Source Path', 'Media URL', 'Metadata Path', 'TokenURI'],
     ...rows.map((row) => [
       row.collection,
       row.itemName,
@@ -176,14 +184,14 @@ export function buildCollectionManifest(items, hostedResults = [], {
       row.metadataPath,
       row.metadataUrl,
     ]),
-  ].map((row) => row.map(csvCell).join(','));
+  ];
 
   return Object.freeze({
     collectionName: String(collectionName || ''),
     rows: Object.freeze(rows),
     tokenUris: Object.freeze(tokenUris),
     copyText: tokenUris.length ? `${tokenUris.join('\n')}\n` : '',
-    csv: new Blob([`${csvLines.join('\n')}\n`], { type: 'text/csv' }),
+    csv: csvBlob(csvRows),
   });
 }
 

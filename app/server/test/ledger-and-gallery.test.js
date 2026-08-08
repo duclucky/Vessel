@@ -118,6 +118,40 @@ test('single metadata hosting links the TokenURI back to the source artifact', (
   assert.equal(metadata.sourceArtifactUrl, 'https://shelby.example/media/source.png');
 });
 
+test('ledger custom folders persist local grouping labels without changing source paths', () => {
+  const ledger = createLedger(memoryStorage(), () => 1_234);
+  ledger.commitUpload({
+    key: 'media/a.png',
+    url: 'https://shelby.example/a.png',
+    size: 42,
+    contentType: 'image/png',
+    sourcePath: 'original/a.png',
+    ownedByYou: true,
+    account: '0xabc',
+    expirationMicros: 2_592_001_000_000,
+  });
+  ledger.commitUpload({
+    key: 'media/b.png',
+    url: 'https://shelby.example/b.png',
+    size: 42,
+    contentType: 'image/png',
+    sourcePath: 'another/b.png',
+    ownedByYou: true,
+    account: '0xabc',
+    expirationMicros: 2_592_001_000_000,
+  });
+
+  ledger.assignCustomFolder(['media/a.png', 'media/b.png'], 'Genesis Custom');
+
+  const entries = ledger.loadMine().sort((left, right) => left.key.localeCompare(right.key));
+  assert.equal(entries[0].customFolder, 'Genesis Custom');
+  assert.equal(entries[1].customFolder, 'Genesis Custom');
+  assert.equal(entries[0].customFolderUpdatedAt, 1_234);
+  assert.equal(entries[0].sourcePath, 'original/a.png');
+  assert.equal(entries[1].sourcePath, 'another/b.png');
+  assert.throws(() => ledger.assignCustomFolder(['media/a.png'], ''), /folder name/i);
+});
+
 test('Gallery retains its grid hook and Vault composition', () => {
   const html = readPage('gallery.html');
   assert.equal(getIds(html).has('gallery-grid'), true);
@@ -178,13 +212,63 @@ test('Gallery exposes absolute URLs and a visible CSV export for external use', 
   const metadataCard = source.slice(metadataCardStart, metadataCardEnd);
 
   assert.equal(ids.has('gallery-export-csv'), true, 'Gallery should expose a CSV export button');
-  assert.match(html, /Export Gallery CSV/i);
+  assert.match(html, /Export Clean CSV/i);
   assert.match(source, /function toAppUrl/);
   assert.match(source, /function galleryManifestCsv/);
   assert.match(source, /gallery-export-csv/);
   assert.match(card, /toAppUrl\(it\.url\)/);
   assert.match(metadataCard, /toAppUrl\(it\.tokenUri \|\| it\.metadataUrl \|\| it\.url\)/);
   assert.match(metadataCard, /toAppUrl\(it\.sourceArtifactUrl/);
+});
+
+test('Gallery CSV export is presentation-friendly and safe for spreadsheet users', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const html = readPage('gallery.html');
+
+  assert.match(html, /Export Clean CSV/i);
+  assert.match(source, /function csvSafeCell/);
+  assert.match(source, /function formatCsvUtc/);
+  assert.match(source, /function formatCsvSizeMb/);
+  assert.match(source, /function csvBlob/);
+  assert.match(source, /\\uFEFF/);
+  assert.match(source, /\\r\\n/);
+  assert.match(source, /'File Name'/);
+  assert.match(source, /'Media URL'/);
+  assert.match(source, /'TokenURI'/);
+  assert.match(source, /'Proof URL'/);
+  assert.match(source, /'Size MB'/);
+  assert.match(source, /'Expires At UTC'/);
+  assert.doesNotMatch(source, /'display_name'/);
+  assert.doesNotMatch(source, /'source_path'/);
+  assert.doesNotMatch(source, /'size_bytes'/);
+  assert.match(source, /startsWith\('='\)/);
+  assert.match(source, /startsWith\('\+'\)/);
+  assert.match(source, /startsWith\('-'\)/);
+  assert.match(source, /startsWith\('@'\)/);
+});
+
+test('Gallery supports media selection and folder-scoped CSV exports', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const html = readPage('gallery.html');
+  const ids = getIds(html);
+  const galleryStart = source.indexOf('async function initGallery()');
+  const galleryEnd = source.indexOf('function accountingMicro', galleryStart);
+  const gallery = source.slice(galleryStart, galleryEnd);
+
+  assert.equal(ids.has('gallery-select-mode'), true);
+  assert.equal(ids.has('gallery-add-folder'), true);
+  assert.match(source, /assignCustomFolder/);
+  assert.match(gallery, /let selectedGalleryKeys = new Set\(\)/);
+  assert.match(gallery, /gallerySelectMode/);
+  assert.match(gallery, /promptCustomFolderName/);
+  assert.match(source, /js-select-artifact/);
+  assert.match(source, /function galleryCollectionId/);
+  assert.match(source, /customFolder \|\| folderCollectionId/);
+  assert.match(source, /function exportItemsForGallery/);
+  assert.match(gallery, /exportItemsForGallery\(items, activeGalleryCollection\)/);
+  assert.match(gallery, /const metadataItems = activeCollection/);
+  assert.match(gallery, /metadataItems\.map\(metadataCard\)/);
+  assert.match(gallery, /Export This Folder CSV/);
 });
 
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {

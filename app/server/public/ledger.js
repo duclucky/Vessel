@@ -63,6 +63,20 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     );
   }
 
+  function assignCustomFolder(keys, folderName) {
+    const selectedKeys = new Set((Array.isArray(keys) ? keys : [keys])
+      .map((key) => String(key || '').trim())
+      .filter(Boolean));
+    const customFolder = String(folderName || '').trim().replace(/\s+/g, ' ');
+    if (!selectedKeys.size) throw new TypeError('At least one artifact key is required');
+    if (!customFolder) throw new TypeError('A custom folder name is required');
+    storage.setItem(LS.mine, JSON.stringify(loadMine().map((entry) => (
+      selectedKeys.has(entry.key)
+        ? { ...entry, customFolder, customFolderUpdatedAt: now() }
+        : entry
+    )).slice(0, UPLOAD_HISTORY_LIMIT)));
+  }
+
   function replaceMine(items) {
     storage.setItem(LS.mine, JSON.stringify((Array.isArray(items) ? items : []).slice(0, UPLOAD_HISTORY_LIMIT)));
   }
@@ -158,6 +172,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     loadMine,
     rememberMine,
     attachTokenUriToArtifact,
+    assignCustomFolder,
     replaceMine,
     forgetMine,
     loadCollectionManifests,

@@ -20,7 +20,14 @@ import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 const API = location.origin;
 const ledger = createLedger(localStorage);
 const recovery = createRecoveryLedger(localStorage);
-const { loadMine, replaceMine, forgetMine, loadCollectionManifests, attachTokenUriToArtifact } = ledger;
+const {
+  loadMine,
+  replaceMine,
+  forgetMine,
+  loadCollectionManifests,
+  attachTokenUriToArtifact,
+  assignCustomFolder,
+} = ledger;
 
 /* ------------------------------- helpers ------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -952,6 +959,11 @@ function folderCollectionId(it) {
   return parts.length > 1 ? parts[0] : '';
 }
 
+function galleryCollectionId(it) {
+  const customFolder = String(it?.customFolder || '').trim();
+  return customFolder || folderCollectionId(it);
+}
+
 function isMetadataArtifact(it) {
   const type = String(it?.contentType || '').toLowerCase();
   return type === 'application/json' || /\.json(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`);
@@ -970,7 +982,8 @@ function splitGalleryArtifacts(items, query = '') {
   const needle = String(query || '').trim().toLowerCase();
   const matches = (item) => !needle
     || sourceDisplayName(item).toLowerCase().includes(needle)
-    || String(item?.sourcePath || item?.key || '').toLowerCase().includes(needle);
+    || String(item?.sourcePath || item?.key || '').toLowerCase().includes(needle)
+    || String(item?.customFolder || '').toLowerCase().includes(needle);
   const media = [];
   const metadata = [];
   for (const item of items || []) {
@@ -983,7 +996,7 @@ function splitGalleryArtifacts(items, query = '') {
   const looseMedia = [];
   const collectionMap = new Map();
   for (const item of media) {
-    const collectionId = folderCollectionId(item);
+    const collectionId = galleryCollectionId(item);
     if (!collectionId) {
       looseMedia.push(item);
       continue;
@@ -999,6 +1012,34 @@ function splitGalleryArtifacts(items, query = '') {
   return Object.freeze({ collections, looseMedia, metadata });
 }
 
+function promptCustomFolderName({ opener } = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 z-[80] flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm';
+    overlay.innerHTML = `<section class="vessel-glass w-full max-w-md rounded-vessel p-6 shadow-2xl" role="dialog" aria-modal="true" aria-labelledby="custom-folder-title">
+      <p class="vessel-kicker text-primary-container">Custom folder</p>
+      <h2 id="custom-folder-title" class="mt-2 font-display text-3xl font-semibold">Group selected media</h2>
+      <p class="mt-3 text-sm leading-6 text-on-surface-variant">This only organizes your local Gallery. Shelby blob URLs and original file paths stay unchanged.</p>
+      <label class="mt-5 block" for="custom-folder-name"><span class="vessel-kicker text-outline">Folder name</span><input id="custom-folder-name" class="vessel-input mt-2" autocomplete="off" placeholder="Example: Genesis collection"></label>
+      <div class="mt-6 flex justify-end gap-3"><button type="button" class="js-folder-cancel vessel-button vessel-button-secondary px-5">Cancel</button><button type="button" class="js-folder-save vessel-button px-5">Save Folder</button></div>
+    </section>`;
+    const input = overlay.querySelector('#custom-folder-name');
+    const close = (value = '') => {
+      overlay.remove();
+      opener?.focus?.();
+      resolve(value);
+    };
+    overlay.querySelector('.js-folder-cancel')?.addEventListener('click', () => close(''));
+    overlay.querySelector('.js-folder-save')?.addEventListener('click', () => close(input?.value || ''));
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close('');
+      if (event.key === 'Enter') close(input?.value || '');
+    });
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => input?.focus());
+  });
+}
+
 async function initGallery() {
   const grid = $('#gallery-grid');
   const imageGrid = $('#image-gallery-grid');
@@ -1007,10 +1048,14 @@ async function initGallery() {
   const metadataEmpty = $('#gallery-metadata-empty');
   const search = $('#gallery-search');
   const exportCsv = $('#gallery-export-csv');
+  const selectMode = $('#gallery-select-mode');
+  const addFolder = $('#gallery-add-folder');
   const status = $('#gallery-view-status');
   const back = $('#gallery-back-collections');
   if (!grid || !imageGrid || !metadataGrid) return;
   let activeGalleryCollection = '';
+  let selectedGalleryKeys = new Set();
+  let gallerySelectMode = false;
   // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
   let items = loadMine();
   const walletState = walletController().getState();
@@ -1028,7 +1073,33 @@ async function initGallery() {
   renderFeeDashboard(items);
   if (exportCsv) {
     exportCsv.disabled = !items.length;
-    exportCsv.onclick = () => downloadBlob(galleryManifestCsv(items), 'vessel-gallery-manifest.csv', document);
+    exportCsv.onclick = () => {
+      const exportItems = exportItemsForGallery(items, activeGalleryCollection);
+      const baseName = activeGalleryCollection || 'vessel-gallery';
+      downloadBlob(galleryManifestCsv(exportItems), `${baseName}-manifest.csv`, document);
+    };
+  }
+  if (selectMode) {
+    selectMode.disabled = !items.some(isMediaArtifact);
+    selectMode.onclick = () => {
+      gallerySelectMode = !gallerySelectMode;
+      if (!gallerySelectMode) selectedGalleryKeys = new Set();
+      renderGallerySections();
+    };
+  }
+  if (addFolder) {
+    addFolder.onclick = async () => {
+      if (!selectedGalleryKeys.size) return;
+      const folderName = await promptCustomFolderName({ opener: addFolder });
+      if (!String(folderName || '').trim()) return;
+      assignCustomFolder([...selectedGalleryKeys], folderName);
+      items = loadMine();
+      activeGalleryCollection = String(folderName || '').trim().replace(/\s+/g, ' ');
+      selectedGalleryKeys = new Set();
+      gallerySelectMode = false;
+      toast('Selected media moved into custom folder', 'ok');
+      renderGallerySections();
+    };
   }
 
   const bindGalleryActions = () => {
@@ -1045,6 +1116,14 @@ async function initGallery() {
       activeGalleryCollection = b.dataset.collectionId || '';
       renderGallerySections();
     }));
+    $$('.js-select-artifact', grid).forEach((input) => {
+      input.checked = selectedGalleryKeys.has(input.dataset.key);
+      input.onchange = () => {
+        if (input.checked) selectedGalleryKeys.add(input.dataset.key);
+        else selectedGalleryKeys.delete(input.dataset.key);
+        updateSelectionControls();
+      };
+    });
     $$('.js-copy', grid).forEach((b) => (b.onclick = () => copy(b.dataset.url)));
     $$('.js-view', grid).forEach((b) => (b.onclick = () => window.open(b.dataset.url, '_blank')));
     $$('.js-meta', grid).forEach((b) => (b.onclick = () => {
@@ -1075,10 +1154,26 @@ async function initGallery() {
     }));
   };
 
+  function updateSelectionControls() {
+    if (selectMode) {
+      selectMode.textContent = gallerySelectMode ? 'Done Selecting' : 'Select';
+      selectMode.classList.toggle('border-primary-container/40', gallerySelectMode);
+    }
+    if (addFolder) {
+      addFolder.classList.toggle('hidden', !gallerySelectMode);
+      addFolder.disabled = !selectedGalleryKeys.size;
+      addFolder.textContent = selectedGalleryKeys.size ? `Add ${selectedGalleryKeys.size} to Folder` : 'Add to Folder';
+    }
+    $$('.js-select-wrap', grid).forEach((node) => node.classList.toggle('hidden', !gallerySelectMode));
+  }
+
   function renderGallerySections() {
     const query = search?.value || '';
     const split = splitGalleryArtifacts(items, query);
     const activeCollection = split.collections.find((entry) => entry.id === activeGalleryCollection);
+    const metadataItems = activeCollection
+      ? exportItemsForGallery(items, activeGalleryCollection).filter(isMetadataArtifact)
+      : split.metadata;
     const mediaCards = activeCollection
       ? activeCollection.items.map(gcard)
       : [
@@ -1087,15 +1182,21 @@ async function initGallery() {
         ...split.looseMedia.map(gcard),
       ];
     imageGrid.innerHTML = mediaCards.join('');
-    metadataGrid.innerHTML = split.metadata.map(metadataCard).join('');
+    metadataGrid.innerHTML = metadataItems.map(metadataCard).join('');
     imageEmpty?.classList.toggle('hidden', mediaCards.length > (activeCollection ? 0 : 1));
-    metadataEmpty?.classList.toggle('hidden', split.metadata.length > 0);
+    metadataEmpty?.classList.toggle('hidden', metadataItems.length > 0);
     back?.classList.toggle('hidden', !activeCollection);
+    if (exportCsv) {
+      const exportItems = exportItemsForGallery(items, activeGalleryCollection);
+      exportCsv.disabled = !exportItems.length;
+      exportCsv.textContent = activeCollection ? 'Export This Folder CSV' : 'Export Clean CSV';
+    }
     if (status) {
       status.textContent = activeCollection
         ? `${activeCollection.name}: ${activeCollection.items.length} media file${activeCollection.items.length === 1 ? '' : 's'} shown by original folder filename.`
         : 'Images and hosted TokenURI metadata are separated for NFT workflows.';
     }
+    updateSelectionControls();
     bindGalleryActions();
   }
 
@@ -1180,6 +1281,10 @@ function gcard(it) {
   const url = safeHtml(toAppUrl(it.url)); const key = safeHtml(it.key); const tokenUri = safeHtml(toAppUrl(it.tokenUri || it.metadataUrl || '')); const type = safeHtml((it.contentType || 'artifact').toUpperCase()); const name = safeHtml(sourceDisplayName(it));
   return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
     <div class="relative aspect-square overflow-hidden bg-surface-lowest">
+      <label class="js-select-wrap hidden absolute left-4 top-4 z-20 flex items-center gap-2 rounded-full border border-primary-container/30 bg-surface-lowest/85 px-3 py-2 text-xs text-primary shadow-xl">
+        <input class="js-select-artifact rounded border-white/20 bg-transparent text-primary focus:ring-primary" type="checkbox" data-key="${key}" aria-label="Select ${name}">
+        <span class="vessel-technical">Select</span>
+      </label>
       <span class="vessel-technical absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-surface-lowest/80 px-3 py-2 text-[10px] ${k.c}">${k.t}</span>
       ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Blob unavailable or expired</p></div>` : isVideo ? `<video class="h-full w-full object-cover" src="${url}" controls preload="metadata" aria-label="Wallet-owned uploaded video artifact"></video>` : `<div class="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Preview unavailable</p></div>`}
     </div>
@@ -1208,14 +1313,50 @@ function newSlot() {
   return `<a class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/25 bg-primary-container/[0.025] p-8 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.05]" href="/upload.html"><span class="flex h-20 w-20 items-center justify-center rounded-full border border-primary-container/20 text-primary"><span class="material-symbols-outlined text-4xl" aria-hidden="true">add</span></span><h2 class="mt-6 font-display text-2xl font-semibold">Upload New</h2><p class="vessel-technical mt-3 text-xs text-outline">Initialize artifact</p></a>`;
 }
 
-function csvCell(value) {
-  const text = String(value ?? '');
+function csvSafeCell(value) {
+  let text = String(value ?? '');
+  if (text.startsWith('=') || text.startsWith('+') || text.startsWith('-') || text.startsWith('@')) {
+    text = `'${text}`;
+  }
   return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
+function formatCsvUtc(value) {
+  const time = Number(value || 0);
+  if (!Number.isFinite(time) || time <= 0) return '';
+  return new Date(time).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
+}
+
+function formatCsvSizeMb(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0.00';
+  return (bytes / 1048576).toFixed(2);
+}
+
+function csvBlob(rows) {
+  const body = rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n');
+  return new Blob([`\uFEFF${body}\r\n`], { type: 'text/csv;charset=utf-8' });
+}
+
+function proofUrlForArtifact(item) {
+  const proof = new URL('/proof.html', location.origin);
+  proof.searchParams.set('key', item?.sourceArtifactKey || item?.key || '');
+  proof.searchParams.set('url', toAppUrl(item?.sourceArtifactUrl || item?.sourceMediaUrl || item?.imageUrl || item?.url || ''));
+  proof.searchParams.set('tokenuri', toAppUrl(item?.tokenUri || item?.metadataUrl || ''));
+  return proof.href;
+}
+
+function exportItemsForGallery(items, activeCollection = '') {
+  if (!activeCollection) return items || [];
+  const media = (items || []).filter((item) => isMediaArtifact(item) && galleryCollectionId(item) === activeCollection);
+  const mediaKeys = new Set(media.map((item) => item.key));
+  const metadata = (items || []).filter((item) => isMetadataArtifact(item) && mediaKeys.has(item.sourceArtifactKey));
+  return [...media, ...metadata];
+}
+
 function collectionManifestCsv(manifest) {
-  const lines = [
-    ['collection', 'item_name', 'source_path', 'image_url', 'metadata_path', 'metadata_url'],
+  return csvBlob([
+    ['Collection', 'File Name', 'Source Path', 'Media URL', 'Metadata Path', 'TokenURI', 'Proof URL'],
     ...(manifest?.rows || []).map((row) => [
       manifest.name,
       row.itemName,
@@ -1223,33 +1364,34 @@ function collectionManifestCsv(manifest) {
       toAppUrl(row.imageUrl),
       row.metadataPath,
       toAppUrl(row.metadataUrl),
+      proofUrlForArtifact({ key: row.sourcePath, url: row.imageUrl, tokenUri: row.metadataUrl }),
     ]),
-  ].map((row) => row.map(csvCell).join(','));
-  return new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
+  ]);
 }
 
 function galleryManifestCsv(items) {
-  const lines = [
-    ['kind', 'collection', 'display_name', 'source_path', 'media_url', 'token_uri', 'metadata_url', 'content_type', 'size_bytes', 'expires_at'],
+  return csvBlob([
+    ['Type', 'Folder', 'File Name', 'Source Path', 'Media URL', 'TokenURI', 'Metadata URL', 'Proof URL', 'Content Type', 'Size MB', 'Expires At UTC', 'Status'],
     ...(items || []).map((item) => {
       const metadata = isMetadataArtifact(item);
       const mediaUrl = metadata ? toAppUrl(item.sourceArtifactUrl || item.sourceMediaUrl || item.imageUrl || '') : toAppUrl(item.url);
       const metadataUrl = metadata ? toAppUrl(item.tokenUri || item.metadataUrl || item.url) : toAppUrl(item.metadataUrl || '');
       return [
-        metadata ? 'metadata' : 'media',
-        folderCollectionId(item),
+        metadata ? 'Metadata' : 'Media',
+        galleryCollectionId(item),
         sourceDisplayName(item),
         item.sourcePath || '',
         mediaUrl,
         toAppUrl(item.tokenUri || metadataUrl),
         metadataUrl,
+        proofUrlForArtifact(item),
         item.contentType || '',
-        item.size || 0,
-        item.expiresAt ? new Date(item.expiresAt).toISOString() : '',
+        formatCsvSizeMb(item.size),
+        formatCsvUtc(item.expiresAt),
+        item.expiresAt && item.expiresAt <= Date.now() ? 'Expired' : 'Active',
       ];
     }),
-  ].map((row) => row.map(csvCell).join(','));
-  return new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
+  ]);
 }
 
 async function initCollection() {
