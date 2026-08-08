@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { useOfficialShelbyStorageAccounts } from './shelby-hooks.jsx';
 
 const defaultBridgeState = Object.freeze({
   ready: false,
@@ -40,6 +41,7 @@ function createNoopApi(getState, setState) {
 }
 
 function OfficialShelbyBridge() {
+  const officialStorage = useOfficialShelbyStorageAccounts();
   const [state, setState] = useState(defaultBridgeState);
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -51,12 +53,12 @@ function OfficialShelbyBridge() {
 
   useEffect(() => {
     window.VesselOfficialShelby = api;
-    setState((current) => ({ ...current, ready: true }));
+    setState((current) => ({ ...current, ready: true, officialStorage }));
     window.dispatchEvent(new CustomEvent('vessel:official-shelby-ready'));
     return () => {
       if (window.VesselOfficialShelby === api) delete window.VesselOfficialShelby;
     };
-  }, [api]);
+  }, [api, officialStorage]);
 
   return null;
 }
