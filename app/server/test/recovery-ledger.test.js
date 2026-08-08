@@ -40,6 +40,11 @@ test('recovery ledger advances allowlisted upload stages without storing file or
     contractSignature: '66'.repeat(64),
     quotePublicKey: '77'.repeat(32),
     settlementDeployment: { moduleAddress: `0x${'88'.repeat(32)}` },
+    quotedAccountingMicro: '35854',
+    storageCostAccountingMicro: '13',
+    gasAccountingMicro: '35000',
+    serviceFeeAccountingMicro: '841',
+    totalAccountingMicro: '35854',
   });
 
   for (const stage of ['settlement_submitted', 'paid', 'registered', 'uploading', 'committed', 'finalizing', 'active', 'recovery_required']) {
@@ -67,6 +72,10 @@ test('recovery ledger advances allowlisted upload stages without storing file or
   assert.equal(ledger.loadForWallet(identity)[0].contractQuote.amount, '84100');
   assert.equal(ledger.loadForWallet(identity)[0].contractSignature, '66'.repeat(64));
   assert.equal(ledger.loadForWallet(identity)[0].quotePublicKey, '77'.repeat(32));
+  assert.equal(ledger.loadForWallet(identity)[0].storageCostAccountingMicro, '13');
+  assert.equal(ledger.loadForWallet(identity)[0].gasAccountingMicro, '35000');
+  assert.equal(ledger.loadForWallet(identity)[0].serviceFeeAccountingMicro, '841');
+  assert.equal(ledger.loadForWallet(identity)[0].totalAccountingMicro, '35854');
   assert.equal(normalizeWalletIdentity(identity), 'aptos:0xabc:0xabc');
 });
 

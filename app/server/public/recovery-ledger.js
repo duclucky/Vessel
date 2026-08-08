@@ -22,6 +22,8 @@ const EVIDENCE_FIELDS = [
   'contractQuote', 'contractSignature', 'quotePublicKey', 'settlementDeployment',
   'registerTransactionHash', 'acknowledgementHash', 'actualStorageUnits',
   'actualGasUsed', 'quotedAccountingMicro', 'errorCode',
+  'storageCostAccountingMicro', 'gasAccountingMicro', 'serviceFeeAccountingMicro',
+  'totalAccountingMicro',
   'paymentTier', 'commitTransactionHash', 'registrationUid', 'blobMerkleRoot',
 ];
 

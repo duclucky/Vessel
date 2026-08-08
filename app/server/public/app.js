@@ -665,9 +665,9 @@ function initUpload() {
           quoteToken: record.quoteToken,
           tierId: record.paymentTier,
           totalAccountingMicro: record.quotedAccountingMicro,
-          storageAccountingMicro: 0,
-          gasAccountingMicro: 0,
-          serviceFeeAccountingMicro: 0,
+          storageAccountingMicro: record.storageCostAccountingMicro,
+          gasAccountingMicro: record.gasAccountingMicro,
+          serviceFeeAccountingMicro: record.serviceFeeAccountingMicro,
           settlementToken: recoveredSettlementToken,
           settlementNetwork: recoveredSettlementNetwork,
           targetExpirationUtc: new Date(recoveredExpirationMs).toISOString(),
@@ -925,9 +925,81 @@ function initUpload() {
   };
 }
 
+function safeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[char]);
+}
+
+function sourceDisplayName(it) {
+  const source = String(it?.sourcePath || '').split('/').filter(Boolean).pop();
+  const key = String(it?.key || '').split('/').filter(Boolean).pop();
+  return source || key || 'Untitled artifact';
+}
+
+function folderCollectionId(it) {
+  const parts = String(it?.sourcePath || '').split('/').filter(Boolean);
+  return parts.length > 1 ? parts[0] : '';
+}
+
+function isMetadataArtifact(it) {
+  const type = String(it?.contentType || '').toLowerCase();
+  return type === 'application/json' || /\.json(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`);
+}
+
+function isMediaArtifact(it) {
+  const type = String(it?.contentType || '').toLowerCase();
+  return !isMetadataArtifact(it) && (
+    type.startsWith('image/')
+    || type.startsWith('video/')
+    || /\.(?:avif|gif|jpe?g|png|svg|webp|mp4|mov|m4v|webm)(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`)
+  );
+}
+
+function splitGalleryArtifacts(items, query = '') {
+  const needle = String(query || '').trim().toLowerCase();
+  const matches = (item) => !needle
+    || sourceDisplayName(item).toLowerCase().includes(needle)
+    || String(item?.sourcePath || item?.key || '').toLowerCase().includes(needle);
+  const media = [];
+  const metadata = [];
+  for (const item of items || []) {
+    if (isMetadataArtifact(item)) {
+      if (matches(item)) metadata.push(item);
+    } else if (isMediaArtifact(item) && matches(item)) {
+      media.push(item);
+    }
+  }
+  const looseMedia = [];
+  const collectionMap = new Map();
+  for (const item of media) {
+    const collectionId = folderCollectionId(item);
+    if (!collectionId) {
+      looseMedia.push(item);
+      continue;
+    }
+    if (!collectionMap.has(collectionId)) {
+      collectionMap.set(collectionId, { id: collectionId, name: collectionId, items: [] });
+    }
+    collectionMap.get(collectionId).items.push(item);
+  }
+  const collections = [...collectionMap.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  looseMedia.sort((a, b) => sourceDisplayName(a).localeCompare(sourceDisplayName(b), undefined, { numeric: true }));
+  metadata.sort((a, b) => sourceDisplayName(a).localeCompare(sourceDisplayName(b), undefined, { numeric: true }));
+  return Object.freeze({ collections, looseMedia, metadata });
+}
+
 async function initGallery() {
   const grid = $('#gallery-grid');
-  if (!grid) return;
+  const imageGrid = $('#image-gallery-grid');
+  const metadataGrid = $('#metadata-gallery-grid');
+  const imageEmpty = $('#gallery-image-empty');
+  const metadataEmpty = $('#gallery-metadata-empty');
+  const search = $('#gallery-search');
+  const status = $('#gallery-view-status');
+  const back = $('#gallery-back-collections');
+  if (!grid || !imageGrid || !metadataGrid) return;
+  let activeGalleryCollection = '';
   // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
   let items = loadMine();
   const walletState = walletController().getState();
@@ -943,48 +1015,84 @@ async function initGallery() {
   const count = $('#artifact-count');
   if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
   renderFeeDashboard(items);
-  if (!items.length) {
-    grid.innerHTML = newSlot() + `<div class="vessel-glass flex min-h-80 flex-col items-center justify-center rounded-vessel p-8 text-center sm:col-span-1 lg:col-span-2"><span class="material-symbols-outlined text-5xl text-outline" aria-hidden="true">deployed_code</span><h2 class="mt-5 font-display text-2xl font-semibold">The vault is waiting</h2><p class="mt-3 max-w-md text-sm leading-6 text-on-surface-variant">Complete one wallet-owned upload to populate your personal artifact collection.</p></div>`;
-    return;
-  }
-  grid.innerHTML = newSlot() + items.map(gcard).join('');
-  $$('.js-artifact-image', grid).forEach((img) => {
-    const markUnavailable = () => {
-      img.setAttribute('aria-hidden', 'true');
-      img.classList.add('hidden');
-      img.parentElement?.querySelector('.js-artifact-fallback')?.classList.remove('hidden');
-    };
-    img.addEventListener('error', markUnavailable, { once: true });
-    if (img.complete && img.naturalWidth === 0) markUnavailable();
-  });
-  $$('.js-copy', grid).forEach((b) => (b.onclick = () => copy(b.dataset.url)));
-  $$('.js-view', grid).forEach((b) => (b.onclick = () => window.open(b.dataset.url, '_blank')));
-  $$('.js-meta', grid).forEach((b) => (b.onclick = () => {
-    ledger.selectArtifact({ key: b.dataset.key, url: b.dataset.url });
-    location.href = '/metadata.html';
-  }));
-  $$('.js-proof', grid).forEach((b) => (b.onclick = () => {
-    const proof = new URL('/proof.html', location.origin);
-    proof.searchParams.set('key', b.dataset.key || '');
-    proof.searchParams.set('url', b.dataset.url || '');
-    proof.searchParams.set('tokenuri', b.dataset.tokenuri || '');
-    location.href = proof.pathname + proof.search;
-  }));
-  $$('.js-del', grid).forEach((b) => (b.onclick = async () => {
-    const confirmed = await confirmAction({
-      opener: b,
-      kicker: 'GALLERY ACTION',
-      title: 'Remove artifact?',
-      message: "This removes the artifact from this browser's Gallery. The blob stays on Shelby until it expires.",
-      cancelLabel: 'CANCEL',
-      confirmLabel: 'REMOVE FROM GALLERY',
+
+  const bindGalleryActions = () => {
+    $$('.js-artifact-image', grid).forEach((img) => {
+      const markUnavailable = () => {
+        img.setAttribute('aria-hidden', 'true');
+        img.classList.add('hidden');
+        img.parentElement?.querySelector('.js-artifact-fallback')?.classList.remove('hidden');
+      };
+      img.addEventListener('error', markUnavailable, { once: true });
+      if (img.complete && img.naturalWidth === 0) markUnavailable();
     });
-    if (!confirmed) return;
-    forgetMine(b.dataset.key);
-    toast('Removed from gallery', 'ok');
-    await initGallery();
-    document.querySelector('#gallery-title')?.focus();
-  }));
+    $$('.js-gallery-collection', grid).forEach((b) => (b.onclick = () => {
+      activeGalleryCollection = b.dataset.collectionId || '';
+      renderGallerySections();
+    }));
+    $$('.js-copy', grid).forEach((b) => (b.onclick = () => copy(b.dataset.url)));
+    $$('.js-view', grid).forEach((b) => (b.onclick = () => window.open(b.dataset.url, '_blank')));
+    $$('.js-meta', grid).forEach((b) => (b.onclick = () => {
+      ledger.selectArtifact({ key: b.dataset.key, url: b.dataset.url });
+      location.href = '/metadata.html';
+    }));
+    $$('.js-proof', grid).forEach((b) => (b.onclick = () => {
+      const proof = new URL('/proof.html', location.origin);
+      proof.searchParams.set('key', b.dataset.key || '');
+      proof.searchParams.set('url', b.dataset.url || '');
+      proof.searchParams.set('tokenuri', b.dataset.tokenuri || '');
+      location.href = proof.pathname + proof.search;
+    }));
+    $$('.js-del', grid).forEach((b) => (b.onclick = async () => {
+      const confirmed = await confirmAction({
+        opener: b,
+        kicker: 'GALLERY ACTION',
+        title: 'Remove artifact?',
+        message: "This removes the artifact from this browser's Gallery. The blob stays on Shelby until it expires.",
+        cancelLabel: 'CANCEL',
+        confirmLabel: 'REMOVE FROM GALLERY',
+      });
+      if (!confirmed) return;
+      forgetMine(b.dataset.key);
+      toast('Removed from gallery', 'ok');
+      await initGallery();
+      document.querySelector('#gallery-title')?.focus();
+    }));
+  };
+
+  function renderGallerySections() {
+    const query = search?.value || '';
+    const split = splitGalleryArtifacts(items, query);
+    const activeCollection = split.collections.find((entry) => entry.id === activeGalleryCollection);
+    const mediaCards = activeCollection
+      ? activeCollection.items.map(gcard)
+      : [
+        newSlot(),
+        ...split.collections.map(folderCollectionCard),
+        ...split.looseMedia.map(gcard),
+      ];
+    imageGrid.innerHTML = mediaCards.join('');
+    metadataGrid.innerHTML = split.metadata.map(metadataCard).join('');
+    imageEmpty?.classList.toggle('hidden', mediaCards.length > (activeCollection ? 0 : 1));
+    metadataEmpty?.classList.toggle('hidden', split.metadata.length > 0);
+    back?.classList.toggle('hidden', !activeCollection);
+    if (status) {
+      status.textContent = activeCollection
+        ? `${activeCollection.name}: ${activeCollection.items.length} media file${activeCollection.items.length === 1 ? '' : 's'} shown by original folder filename.`
+        : 'Images and hosted TokenURI metadata are separated for NFT workflows.';
+    }
+    bindGalleryActions();
+  }
+
+  back?.addEventListener('click', () => {
+    activeGalleryCollection = '';
+    renderGallerySections();
+  });
+  search?.addEventListener('input', () => {
+    activeGalleryCollection = '';
+    renderGallerySections();
+  });
+  renderGallerySections();
 }
 function accountingMicro(value) {
   try {
@@ -1000,16 +1108,39 @@ function formatAccountingUsd(micro) {
   const frac = String(value % 1_000_000n).padStart(6, '0');
   return `$${whole}.${frac}`;
 }
+function hasAccountingValue(item, field) {
+  return item?.[field] !== undefined && item?.[field] !== null && String(item[field]).trim() !== '';
+}
+function hasAccountingBreakdown(item) {
+  return hasAccountingValue(item, 'storageCostAccountingMicro')
+    && hasAccountingValue(item, 'serviceFeeAccountingMicro');
+}
 function renderFeeDashboard(items) {
-  const totals = (items || []).reduce((sum, item) => ({
-    total: sum.total + accountingMicro(item.totalAccountingMicro || item.quotedAccountingMicro),
-    storage: sum.storage + accountingMicro(item.storageCostAccountingMicro),
-    service: sum.service + accountingMicro(item.serviceFeeAccountingMicro),
-  }), { total: 0n, storage: 0n, service: 0n });
-  const set = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = formatAccountingUsd(value); };
-  set('fee-total-paid', totals.total);
-  set('fee-storage-cost', totals.storage);
-  set('fee-service-fee', totals.service);
+  const totals = (items || []).reduce((sum, item) => {
+    const total = accountingMicro(item.totalAccountingMicro || item.quotedAccountingMicro);
+    const hasBreakdown = hasAccountingBreakdown(item);
+    return {
+      total: sum.total + total,
+      storage: sum.storage + (hasBreakdown ? accountingMicro(item.storageCostAccountingMicro) : 0n),
+      service: sum.service + (hasBreakdown ? accountingMicro(item.serviceFeeAccountingMicro) : 0n),
+      unitemized: sum.unitemized + (total > 0n && !hasBreakdown ? total : 0n),
+      breakdownCount: sum.breakdownCount + (hasBreakdown ? 1 : 0),
+    };
+  }, { total: 0n, storage: 0n, service: 0n, unitemized: 0n, breakdownCount: 0 });
+  const setMoney = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = formatAccountingUsd(value); };
+  const setText = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = value; };
+  setMoney('fee-total-paid', totals.total);
+  if (totals.breakdownCount) {
+    setMoney('fee-storage-cost', totals.storage);
+    setMoney('fee-service-fee', totals.service);
+  } else if (totals.unitemized > 0n) {
+    setText('fee-storage-cost', 'Not recorded');
+    setText('fee-service-fee', 'Not recorded');
+  } else {
+    setMoney('fee-storage-cost', 0n);
+    setMoney('fee-service-fee', 0n);
+  }
+  setMoney('fee-unitemized', totals.unitemized);
 }
 function ttl(expiresAt) {
   const ms = expiresAt - Date.now(); if (ms <= 0) return { t: 'EXPIRED', c: 'text-error' };
@@ -1022,19 +1153,41 @@ function isRenderableImageArtifact(it) {
   if (type.startsWith('image/')) return true;
   return /\.(?:avif|gif|jpe?g|png|svg|webp)(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`);
 }
+function isRenderableVideoArtifact(it) {
+  const type = String(it?.contentType || '').toLowerCase();
+  if (type.startsWith('video/')) return true;
+  return /\.(?:mp4|mov|m4v|webm)(?:$|[?#])/i.test(`${it?.key || ''} ${it?.url || ''}`);
+}
 function gcard(it) {
   const k = ttl(it.expiresAt);
   const isImg = isRenderableImageArtifact(it);
-  const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-  const url = safe(it.url); const key = safe(it.key); const tokenUri = safe(it.tokenUri || it.metadataUrl || ''); const type = safe((it.contentType || 'artifact').toUpperCase());
+  const isVideo = isRenderableVideoArtifact(it);
+  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || ''); const type = safeHtml((it.contentType || 'artifact').toUpperCase()); const name = safeHtml(sourceDisplayName(it));
   return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
     <div class="relative aspect-square overflow-hidden bg-surface-lowest">
       <span class="vessel-technical absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-surface-lowest/80 px-3 py-2 text-[10px] ${k.c}">${k.t}</span>
-      ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Blob unavailable or expired</p></div>` : `<div class="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Preview unavailable</p></div>`}
+      ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Blob unavailable or expired</p></div>` : isVideo ? `<video class="h-full w-full object-cover" src="${url}" controls preload="metadata" aria-label="Wallet-owned uploaded video artifact"></video>` : `<div class="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Preview unavailable</p></div>`}
     </div>
-    <div class="flex flex-1 flex-col p-5"><p class="vessel-kicker text-primary-container">Wallet-owned artifact</p><h2 class="vessel-technical mt-3 truncate text-base text-on-surface">${shortMid(key, 10)}</h2><div class="mt-5 border-t border-white/5 pt-4"><div class="flex items-center justify-between gap-4 text-xs"><span class="vessel-technical text-outline">${type}</span><span class="vessel-technical text-on-surface-variant">${(Number(it.size || 0) / 1048576).toFixed(2)} MB</span></div></div>
+    <div class="flex flex-1 flex-col p-5"><p class="vessel-kicker text-primary-container">Wallet-owned artifact</p><h2 class="mt-3 truncate font-display text-xl font-semibold text-on-surface" title="${name}">${name}</h2><p class="vessel-technical mt-2 truncate text-xs text-outline">${shortMid(key, 10)}</p><div class="mt-5 border-t border-white/5 pt-4"><div class="flex items-center justify-between gap-4 text-xs"><span class="vessel-technical text-outline">${type}</span><span class="vessel-technical text-on-surface-variant">${(Number(it.size || 0) / 1048576).toFixed(2)} MB</span></div></div>
       <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-meta flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Build artifact metadata"><span class="material-symbols-outlined" aria-hidden="true">data_object</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" data-tokenuri="${tokenUri}" aria-label="Share proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
     </div></article>`;
+}
+function folderCollectionCard(collection) {
+  const name = safeHtml(collection.name);
+  const count = collection.items.length;
+  return `<button type="button" class="js-gallery-collection vessel-artifact flex min-h-[18rem] flex-col items-start justify-between p-6 text-left transition hover:border-primary-container/40 hover:bg-primary-container/[0.03]" data-collection-id="${name}" aria-label="Open collection ${name}">
+    <span class="material-symbols-outlined text-5xl text-primary-container" aria-hidden="true">folder_open</span>
+    <span><span class="vessel-kicker text-primary-container">Folder collection</span><span class="mt-3 block font-display text-2xl font-semibold text-on-surface">${name}</span><span class="mt-2 block text-sm text-on-surface-variant">${count} media file${count === 1 ? '' : 's'}</span></span>
+  </button>`;
+}
+function metadataCard(it) {
+  const k = ttl(it.expiresAt);
+  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || it.url); const name = safeHtml(sourceDisplayName(it));
+  return `<article class="vessel-glass flex flex-col gap-4 rounded-3xl p-5">
+    <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="vessel-kicker text-secondary">Metadata TokenURI</p><h2 class="mt-2 truncate font-display text-xl font-semibold text-on-surface" title="${name}">${name}</h2><p class="vessel-technical mt-2 truncate text-xs text-outline">${shortMid(key, 10)}</p></div><span class="vessel-technical shrink-0 rounded-full border border-white/10 px-3 py-2 text-[10px] ${k.c}">${k.t}</span></div>
+    <label class="block"><span class="vessel-kicker text-outline">TokenURI / JSON URL</span><input class="vessel-input mt-2 text-xs" readonly value="${tokenUri}"></label>
+    <div class="flex gap-2"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${tokenUri}" aria-label="Copy TokenURI"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open metadata JSON"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="" data-tokenuri="${tokenUri}" aria-label="Share TokenURI proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove metadata from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
+  </article>`;
 }
 function newSlot() {
   return `<a class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/25 bg-primary-container/[0.025] p-8 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.05]" href="/upload.html"><span class="flex h-20 w-20 items-center justify-center rounded-full border border-primary-container/20 text-primary"><span class="material-symbols-outlined text-4xl" aria-hidden="true">add</span></span><h2 class="mt-6 font-display text-2xl font-semibold">Upload New</h2><p class="vessel-technical mt-3 text-xs text-outline">Initialize artifact</p></a>`;

@@ -29,12 +29,37 @@
       <div><p class="vessel-kicker text-primary-container">Personal collection</p><h1 id="gallery-title" tabindex="-1" class="mt-4 font-display text-6xl font-bold tracking-[-0.05em] md:text-8xl">The Vault</h1><p class="mt-4 text-lg text-on-surface-variant">Your wallet-owned artifacts, tracked in this browser.</p></div>
       <div class="vessel-glass flex w-fit items-center gap-3 rounded-full px-5 py-3"><span class="h-2 w-2 rounded-full bg-primary-container shadow-[0_0_12px_#5eead4]"></span><span id="artifact-count" class="vessel-technical text-sm text-primary">0 artifacts</span></div>
     </header>
-    <section class="mt-8 grid gap-4 md:grid-cols-3" aria-label="Fee dashboard">
+    <section class="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Fee dashboard">
       <article class="vessel-glass rounded-3xl p-5"><p class="vessel-kicker text-primary-container">Total paid</p><p id="fee-total-paid" class="mt-3 font-display text-3xl font-semibold text-on-surface">$0.000000</p><p class="mt-2 text-xs leading-5 text-outline">Shelby network cost, sponsored gas, and Vessel fee.</p></article>
       <article class="vessel-glass rounded-3xl p-5"><p class="vessel-kicker text-tertiary-container">Storage cost</p><p id="fee-storage-cost" class="mt-3 font-display text-3xl font-semibold text-on-surface">$0.000000</p><p class="mt-2 text-xs leading-5 text-outline">Recorded from quote breakdown when available.</p></article>
       <article class="vessel-glass rounded-3xl p-5"><p class="vessel-kicker text-secondary">Service fee</p><p id="fee-service-fee" class="mt-3 font-display text-3xl font-semibold text-on-surface">$0.000000</p><p class="mt-2 text-xs leading-5 text-outline">2% service fee with the configured minimum.</p></article>
+      <article class="vessel-glass rounded-3xl p-5"><p class="vessel-kicker text-outline">Unitemized history</p><p id="fee-unitemized" class="mt-3 font-display text-3xl font-semibold text-on-surface">$0.000000</p><p class="mt-2 text-xs leading-5 text-outline">Older or recovered uploads that only recorded a total.</p></article>
     </section>
-    <section id="gallery-grid" class="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Wallet-owned artifact collection"></section>
+    <section class="mt-10 flex flex-col gap-4 rounded-vessel border border-white/10 bg-surface-lowest/40 p-5 md:flex-row md:items-end md:justify-between" aria-label="Gallery controls">
+      <div>
+        <p class="vessel-kicker text-primary-container">Vault browser</p>
+        <p id="gallery-view-status" class="mt-2 text-sm text-on-surface-variant">Images and hosted TokenURI metadata are separated for NFT workflows.</p>
+      </div>
+      <label class="block w-full md:max-w-sm" for="gallery-search">
+        <span class="vessel-kicker text-outline">Search by file name</span>
+        <input id="gallery-search" class="vessel-input mt-2" type="search" placeholder="Example: 001.png or metadata.json" autocomplete="off">
+      </label>
+    </section>
+    <section id="gallery-grid" class="mt-12 space-y-12" aria-label="Wallet-owned artifact collection">
+      <section aria-labelledby="gallery-images-title">
+        <div class="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div><p class="vessel-kicker text-primary-container">Images</p><h2 id="gallery-images-title" class="mt-2 font-display text-3xl font-semibold">Media artifacts</h2></div>
+          <button id="gallery-back-collections" type="button" class="vessel-button vessel-button-secondary hidden px-4 py-3"><span class="material-symbols-outlined" aria-hidden="true">arrow_back</span>Back to collections</button>
+        </div>
+        <div id="image-gallery-grid" class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
+        <div id="gallery-image-empty" class="vessel-glass mt-4 hidden rounded-vessel p-8 text-center"><h3 class="font-display text-2xl font-semibold">No media artifacts yet</h3><p class="mt-3 text-sm text-on-surface-variant">Upload images or a folder to create a media collection.</p></div>
+      </section>
+      <section aria-labelledby="gallery-metadata-title">
+        <div class="mb-5"><p class="vessel-kicker text-secondary">Metadata TokenURI</p><h2 id="gallery-metadata-title" class="mt-2 font-display text-3xl font-semibold">Hosted JSON metadata</h2></div>
+        <div id="metadata-gallery-grid" class="grid grid-cols-1 gap-4 lg:grid-cols-2"></div>
+        <div id="gallery-metadata-empty" class="vessel-glass mt-4 hidden rounded-vessel p-8 text-center"><h3 class="font-display text-2xl font-semibold">No hosted TokenURI metadata yet</h3><p class="mt-3 text-sm text-on-surface-variant">Create and host NFT metadata from an image artifact.</p></div>
+      </section>
+    </section>
   </main>
 
   <footer class="border-t border-white/5 bg-surface-lowest/60 py-10"><div class="vessel-page flex flex-col gap-6 text-center md:flex-row md:items-center md:justify-between md:text-left"><a class="font-display text-2xl font-bold tracking-[-0.05em] text-primary" href="/">VESSEL</a><p class="vessel-technical text-xs text-outline">Capability demo · ShelbyNet beta · 2026</p><a class="vessel-technical text-xs text-tertiary-container hover:text-primary" href="https://github.com/duclucky/Vessel" target="_blank" rel="noreferrer">GitHub ↗</a></div></footer>

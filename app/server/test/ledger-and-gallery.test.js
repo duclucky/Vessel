@@ -105,9 +105,15 @@ test('single metadata hosting links the TokenURI back to the source artifact', (
 test('Gallery retains its grid hook and Vault composition', () => {
   const html = readPage('gallery.html');
   assert.equal(getIds(html).has('gallery-grid'), true);
+  assert.equal(getIds(html).has('image-gallery-grid'), true);
+  assert.equal(getIds(html).has('metadata-gallery-grid'), true);
+  assert.equal(getIds(html).has('gallery-search'), true);
+  assert.equal(getIds(html).has('gallery-image-empty'), true);
+  assert.equal(getIds(html).has('gallery-metadata-empty'), true);
   assert.equal(getIds(html).has('fee-total-paid'), true);
   assert.equal(getIds(html).has('fee-storage-cost'), true);
   assert.equal(getIds(html).has('fee-service-fee'), true);
+  assert.equal(getIds(html).has('fee-unitemized'), true);
   assert.match(html, />\s*The Vault\s*</);
   assert.match(html, /Your wallet-owned artifacts/i);
 });
@@ -119,6 +125,29 @@ test('Gallery renders an aggregate fee dashboard from local upload history', () 
   assert.match(source, /storageCostAccountingMicro/);
   assert.match(source, /serviceFeeAccountingMicro/);
   assert.match(source, /totalAccountingMicro/);
+  assert.match(source, /hasAccountingBreakdown/);
+  assert.match(source, /Not recorded/);
+  assert.match(source, /fee-unitemized/);
+});
+
+test('Gallery separates media collections from hosted metadata TokenURIs', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const html = readPage('gallery.html');
+  const galleryStart = source.indexOf('async function initGallery()');
+  const galleryEnd = source.indexOf('function accountingMicro', galleryStart);
+  const gallery = source.slice(galleryStart, galleryEnd);
+
+  assert.match(gallery, /splitGalleryArtifacts/);
+  assert.match(gallery, /folderCollectionCard/);
+  assert.match(gallery, /metadataCard/);
+  assert.match(gallery, /activeGalleryCollection/);
+  assert.match(source, /function sourceDisplayName/);
+  assert.match(gallery, /gallery-search/);
+  assert.match(html, /No media artifacts yet/);
+  assert.match(html, /No hosted TokenURI metadata yet/);
+  const metadataCardStart = source.indexOf('function metadataCard');
+  const metadataCardEnd = source.indexOf('async function initGallery()', metadataCardStart);
+  assert.doesNotMatch(source.slice(metadataCardStart, metadataCardEnd), /js-meta/);
 });
 
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {
@@ -199,8 +228,12 @@ test('Gallery infers image media types from Shelby blob names for remote preview
 test('Gallery preview treats SVG and legacy image keys as renderable images', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /isRenderableImageArtifact/);
+  assert.match(source, /isRenderableVideoArtifact/);
   assert.match(source, /\(\?:avif\|gif\|jpe\?g\|png\|svg\|webp\)/);
+  assert.match(source, /\(\?:mp4\|mov\|m4v\|webm\)/);
   assert.match(source, /image\/svg\+xml/);
+  assert.match(source, /type\.startsWith\('video\/'\)/);
+  assert.match(source, /<video class=/);
   assert.match(source, /src="\$\{url\}"/);
 });
 

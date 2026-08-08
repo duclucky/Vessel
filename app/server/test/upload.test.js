@@ -158,6 +158,9 @@ test('paid recovery rebuilds the upload context without losing wallet identity',
   assert.match(paidRecovery, /config:\s*Object\.freeze/);
   assert.match(paidRecovery, /settlementDeployment:\s*record\.settlementDeployment/);
   assert.match(paidRecovery, /settlementNetwork:\s*recoveredSettlementNetwork/);
+  assert.match(paidRecovery, /storageAccountingMicro:\s*record\.storageCostAccountingMicro/);
+  assert.match(paidRecovery, /gasAccountingMicro:\s*record\.gasAccountingMicro/);
+  assert.match(paidRecovery, /serviceFeeAccountingMicro:\s*record\.serviceFeeAccountingMicro/);
   assert.match(paidRecovery, /targetExpirationUtc:\s*new Date\(recoveredExpirationMs\)\.toISOString\(\)/);
 });
 

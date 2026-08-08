@@ -36,6 +36,9 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
     encoding: 0,
     tierId: 1,
     totalAccountingMicro: '10000',
+    storageAccountingMicro: '6000',
+    gasAccountingMicro: '3000',
+    serviceFeeAccountingMicro: '1000',
     solanaAmountMicro: '10000',
     fileHash: HASH,
     contractQuote: { quoteId: 'quote-1' },
@@ -148,6 +151,10 @@ test('service settles, registers, and writes one immutable Aptos file context', 
   assert.equal(Object.isFrozen(result), true);
   assert.equal(result.ownedByYou, true);
   assert.equal(result.account, STORAGE);
+  assert.equal(result.storageCostAccountingMicro, '6000');
+  assert.equal(result.gasAccountingMicro, '3000');
+  assert.equal(result.serviceFeeAccountingMicro, '1000');
+  assert.equal(result.totalAccountingMicro, '10000');
   assert.equal(flow.settlementCalls, 1);
   assert.equal(flow.walletUploadCalls, 1);
   assert.deepEqual(flow.recoveryCalls.at(-1), ['complete']);
@@ -209,10 +216,17 @@ test('resume checks an existing pending receipt without submitting another settl
     quotePublicKey: flow.quote.quotePublicKey,
     settlementDeployment: flow.quote.settlementDeployment,
     quotedAccountingMicro: flow.quote.totalAccountingMicro,
+    storageCostAccountingMicro: flow.quote.storageAccountingMicro,
+    gasAccountingMicro: flow.quote.gasAccountingMicro,
+    serviceFeeAccountingMicro: flow.quote.serviceFeeAccountingMicro,
+    totalAccountingMicro: flow.quote.totalAccountingMicro,
     paymentTier: flow.quote.tierId,
   };
   const result = await flow.service.resume(file, record);
   assert.equal(result.ownedByYou, true);
+  assert.equal(result.storageCostAccountingMicro, '6000');
+  assert.equal(result.gasAccountingMicro, '3000');
+  assert.equal(result.serviceFeeAccountingMicro, '1000');
   assert.equal(flow.settlementCalls, 2);
   assert.equal(flow.walletUploadCalls, 1);
 });
