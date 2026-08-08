@@ -33,7 +33,9 @@
     "dotenv": "^16.4.5",
     "ethers": "^6.13.0",
     "express": "^4.19.2",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "overrides": {
     "@aptos-labs/ts-sdk": "5.2.1",

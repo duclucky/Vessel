@@ -37,6 +37,11 @@ await Promise.all([
   }),
   esbuild.build({
     ...sharedBuildOptions,
+    entryPoints: ['client-src/vessel-official-shelby.jsx'],
+    outfile: 'public/vessel-official-shelby.js',
+  }),
+  esbuild.build({
+    ...sharedBuildOptions,
     entryPoints: ['client-src/vessel-wallets.js'],
     outfile: 'public/vessel-wallets.js',
   }),
@@ -44,12 +49,12 @@ await Promise.all([
 
 // Some upstream SDK error strings contain spaces before physical newlines. They are
 // harmless at runtime but make committed browser artifacts fail `git diff --check`.
-for (const file of ['public/vessel-solana.js', 'public/vessel-wallets.js']) {
+for (const file of ['public/vessel-solana.js', 'public/vessel-official-shelby.js', 'public/vessel-wallets.js']) {
   const generated = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, generated.replace(/[ \t]+$/gm, ''));
 }
 
-const bundleSizes = ['vessel-solana.js', 'vessel-wallets.js']
+const bundleSizes = ['vessel-solana.js', 'vessel-official-shelby.js', 'vessel-wallets.js']
   .map((file) => `${file} ${(fs.statSync(`public/${file}`).size / 1024).toFixed(0)} KB`)
   .join('; ');
 const claySize = (fs.statSync('public/clay.wasm').size / 1024).toFixed(0);
