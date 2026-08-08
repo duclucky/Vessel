@@ -47,7 +47,7 @@ test('single metadata export creates a UTF-8 JSON file', async () => {
   assert.equal(await file.text(), `${JSON.stringify(metadata, null, 2)}\n`);
 });
 
-test('collection manifest maps images to hosted metadata TokenURIs as CSV and copy text', async () => {
+test('collection manifest maps images to hosted metadata TokenURIs as styled sheet and copy text', async () => {
   const manifest = buildCollectionManifest([
     {
       sourcePath: 'genesis/images/1.png',
@@ -76,15 +76,19 @@ test('collection manifest maps images to hosted metadata TokenURIs as CSV and co
     'https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json',
   ]);
   assert.equal(manifest.copyText, `${manifest.tokenUris.join('\n')}\n`);
-  const bytes = new Uint8Array(await manifest.csv.arrayBuffer());
-  assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf]);
-  assert.equal(await manifest.csv.text(), [
-    'sep=,',
-    '🖼 File Name,📁 Collection,🔗 Media URL,🧾 TokenURI,📂 Source Path,🧬 Metadata Path',
-    'Genesis #1,Genesis,https://vessel.example/api/shelby/blobs/0xabc/media/1.png,https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json,genesis/images/1.png,metadata/1.json',
-    '"Genesis, #2",Genesis,https://vessel.example/api/shelby/blobs/0xabc/media/2.png,https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json,genesis/images/2.png,metadata/2.json',
-    '',
-  ].join('\r\n'));
+  assert.equal('csv' in manifest, false);
+  assert.equal(manifest.workbook.type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const entries = readStoredZip(new Uint8Array(await manifest.workbook.arrayBuffer()));
+  assert.equal(entries.has('xl/styles.xml'), true);
+  assert.equal(entries.has('xl/worksheets/sheet1.xml'), true);
+  assert.match(entries.get('xl/styles.xml'), /patternFill patternType="solid"/);
+  assert.match(entries.get('xl/styles.xml'), /sz val="14"/);
+  assert.match(entries.get('xl/worksheets/sheet1.xml'), /<pane ySplit="1"/);
+  assert.match(entries.get('xl/worksheets/sheet1.xml'), /width="44"/);
+  assert.match(entries.get('xl/worksheets/sheet1.xml'), /🖼 File Name/);
+  assert.match(entries.get('xl/worksheets/sheet1.xml'), /Genesis #1/);
+  assert.match(entries.get('xl/worksheets/sheet1.xml'), /Genesis, #2/);
+  assert.doesNotMatch(entries.get('xl/worksheets/sheet1.xml'), /sep=,/);
 });
 
 test('batch ZIP contains deterministic JSON paths and a redacted report', async () => {

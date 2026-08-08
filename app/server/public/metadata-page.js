@@ -877,8 +877,8 @@ export function initMetadataPage({
       notify('All collection TokenURIs copied', 'ok');
     });
     element.batchDownloadManifest?.addEventListener('click', () => {
-      if (!batchManifest?.csv) return;
-      downloadBlob(batchManifest.csv, `${fileNameStem(batchManifest.collectionName, 'collection')}-manifest.csv`, document);
+      if (!batchManifest?.workbook) return;
+      downloadBlob(batchManifest.workbook, `${fileNameStem(batchManifest.collectionName, 'collection')}-manifest.xlsx`, document);
     });
   }
 

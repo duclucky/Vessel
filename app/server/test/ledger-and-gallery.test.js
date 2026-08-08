@@ -200,7 +200,7 @@ test('Gallery separates media collections from hosted metadata TokenURIs', () =>
   assert.doesNotMatch(source.slice(metadataCardStart, metadataCardEnd), /js-meta/);
 });
 
-test('Gallery exposes absolute URLs and a visible CSV export for external use', () => {
+test('Gallery exposes absolute URLs and a visible styled sheet export for external use', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const html = readPage('gallery.html');
   const ids = getIds(html);
@@ -211,28 +211,31 @@ test('Gallery exposes absolute URLs and a visible CSV export for external use', 
   const metadataCardEnd = source.indexOf('function newSlot', metadataCardStart);
   const metadataCard = source.slice(metadataCardStart, metadataCardEnd);
 
-  assert.equal(ids.has('gallery-export-csv'), true, 'Gallery should expose a CSV export button');
-  assert.match(html, /Export Clean CSV/i);
+  assert.equal(ids.has('gallery-export-csv'), true, 'Gallery should expose a sheet export button');
+  assert.match(html, /Export Styled Sheet/i);
   assert.match(source, /function toAppUrl/);
-  assert.match(source, /function galleryManifestCsv/);
+  assert.match(source, /function galleryManifestWorkbook/);
   assert.match(source, /gallery-export-csv/);
   assert.match(card, /toAppUrl\(it\.url\)/);
   assert.match(metadataCard, /toAppUrl\(it\.tokenUri \|\| it\.metadataUrl \|\| it\.url\)/);
   assert.match(metadataCard, /toAppUrl\(it\.sourceArtifactUrl/);
 });
 
-test('Gallery CSV export is presentation-friendly and safe for spreadsheet users', () => {
+test('Gallery XLSX export is styled and presentation-friendly for spreadsheet users', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const exporter = fs.readFileSync(path.join(publicDir, 'metadata-export.js'), 'utf8');
   const html = readPage('gallery.html');
 
-  assert.match(html, /Export Clean CSV/i);
-  assert.match(source, /function csvSafeCell/);
+  assert.match(html, /Export Styled Sheet/i);
+  assert.match(source, /buildStyledWorkbook/);
   assert.match(source, /function formatCsvUtc/);
   assert.match(source, /function formatCsvSizeMb/);
-  assert.match(source, /function csvBlob/);
-  assert.match(source, /\\uFEFF/);
-  assert.match(source, /sep=,/);
-  assert.match(source, /\\r\\n/);
+  assert.match(exporter, /application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet/);
+  assert.match(exporter, /patternFill patternType="solid"/);
+  assert.match(exporter, /sz val="14"/);
+  assert.match(exporter, /<pane ySplit="1"/);
+  assert.match(exporter, /customWidth="1"/);
+  assert.match(source, /\.xlsx/);
   assert.match(source, /'🖼 File Name'/);
   assert.match(source, /'📁 Folder'/);
   assert.match(source, /'🔗 Media URL'/);
@@ -245,16 +248,14 @@ test('Gallery CSV export is presentation-friendly and safe for spreadsheet users
   assert.match(source, /'🔴 Expired'/);
   assert.match(source, /function formatCsvType/);
   assert.match(source, /function formatCsvStatus/);
+  assert.doesNotMatch(source, /sep=,/);
+  assert.doesNotMatch(source, /function csvBlob/);
   assert.doesNotMatch(source, /'display_name'/);
   assert.doesNotMatch(source, /'source_path'/);
   assert.doesNotMatch(source, /'size_bytes'/);
-  assert.match(source, /startsWith\('='\)/);
-  assert.match(source, /startsWith\('\+'\)/);
-  assert.match(source, /startsWith\('-'\)/);
-  assert.match(source, /startsWith\('@'\)/);
 });
 
-test('Gallery supports media selection and folder-scoped CSV exports', () => {
+test('Gallery supports media selection and folder-scoped sheet exports', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const html = readPage('gallery.html');
   const ids = getIds(html);
@@ -275,7 +276,7 @@ test('Gallery supports media selection and folder-scoped CSV exports', () => {
   assert.match(gallery, /exportItemsForGallery\(items, activeGalleryCollection\)/);
   assert.match(gallery, /const metadataItems = activeCollection/);
   assert.match(gallery, /metadataItems\.map\(metadataCard\)/);
-  assert.match(gallery, /Export This Folder CSV/);
+  assert.match(gallery, /Export This Folder Sheet/);
 });
 
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {

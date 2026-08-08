@@ -13,7 +13,7 @@ import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 import { initMetadataPage } from './metadata-page.js';
-import { downloadBlob } from './metadata-export.js';
+import { buildStyledWorkbook, downloadBlob } from './metadata-export.js';
 import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 
@@ -1076,7 +1076,7 @@ async function initGallery() {
     exportCsv.onclick = () => {
       const exportItems = exportItemsForGallery(items, activeGalleryCollection);
       const baseName = activeGalleryCollection || 'vessel-gallery';
-      downloadBlob(galleryManifestCsv(exportItems), `${baseName}-manifest.csv`, document);
+      downloadBlob(galleryManifestWorkbook(exportItems), `${baseName}-manifest.xlsx`, document);
     };
   }
   if (selectMode) {
@@ -1189,7 +1189,7 @@ async function initGallery() {
     if (exportCsv) {
       const exportItems = exportItemsForGallery(items, activeGalleryCollection);
       exportCsv.disabled = !exportItems.length;
-      exportCsv.textContent = activeCollection ? 'Export This Folder CSV' : 'Export Clean CSV';
+      exportCsv.textContent = activeCollection ? 'Export This Folder Sheet' : 'Export Styled Sheet';
     }
     if (status) {
       status.textContent = activeCollection
@@ -1313,14 +1313,6 @@ function newSlot() {
   return `<a class="flex min-h-[30rem] flex-col items-center justify-center rounded-vessel border border-dashed border-primary-container/25 bg-primary-container/[0.025] p-8 text-center transition hover:border-primary-container/60 hover:bg-primary-container/[0.05]" href="/upload.html"><span class="flex h-20 w-20 items-center justify-center rounded-full border border-primary-container/20 text-primary"><span class="material-symbols-outlined text-4xl" aria-hidden="true">add</span></span><h2 class="mt-6 font-display text-2xl font-semibold">Upload New</h2><p class="vessel-technical mt-3 text-xs text-outline">Initialize artifact</p></a>`;
 }
 
-function csvSafeCell(value) {
-  let text = String(value ?? '');
-  if (text.startsWith('=') || text.startsWith('+') || text.startsWith('-') || text.startsWith('@')) {
-    text = `'${text}`;
-  }
-  return /[",\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
 function formatCsvUtc(value) {
   const time = Number(value || 0);
   if (!Number.isFinite(time) || time <= 0) return '';
@@ -1331,11 +1323,6 @@ function formatCsvSizeMb(value) {
   const bytes = Number(value || 0);
   if (!Number.isFinite(bytes) || bytes <= 0) return '0.00';
   return (bytes / 1048576).toFixed(2);
-}
-
-function csvBlob(rows) {
-  const body = ['sep=,', ...rows.map((row) => row.map(csvSafeCell).join(','))].join('\r\n');
-  return new Blob([`\uFEFF${body}\r\n`], { type: 'text/csv;charset=utf-8' });
 }
 
 function formatCsvType(metadata) {
@@ -1362,8 +1349,8 @@ function exportItemsForGallery(items, activeCollection = '') {
   return [...media, ...metadata];
 }
 
-function collectionManifestCsv(manifest) {
-  return csvBlob([
+function collectionManifestWorkbook(manifest) {
+  return buildStyledWorkbook([
     ['🖼 File Name', '📁 Collection', '🔗 Media URL', '🧾 TokenURI', '📌 Proof URL', '📂 Source Path', '🧬 Metadata Path'],
     ...(manifest?.rows || []).map((row) => [
       row.itemName,
@@ -1374,11 +1361,11 @@ function collectionManifestCsv(manifest) {
       row.sourcePath,
       row.metadataPath,
     ]),
-  ]);
+  ], { name: 'Collection TokenURIs' });
 }
 
-function galleryManifestCsv(items) {
-  return csvBlob([
+function galleryManifestWorkbook(items) {
+  return buildStyledWorkbook([
     ['🖼 File Name', '📁 Folder', '🧩 Type', '🔗 Media URL', '🧾 TokenURI', '📌 Proof URL', '📦 Size MB', '⏳ Expires At', '✅ Status', '📂 Source Path', '🧬 Content Type', '🗃 Metadata URL'],
     ...(items || []).map((item) => {
       const metadata = isMetadataArtifact(item);
@@ -1399,7 +1386,7 @@ function galleryManifestCsv(items) {
         metadataUrl,
       ];
     }),
-  ]);
+  ], { name: 'Gallery Manifest' });
 }
 
 async function initCollection() {
@@ -1441,7 +1428,7 @@ async function initCollection() {
   }
   if (exportManifest) {
     exportManifest.disabled = !manifest.rows.length;
-    exportManifest.onclick = () => downloadBlob(collectionManifestCsv(manifest), `${manifest.id || 'collection'}-manifest.csv`, document);
+    exportManifest.onclick = () => downloadBlob(collectionManifestWorkbook(manifest), `${manifest.id || 'collection'}-manifest.xlsx`, document);
   }
 
   const rows = manifest.rows.map((row) => {

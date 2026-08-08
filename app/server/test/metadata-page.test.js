@@ -180,7 +180,8 @@ test('batch metadata page exposes hosted collection manifest actions', () => {
   assert.match(source, /batchCopyTokenUris/);
   assert.match(source, /batchDownloadManifest/);
   assert.match(source, /copyText\(batchManifest\.copyText\)/);
-  assert.match(source, /downloadBlob\(batchManifest\.csv/);
+  assert.match(source, /downloadBlob\(batchManifest\.workbook/);
+  assert.match(source, /\.xlsx/);
   assert.match(source, /saveCollectionManifest\(batchManifest/);
 });
 
