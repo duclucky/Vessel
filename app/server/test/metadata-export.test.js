@@ -79,9 +79,10 @@ test('collection manifest maps images to hosted metadata TokenURIs as CSV and co
   const bytes = new Uint8Array(await manifest.csv.arrayBuffer());
   assert.deepEqual([...bytes.slice(0, 3)], [0xef, 0xbb, 0xbf]);
   assert.equal(await manifest.csv.text(), [
-    'Collection,File Name,Source Path,Media URL,Metadata Path,TokenURI',
-    'Genesis,Genesis #1,genesis/images/1.png,https://vessel.example/api/shelby/blobs/0xabc/media/1.png,metadata/1.json,https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json',
-    'Genesis,"Genesis, #2",genesis/images/2.png,https://vessel.example/api/shelby/blobs/0xabc/media/2.png,metadata/2.json,https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json',
+    'sep=,',
+    '🖼 File Name,📁 Collection,🔗 Media URL,🧾 TokenURI,📂 Source Path,🧬 Metadata Path',
+    'Genesis #1,Genesis,https://vessel.example/api/shelby/blobs/0xabc/media/1.png,https://vessel.example/api/shelby/blobs/0xabc/metadata/1.json,genesis/images/1.png,metadata/1.json',
+    '"Genesis, #2",Genesis,https://vessel.example/api/shelby/blobs/0xabc/media/2.png,https://vessel.example/api/shelby/blobs/0xabc/metadata/2.json,genesis/images/2.png,metadata/2.json',
     '',
   ].join('\r\n'));
 });

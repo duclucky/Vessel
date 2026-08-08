@@ -117,7 +117,7 @@ function csvSafeCell(value) {
 }
 
 function csvBlob(rows) {
-  const body = rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n');
+  const body = ['sep=,', ...rows.map((row) => row.map(csvSafeCell).join(','))].join('\r\n');
   return new Blob([`\uFEFF${body}\r\n`], { type: 'text/csv;charset=utf-8' });
 }
 
@@ -175,14 +175,14 @@ export function buildCollectionManifest(items, hostedResults = [], {
   });
   const tokenUris = rows.map((row) => row.metadataUrl).filter(Boolean);
   const csvRows = [
-    ['Collection', 'File Name', 'Source Path', 'Media URL', 'Metadata Path', 'TokenURI'],
+    ['🖼 File Name', '📁 Collection', '🔗 Media URL', '🧾 TokenURI', '📂 Source Path', '🧬 Metadata Path'],
     ...rows.map((row) => [
-      row.collection,
       row.itemName,
-      row.sourcePath,
+      row.collection,
       row.imageUrl,
-      row.metadataPath,
       row.metadataUrl,
+      row.sourcePath,
+      row.metadataPath,
     ]),
   ];
 

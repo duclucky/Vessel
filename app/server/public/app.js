@@ -1334,8 +1334,16 @@ function formatCsvSizeMb(value) {
 }
 
 function csvBlob(rows) {
-  const body = rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n');
+  const body = ['sep=,', ...rows.map((row) => row.map(csvSafeCell).join(','))].join('\r\n');
   return new Blob([`\uFEFF${body}\r\n`], { type: 'text/csv;charset=utf-8' });
+}
+
+function formatCsvType(metadata) {
+  return metadata ? '🧾 Metadata' : '🖼 Media';
+}
+
+function formatCsvStatus(item) {
+  return item?.expiresAt && item.expiresAt <= Date.now() ? '🔴 Expired' : '🟢 Active';
 }
 
 function proofUrlForArtifact(item) {
@@ -1356,39 +1364,39 @@ function exportItemsForGallery(items, activeCollection = '') {
 
 function collectionManifestCsv(manifest) {
   return csvBlob([
-    ['Collection', 'File Name', 'Source Path', 'Media URL', 'Metadata Path', 'TokenURI', 'Proof URL'],
+    ['🖼 File Name', '📁 Collection', '🔗 Media URL', '🧾 TokenURI', '📌 Proof URL', '📂 Source Path', '🧬 Metadata Path'],
     ...(manifest?.rows || []).map((row) => [
-      manifest.name,
       row.itemName,
-      row.sourcePath,
+      manifest.name,
       toAppUrl(row.imageUrl),
-      row.metadataPath,
       toAppUrl(row.metadataUrl),
       proofUrlForArtifact({ key: row.sourcePath, url: row.imageUrl, tokenUri: row.metadataUrl }),
+      row.sourcePath,
+      row.metadataPath,
     ]),
   ]);
 }
 
 function galleryManifestCsv(items) {
   return csvBlob([
-    ['Type', 'Folder', 'File Name', 'Source Path', 'Media URL', 'TokenURI', 'Metadata URL', 'Proof URL', 'Content Type', 'Size MB', 'Expires At UTC', 'Status'],
+    ['🖼 File Name', '📁 Folder', '🧩 Type', '🔗 Media URL', '🧾 TokenURI', '📌 Proof URL', '📦 Size MB', '⏳ Expires At', '✅ Status', '📂 Source Path', '🧬 Content Type', '🗃 Metadata URL'],
     ...(items || []).map((item) => {
       const metadata = isMetadataArtifact(item);
       const mediaUrl = metadata ? toAppUrl(item.sourceArtifactUrl || item.sourceMediaUrl || item.imageUrl || '') : toAppUrl(item.url);
       const metadataUrl = metadata ? toAppUrl(item.tokenUri || item.metadataUrl || item.url) : toAppUrl(item.metadataUrl || '');
       return [
-        metadata ? 'Metadata' : 'Media',
-        galleryCollectionId(item),
         sourceDisplayName(item),
-        item.sourcePath || '',
+        galleryCollectionId(item),
+        formatCsvType(metadata),
         mediaUrl,
         toAppUrl(item.tokenUri || metadataUrl),
-        metadataUrl,
         proofUrlForArtifact(item),
-        item.contentType || '',
         formatCsvSizeMb(item.size),
         formatCsvUtc(item.expiresAt),
-        item.expiresAt && item.expiresAt <= Date.now() ? 'Expired' : 'Active',
+        formatCsvStatus(item),
+        item.sourcePath || '',
+        item.contentType || '',
+        metadataUrl,
       ];
     }),
   ]);
