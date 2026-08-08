@@ -197,3 +197,49 @@ test('DAA adapter publishes ready only after the derived storage address exists'
   assert.equal(events[1].status, 'ready');
   assert.equal(events[1].session.storageAddress, '0xdaa2');
 });
+
+test('DAA adapter can derive Solana storage through the official Shelby bridge', async () => {
+  const wallet = standardWallet();
+  let request;
+  let handoff;
+  const officialShelby = {
+    async connectWallet(input) {
+      request = input;
+      const signature = await input.wallet.signMessage(Uint8Array.from([9, 8, 7]));
+      assert.equal(input.chain, 'solana');
+      assert.equal(input.descriptor.id, 'solana:standard:1');
+      assert.equal(input.wallet.account.address.toString(), key.toBase58());
+      assert.equal(signature.length, 64);
+      return {
+        chain: 'solana',
+        mode: 'daa',
+        sourceNetwork: 'devnet',
+        sourceAddress: key.toBase58(),
+        storageNetwork: 'shelbynet',
+        storageAddress: '0xofficialdaa',
+      };
+    },
+    disconnect: async () => {},
+  };
+  const uploadClient = {
+    acceptOfficialSession(input) {
+      handoff = input;
+    },
+  };
+
+  const adapter = createSolanaDaaAdapter({
+    descriptor: { id: 'solana:standard:1', name: 'Standard Wallet', provider: wallet },
+    officialShelby,
+    uploadClient,
+  });
+
+  const session = await adapter.connect({ silent: false });
+
+  assert.ok(request);
+  assert.equal(session.sourceAddress, key.toBase58());
+  assert.equal(session.storageAddress, '0xofficialdaa');
+  assert.equal(session.storageNetwork, 'shelbynet');
+  assert.equal(handoff.solana, key.toBase58());
+  assert.equal(handoff.storageAccount, '0xofficialdaa');
+  assert.equal(typeof handoff.provider.signMessage, 'function');
+});

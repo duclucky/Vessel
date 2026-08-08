@@ -39,6 +39,14 @@ function selectProvider(nextProvider) {
   return provider;
 }
 
+function acceptOfficialSession({ provider: nextProvider, solana, storageAccount } = {}) {
+  selectProvider(nextProvider);
+  if (!solana || !storageAccount) throw new Error('Official Shelby Solana session is incomplete');
+  pubkey = String(solana);
+  storageAddr = storageAccount;
+  return { solana: pubkey, storageAccount: storageAddr.toString(), network: NET };
+}
+
 async function loadConfig() {
   if (serverCfg) return serverCfg;
   serverCfg = await fetch('/api/config').then((response) => response.json()).catch(() => ({}));
@@ -406,6 +414,7 @@ window.VesselSolana = {
   available: () => Boolean(provider && pubkey && storageAddr),
   network: NET,
   connect,
+  acceptOfficialSession,
   selectProvider,
   clearProvider,
   disconnect: clearProvider,

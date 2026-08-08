@@ -70187,7 +70187,10 @@ ${String(result)}`);
     error.code = "official_shelby_unavailable";
     return error;
   }
-  function createNoopApi(getState, setState) {
+  function sameSession(left, right) {
+    return left?.chain === right?.chain && left?.sourceAddress === right?.sourceAddress && left?.storageAddress === right?.storageAddress;
+  }
+  function createNoopApi(getState, setState, setRequestedWallet, pendingRef) {
     return Object.freeze({
       isReady() {
         return getState().ready === true;
@@ -70195,10 +70198,18 @@ ${String(result)}`);
       async scanWallets() {
         return [];
       },
-      async connectWallet() {
-        throw unavailable("connectWallet");
+      async connectWallet(input = {}) {
+        if (!input.wallet || !input.chain) throw unavailable("connectWallet");
+        pendingRef.current?.reject?.(unavailable("connectWallet"));
+        setRequestedWallet(input);
+        return new Promise((resolve, reject) => {
+          pendingRef.current = { resolve, reject };
+        });
       },
       async disconnect() {
+        pendingRef.current?.reject?.(unavailable("disconnect"));
+        pendingRef.current = null;
+        setRequestedWallet(null);
         setState((current) => ({ ...current, session: null, lastError: null }));
       },
       getSession() {
@@ -70213,22 +70224,41 @@ ${String(result)}`);
     });
   }
   function OfficialShelbyBridge() {
-    const officialStorage = useOfficialShelbyStorageAccounts();
+    const [requestedWallet, setRequestedWallet] = (0, import_react6.useState)(null);
+    const officialStorage = useOfficialShelbyStorageAccounts({
+      solanaWallet: requestedWallet?.chain === "solana" ? requestedWallet.wallet : null,
+      ethereumWallet: requestedWallet?.chain === "evm" ? requestedWallet.wallet : null
+    });
     const [state, setState] = (0, import_react6.useState)(defaultBridgeState);
     const stateRef = (0, import_react6.useRef)(state);
+    const pendingRef = (0, import_react6.useRef)(null);
     stateRef.current = state;
     const api = (0, import_react6.useMemo)(
-      () => createNoopApi(() => stateRef.current, setState),
+      () => createNoopApi(() => stateRef.current, setState, setRequestedWallet, pendingRef),
       []
     );
     (0, import_react6.useEffect)(() => {
       window.VesselOfficialShelby = api;
-      setState((current) => ({ ...current, ready: true, officialStorage }));
+      setState((current) => ({ ...current, ready: true }));
       window.dispatchEvent(new CustomEvent("vessel:official-shelby-ready"));
       return () => {
         if (window.VesselOfficialShelby === api) delete window.VesselOfficialShelby;
       };
-    }, [api, officialStorage]);
+    }, [api]);
+    (0, import_react6.useEffect)(() => {
+      if (!requestedWallet) return;
+      const session = requestedWallet.chain === "solana" ? officialStorage.solana : officialStorage.evm;
+      if (!session) return;
+      const nextSession = Object.freeze({
+        ...session,
+        walletId: requestedWallet.descriptor?.id || "",
+        walletName: requestedWallet.descriptor?.name || requestedWallet.chain,
+        sourceNetwork: requestedWallet.chain === "solana" ? "devnet" : "sepolia"
+      });
+      setState((current) => sameSession(current.session, nextSession) ? current : { ...current, session: nextSession, lastError: null });
+      pendingRef.current?.resolve?.(nextSession);
+      pendingRef.current = null;
+    }, [officialStorage.evm, officialStorage.solana, requestedWallet]);
     return null;
   }
   function mountOfficialShelbyBridge(target = document.createElement("div")) {

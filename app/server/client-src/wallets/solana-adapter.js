@@ -119,8 +119,27 @@ export function createSolanaAdapter(descriptor) {
     mode: 'daa',
   });
 
+  const officialWalletFor = (selected = requireAccount()) => ({
+    account: {
+      address: {
+        toString: () => selected.address,
+      },
+    },
+    async signMessage(message) {
+      const [output] = await feature('solana:signMessage', 'signMessage').signMessage({
+        account: selected,
+        message,
+      });
+      if (!(output?.signature instanceof Uint8Array)) {
+        throw adapterError('Wallet did not return a message signature', 'provider_unavailable');
+      }
+      return output.signature;
+    },
+  });
+
   return {
     daaProvider: () => daaProvider,
+    officialWallet: () => officialWalletFor(),
     setStorageAddress(value) {
       storageAddress = String(value || '');
     },
@@ -152,11 +171,43 @@ export function createSolanaAdapter(descriptor) {
   };
 }
 
-export function createSolanaDaaAdapter({ descriptor, daaClient }) {
+export function createSolanaDaaAdapter({
+  descriptor,
+  daaClient,
+  officialShelby,
+  uploadClient,
+}) {
   const standard = createSolanaAdapter(descriptor);
   let derivation = 0;
 
+  const deriveWithOfficialShelby = async (session) => {
+    const result = await officialShelby.connectWallet({
+      chain: 'solana',
+      descriptor,
+      wallet: standard.officialWallet(),
+    });
+    if (result.sourceAddress !== session.sourceAddress || !result.storageAddress) {
+      throw adapterError('Official Shelby storage identity does not match the selected wallet', 'identity_mismatch');
+    }
+    uploadClient?.acceptOfficialSession?.({
+      provider: standard.daaProvider(),
+      solana: session.sourceAddress,
+      storageAccount: result.storageAddress,
+    });
+    standard.setStorageAddress(result.storageAddress);
+    return {
+      ...session,
+      ...result,
+      walletId: descriptor.id,
+      walletName: descriptor.name,
+      sourceNetwork: 'devnet',
+      storageNetwork: 'shelbynet',
+      mode: 'daa',
+    };
+  };
+
   const deriveSession = async (session) => {
+    if (officialShelby?.connectWallet) return deriveWithOfficialShelby(session);
     const result = await daaClient.connect(standard.daaProvider());
     if (result.solana !== session.sourceAddress || !result.storageAccount) {
       throw adapterError('Derived storage identity does not match the selected wallet', 'identity_mismatch');
@@ -179,12 +230,13 @@ export function createSolanaDaaAdapter({ descriptor, daaClient }) {
       return standard.subscribe((event) => {
         if (!event.session) {
           derivation += 1;
-          daaClient.clearProvider();
+          daaClient?.clearProvider?.();
+          officialShelby?.disconnect?.();
           listener(event);
           return;
         }
         const current = ++derivation;
-        daaClient.clearProvider();
+        daaClient?.clearProvider?.();
         listener({ ...event, status: 'identity_required' });
         void deriveSession(event.session).then((session) => {
           if (current === derivation) listener({ session, status: 'ready', error: '' });
@@ -198,7 +250,8 @@ export function createSolanaDaaAdapter({ descriptor, daaClient }) {
     async disconnect() {
       derivation += 1;
       await standard.disconnect();
-      daaClient.clearProvider();
+      daaClient?.clearProvider?.();
+      await officialShelby?.disconnect?.();
     },
   };
 }

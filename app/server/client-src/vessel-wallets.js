@@ -44,7 +44,8 @@ const availableRegistry = {
       if (wallet.chain === 'solana' && wallet.enabled) {
         adapters.set(wallet.id, (descriptor) => createSolanaDaaAdapter({
           descriptor,
-          daaClient: window.VesselSolana,
+          officialShelby: window.VesselOfficialShelby,
+          uploadClient: window.VesselSolana,
         }));
         return wallet;
       }

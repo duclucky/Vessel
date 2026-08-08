@@ -40,3 +40,13 @@ test('official Shelby bridge consumes the hook wrapper instead of deriving stora
   assert.doesNotMatch(bridge, /EIP1193DerivedPublicKey/);
   assert.doesNotMatch(bridge, /derived-wallet-solana/);
 });
+
+test('wallet bootstrap routes Solana DAA through the official Shelby bridge', () => {
+  const source = readFileSync('client-src/vessel-wallets.js', 'utf8');
+  const solanaBlockStart = source.indexOf("wallet.chain === 'solana'");
+  const solanaBlockEnd = source.indexOf("wallet.chain === 'evm'", solanaBlockStart);
+  const solanaBlock = source.slice(solanaBlockStart, solanaBlockEnd);
+
+  assert.match(solanaBlock, /officialShelby:\s*window\.VesselOfficialShelby/);
+  assert.doesNotMatch(solanaBlock, /daaClient:\s*window\.VesselSolana/);
+});
