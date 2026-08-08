@@ -29,6 +29,17 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
     storage.setItem(LS.mine, JSON.stringify(list.slice(0, UPLOAD_HISTORY_LIMIT)));
   }
 
+  function attachTokenUriToArtifact(key, tokenUri) {
+    const artifactKey = String(key || '').trim();
+    const uri = String(tokenUri || '').trim();
+    if (!artifactKey || !uri) throw new TypeError('Artifact key and TokenURI are required');
+    storage.setItem(LS.mine, JSON.stringify(loadMine().map((entry) => (
+      entry.key === artifactKey
+        ? { ...entry, tokenUri: uri, metadataUrl: uri, tokenUriUpdatedAt: now() }
+        : entry
+    )).slice(0, UPLOAD_HISTORY_LIMIT)));
+  }
+
   function forgetMine(key) {
     storage.setItem(
       LS.mine,
@@ -130,6 +141,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   return {
     loadMine,
     rememberMine,
+    attachTokenUriToArtifact,
     replaceMine,
     forgetMine,
     loadCollectionManifests,

@@ -81,6 +81,27 @@ test('Gallery can select an existing wallet-owned artifact for Metadata Atelier'
   assert.deepEqual(ledger.loadMine(), []);
 });
 
+test('single metadata hosting links the TokenURI back to the source artifact', () => {
+  const ledger = createLedger(memoryStorage(), () => 9_999);
+  ledger.commitUpload({
+    key: 'media/source.png',
+    url: 'https://shelby.example/media/source.png',
+    size: 42,
+    contentType: 'image/png',
+    sourcePath: 'source.png',
+    ownedByYou: true,
+    account: '0xabc',
+    expirationMicros: 2_592_001_000_000,
+  });
+
+  ledger.attachTokenUriToArtifact('media/source.png', 'https://shelby.example/metadata/source.json');
+
+  assert.equal(ledger.loadMine()[0].key, 'media/source.png');
+  assert.equal(ledger.loadMine()[0].tokenUri, 'https://shelby.example/metadata/source.json');
+  assert.equal(ledger.loadMine()[0].metadataUrl, 'https://shelby.example/metadata/source.json');
+  assert.equal(ledger.loadMine()[0].tokenUriUpdatedAt, 9_999);
+});
+
 test('Gallery retains its grid hook and Vault composition', () => {
   const html = readPage('gallery.html');
   assert.equal(getIds(html).has('gallery-grid'), true);
@@ -251,13 +272,39 @@ test('Metadata hosting commits the wallet-owned JSON result to the same gallery 
   const metadataStart = source.indexOf('async function initMetadata()');
   const metadataEnd = source.indexOf('/* ------------------------------- boot', metadataStart);
   const metadata = source.slice(metadataStart, metadataEnd);
+  const page = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
 
   assert.match(metadata, /walletOwnedUpload\.upload/);
   assert.match(metadata, /ledger\.commitUpload\(result\)/);
+  assert.match(metadata, /attachTokenUriToArtifact/);
+  assert.match(page, /saveArtifactTokenUri/);
   assert.match(metadata, /sourcePath/);
   const uploader = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
   assert.match(uploader, /storageCostAccountingMicro: validated\.quote\.storageAccountingMicro/);
   assert.match(uploader, /serviceFeeAccountingMicro: validated\.quote\.serviceFeeAccountingMicro/);
+});
+
+test('Gallery proof links include a hosted TokenURI when metadata is attached', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const cardStart = source.indexOf('function gcard');
+  const cardEnd = source.indexOf('function newSlot', cardStart);
+  const card = source.slice(cardStart, cardEnd);
+  const proofHandler = source.slice(
+    source.indexOf("$$('.js-proof', grid)"),
+    source.indexOf("$$('.js-del', grid)"),
+  );
+
+  assert.match(card, /data-tokenuri="\$\{tokenUri\}"/);
+  assert.match(proofHandler, /proof\.searchParams\.set\('tokenuri', b\.dataset\.tokenuri \|\| ''\)/);
+});
+
+test('Proof page explains when an artifact has no hosted TokenURI yet', () => {
+  const html = readPage('proof.html');
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+
+  assert.equal(getIds(html).has('proof-tokenuri-helper'), true);
+  assert.match(html, /Create TokenURI/);
+  assert.match(source, /No TokenURI has been attached to this artifact yet/);
 });
 
 test('Metadata loader reconciles local collection paths with remote Shelby artifacts', () => {

@@ -94,6 +94,7 @@ export function initMetadataPage({
   hostingAvailable = false,
   loadCollections = async () => [],
   hostFiles = async () => { throw metadataPageError('Wallet-owned metadata hosting is not ready', 'wallet_owned_metadata_host_not_ready'); },
+  saveArtifactTokenUri = () => {},
   saveCollectionManifest = () => {},
   notify = () => {},
   copyText = (value) => globalThis.navigator?.clipboard?.writeText?.(value),
@@ -719,6 +720,7 @@ export function initMetadataPage({
         element.resultArea.classList.add('flex');
       }
       if (element.resultUri) element.resultUri.value = tokenUri;
+      saveArtifactTokenUri({ key: artifactKey, tokenUri, result });
       notify('TokenURI hosted under your wallet-owned storage address', 'ok');
       return result;
     } finally {

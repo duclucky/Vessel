@@ -20,7 +20,7 @@ import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 const API = location.origin;
 const ledger = createLedger(localStorage);
 const recovery = createRecoveryLedger(localStorage);
-const { loadMine, replaceMine, forgetMine, loadCollectionManifests } = ledger;
+const { loadMine, replaceMine, forgetMine, loadCollectionManifests, attachTokenUriToArtifact } = ledger;
 
 /* ------------------------------- helpers ------------------------------ */
 const $ = (s, r = document) => r.querySelector(s);
@@ -913,6 +913,7 @@ async function initGallery() {
     const proof = new URL('/proof.html', location.origin);
     proof.searchParams.set('key', b.dataset.key || '');
     proof.searchParams.set('url', b.dataset.url || '');
+    proof.searchParams.set('tokenuri', b.dataset.tokenuri || '');
     location.href = proof.pathname + proof.search;
   }));
   $$('.js-del', grid).forEach((b) => (b.onclick = async () => {
@@ -971,14 +972,14 @@ function gcard(it) {
   const k = ttl(it.expiresAt);
   const isImg = isRenderableImageArtifact(it);
   const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
-  const url = safe(it.url); const key = safe(it.key); const type = safe((it.contentType || 'artifact').toUpperCase());
+  const url = safe(it.url); const key = safe(it.key); const tokenUri = safe(it.tokenUri || it.metadataUrl || ''); const type = safe((it.contentType || 'artifact').toUpperCase());
   return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
     <div class="relative aspect-square overflow-hidden bg-surface-lowest">
       <span class="vessel-technical absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-surface-lowest/80 px-3 py-2 text-[10px] ${k.c}">${k.t}</span>
       ${isImg ? `<img class="js-artifact-image h-full w-full object-cover transition duration-700 group-hover:scale-105" src="${url}" alt="Wallet-owned uploaded artifact"><div class="js-artifact-fallback hidden flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Blob unavailable or expired</p></div>` : `<div class="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"><span class="material-symbols-outlined text-6xl text-outline" aria-hidden="true">deployed_code</span><p class="vessel-technical text-xs text-outline">Preview unavailable</p></div>`}
     </div>
     <div class="flex flex-1 flex-col p-5"><p class="vessel-kicker text-primary-container">Wallet-owned artifact</p><h2 class="vessel-technical mt-3 truncate text-base text-on-surface">${shortMid(key, 10)}</h2><div class="mt-5 border-t border-white/5 pt-4"><div class="flex items-center justify-between gap-4 text-xs"><span class="vessel-technical text-outline">${type}</span><span class="vessel-technical text-on-surface-variant">${(Number(it.size || 0) / 1048576).toFixed(2)} MB</span></div></div>
-      <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-meta flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Build artifact metadata"><span class="material-symbols-outlined" aria-hidden="true">data_object</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Share proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
+      <div class="mt-auto flex gap-2 pt-5"><button class="js-copy flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Copy artifact URL"><span class="material-symbols-outlined" aria-hidden="true">content_copy</span></button><button class="js-view flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-url="${url}" aria-label="Open artifact"><span class="material-symbols-outlined" aria-hidden="true">visibility</span></button><button class="js-meta flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" aria-label="Build artifact metadata"><span class="material-symbols-outlined" aria-hidden="true">data_object</span></button><button class="js-proof flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-white/10 text-on-surface-variant hover:border-primary-container/30 hover:text-primary" data-key="${key}" data-url="${url}" data-tokenuri="${tokenUri}" aria-label="Share proof"><span class="material-symbols-outlined" aria-hidden="true">ios_share</span></button><button class="js-del flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-full border border-error/15 text-error/80 hover:bg-error/10" data-key="${key}" aria-label="Remove artifact from gallery"><span class="material-symbols-outlined" aria-hidden="true">delete</span></button></div>
     </div></article>`;
 }
 function newSlot() {
@@ -1093,6 +1094,22 @@ async function initProof() {
       : 'No proof parameters were provided. Open a proof link from the Vault or Collection page.';
   }
   if (copyLink) copyLink.onclick = () => copy(location.href);
+  const tokenUriHelper = $('#proof-tokenuri-helper');
+  const createTokenUri = $('#proof-create-tokenuri');
+  const canCreateTokenUri = Boolean(!tokenUriUrl && key && mediaUrl);
+  if (tokenUriHelper) {
+    tokenUriHelper.textContent = tokenUriUrl
+      ? 'This TokenURI points to the hosted NFT metadata JSON for this artifact.'
+      : 'No TokenURI has been attached to this artifact yet. Create and host metadata first.';
+  }
+  if (createTokenUri) {
+    createTokenUri.classList.toggle('hidden', !canCreateTokenUri);
+    createTokenUri.onclick = (event) => {
+      event.preventDefault();
+      ledger.selectArtifact({ key, url: mediaUrl });
+      location.href = '/metadata.html';
+    };
+  }
 
   const state = walletController()?.getState?.();
   const manifest = collectionId && state?.session?.storageAddress
@@ -1261,6 +1278,9 @@ async function initMetadata() {
     hostingAvailable: cfg.shelbyWritesEnabled === true,
     loadCollections: loadMetadataCollections,
     hostFiles: hostMetadataFiles,
+    saveArtifactTokenUri: ({ key, tokenUri }) => {
+      attachTokenUriToArtifact(key, tokenUri);
+    },
     saveCollectionManifest: (manifest, { collection } = {}) => {
       const session = walletController()?.getState?.().session;
       if (!session?.storageAddress || !manifest?.rows?.length) return;
