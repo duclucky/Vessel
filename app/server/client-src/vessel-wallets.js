@@ -53,6 +53,7 @@ const availableRegistry = {
         adapters.set(wallet.id, (descriptor) => createEvmDaaAdapter({
           descriptor,
           domain: publicConfig.domain,
+          officialShelby: window.VesselOfficialShelby,
         }));
         return wallet;
       }

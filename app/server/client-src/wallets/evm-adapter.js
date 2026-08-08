@@ -48,6 +48,7 @@ export function createEvmDaaAdapter({
   deriveStorageAddress = deriveWithOfficialShelbyEthereumDaa,
   signAptosTransactionWithEthereum = officialSignAptosTransactionWithEthereum,
   targetChainId = SEPOLIA_HEX_CHAIN_ID,
+  officialShelby,
 } = {}) {
   const provider = descriptor?.provider;
   if (!provider?.request) throw evmError('Select an EVM wallet before connecting', 'provider_unavailable');
@@ -87,7 +88,21 @@ export function createEvmDaaAdapter({
     const sourceAddress = await requestAccounts({ silent });
     if (!sourceAddress) return null;
     await ensureNetwork();
-    const storageAddress = deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+    const officialSession = officialShelby?.connectWallet
+      ? await officialShelby.connectWallet({
+        chain: 'evm',
+        descriptor,
+        wallet: {
+          account: { address: sourceAddress },
+          request: provider.request.bind(provider),
+        },
+      })
+      : null;
+    const storageAddress = officialSession?.storageAddress
+      || deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+    if (officialSession && officialSession.sourceAddress !== sourceAddress) {
+      throw evmError('Official Shelby storage identity does not match the selected wallet', 'identity_mismatch');
+    }
     session = Object.freeze({
       walletId: descriptor.id,
       walletName: descriptor.name || 'EVM wallet',
@@ -123,6 +138,7 @@ export function createEvmDaaAdapter({
     signAptosTransaction,
     disconnect() {
       session = null;
+      officialShelby?.disconnect?.();
       publish({ session: null });
     },
     subscribe(listener) {

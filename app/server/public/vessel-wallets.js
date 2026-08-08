@@ -52277,7 +52277,8 @@ ${suffix}`;
     domain = defaultDomain(),
     deriveStorageAddress = deriveWithOfficialShelbyEthereumDaa,
     signAptosTransactionWithEthereum: signAptosTransactionWithEthereum2 = signAptosTransactionWithEthereum,
-    targetChainId = SEPOLIA_HEX_CHAIN_ID
+    targetChainId = SEPOLIA_HEX_CHAIN_ID,
+    officialShelby
   } = {}) {
     const provider = descriptor?.provider;
     if (!provider?.request) throw evmError("Select an EVM wallet before connecting", "provider_unavailable");
@@ -52313,7 +52314,18 @@ ${suffix}`;
       const sourceAddress = await requestAccounts({ silent });
       if (!sourceAddress) return null;
       await ensureNetwork();
-      const storageAddress = deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+      const officialSession = officialShelby?.connectWallet ? await officialShelby.connectWallet({
+        chain: "evm",
+        descriptor,
+        wallet: {
+          account: { address: sourceAddress },
+          request: provider.request.bind(provider)
+        }
+      }) : null;
+      const storageAddress = officialSession?.storageAddress || deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+      if (officialSession && officialSession.sourceAddress !== sourceAddress) {
+        throw evmError("Official Shelby storage identity does not match the selected wallet", "identity_mismatch");
+      }
       session = Object.freeze({
         walletId: descriptor.id,
         walletName: descriptor.name || "EVM wallet",
@@ -52347,6 +52359,7 @@ ${suffix}`;
       signAptosTransaction,
       disconnect() {
         session = null;
+        officialShelby?.disconnect?.();
         publish({ session: null });
       },
       subscribe(listener) {
@@ -58182,7 +58195,8 @@ Message: ${transactionMessage}.
         if (wallet.chain === "evm" && wallet.enabled) {
           adapters.set(wallet.id, (descriptor) => createEvmDaaAdapter({
             descriptor,
-            domain: publicConfig.domain
+            domain: publicConfig.domain,
+            officialShelby: window.VesselOfficialShelby
           }));
           return wallet;
         }

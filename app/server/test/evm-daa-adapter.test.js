@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { createEvmDaaAdapter } from '../client-src/wallets/evm-adapter.js';
 
 const STORAGE = `0x${'33'.repeat(32)}`;
@@ -39,6 +40,51 @@ test('EVM DAA adapter derives Shelby storage with official injected derivation',
   assert.equal(session.sourceAddress, '0x1234567890abcdef1234567890abcdef12345678');
   assert.equal(session.storageAddress, STORAGE);
   assert.equal(session.walletName, 'MetaMask');
+});
+
+test('EVM DAA adapter can derive storage through the official Shelby bridge', async () => {
+  const source = provider();
+  let request;
+  const officialShelby = {
+    async connectWallet(input) {
+      request = input;
+      assert.equal(input.chain, 'evm');
+      assert.equal(input.descriptor.name, 'MetaMask');
+      assert.equal(input.wallet.account.address, '0x1234567890abcdef1234567890abcdef12345678');
+      assert.equal(typeof input.wallet.request, 'function');
+      return {
+        chain: 'evm',
+        mode: 'daa',
+        sourceNetwork: 'sepolia',
+        sourceAddress: '0x1234567890abcdef1234567890abcdef12345678',
+        storageNetwork: 'shelbynet',
+        storageAddress: STORAGE,
+      };
+    },
+  };
+  const adapter = createEvmDaaAdapter({
+    descriptor: { name: 'MetaMask', provider: source },
+    officialShelby,
+    signAptosTransactionWithEthereum: async () => ({ status: 'Approved', args: {} }),
+  });
+
+  const session = await adapter.connect();
+
+  assert.ok(request);
+  assert.equal(session.chain, 'evm');
+  assert.equal(session.sourceNetwork, 'sepolia');
+  assert.equal(session.sourceAddress, '0x1234567890abcdef1234567890abcdef12345678');
+  assert.equal(session.storageNetwork, 'shelbynet');
+  assert.equal(session.storageAddress, STORAGE);
+});
+
+test('wallet bootstrap routes EVM DAA through the official Shelby bridge', () => {
+  const source = readFileSync(new URL('../client-src/vessel-wallets.js', import.meta.url), 'utf8');
+  const evmBlockStart = source.indexOf("wallet.chain === 'evm' && wallet.enabled");
+  const evmBlockEnd = source.indexOf("wallet.chain === 'evm')", evmBlockStart);
+  const evmBlock = source.slice(evmBlockStart, evmBlockEnd);
+
+  assert.match(evmBlock, /officialShelby:\s*window\.VesselOfficialShelby/);
 });
 
 test('EVM DAA adapter requests Sepolia before reporting ready', async () => {
