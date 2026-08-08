@@ -2,14 +2,14 @@
 
 ## Goal
 
-Make Vessel's cross-chain storage path as close to Shelby's official integration model as possible: Shelby SDKs own Derived Account Abstraction and ShelbyNet storage operations, while Vessel contracts only collect Vessel service fees and emit receipts.
+Make Vessel's cross-chain storage path as close to Shelby's official integration model as possible: Shelby SDKs own Derived Account Abstraction and ShelbyNet storage operations, while Vessel contracts collect the source-chain Vessel charge and emit receipts.
 
 ## Current Problem
 
 Vessel currently works, but the implementation mixes two concerns too closely:
 
 - Shelby DAA and ShelbyNet storage ownership.
-- Vessel fee settlement on Aptos, Solana, and EVM testnets.
+- Vessel source-chain payment settlement on Aptos, Solana, and EVM testnets.
 
 The Solana and EVM paths use official underlying DAA primitives, but the app is still a vanilla JavaScript app. Shelby's official browser examples for Solana and Ethereum are React hooks. That means the current implementation is defensible, but not the most official form when presented to Shelby reviewers.
 
@@ -56,10 +56,18 @@ For Solana, the React island must call the official Solana Kit browser hook. For
 
 Vessel contracts own only:
 
-- collection of the Vessel service fee,
+- collection of the source-chain Vessel charge,
 - custody in the contract or program vault,
 - admin or multisig withdrawal,
 - a verifiable receipt that binds the fee payment to a specific storage intent.
+
+The source-chain Vessel charge includes the costs Vessel needs to recover for that upload:
+
+- Shelby storage cost,
+- sponsored ShelbyNet gas or gas-station cost,
+- Vessel service fee, currently 2% with the configured minimum.
+
+Non-Aptos users never need APT or ShelbyUSD. Vessel sponsors the ShelbyNet side of the upload and recovers that cost through the user's Solana or EVM source-chain payment.
 
 The contracts must not represent themselves as Shelby storage contracts. New source-chain fee contracts must use `VesselFeeReceiptV1` naming. Existing deployed contracts may keep their old on-chain struct names for backwards compatibility only if the server and UI map them to "Vessel fee receipt" everywhere.
 
@@ -90,12 +98,15 @@ The server never receives a wallet seed phrase or private key. Shelby API keys a
    - file hash,
    - retention,
    - storage expiration,
+   - Shelby storage cost,
+   - sponsored ShelbyNet gas reimbursement,
+   - Vessel service fee,
    - fee breakdown,
-   - Vessel service fee.
-5. User approves Vessel fee settlement on the source chain.
+   - total source-chain Vessel charge.
+5. User approves Vessel fee settlement on the source chain for the total source-chain Vessel charge.
 6. Vessel contract emits fee receipt.
 7. Server verifies receipt against the signed quote.
-8. Shelby official SDK path registers and uploads the blob under the derived Shelby Storage Account.
+8. Vessel sponsors the ShelbyNet register/upload transaction through the official Shelby SDK path under the derived Shelby Storage Account.
 9. Gallery records the artifact with media URL, proof URL, fee receipt, and optional TokenURI.
 
 ### Aptos wallet upload
@@ -110,7 +121,7 @@ Rename semantics from generic settlement to fee settlement:
 
 - `SettlementReceiptV1` becomes `VesselFeeReceiptV1`.
 - `SettlementReceiptCreatedV1` becomes `VesselFeeReceiptCreatedV1`.
-- `amount` means Vessel service fee amount only.
+- `amount` means the total source-chain Vessel charge for the upload.
 - `asset` means the source-chain fee asset, currently Devnet USDC.
 - The receipt must bind:
   - quote ID,
@@ -137,7 +148,7 @@ Rename semantics from generic settlement to fee settlement:
 
 - `SettlementReceiptV1` becomes `VesselFeeReceiptV1`.
 - `amount` must use the actual chain payment unit.
-- For Sepolia beta, native ETH is acceptable only if the quote explicitly converts the Vessel service fee to wei.
+- For Sepolia beta, native ETH is acceptable only if the quote explicitly converts the total source-chain Vessel charge to wei.
 
 Because EVM does not have a standard Ed25519 precompile, Ed25519 quote signature verification remains server-side for the beta. The EVM contract must still validate:
 
@@ -155,6 +166,7 @@ Use the same fee-only language:
 - the Move contract is the Vessel fee collector,
 - Shelby protocol remains the storage authority,
 - Aptos-native storage gas and ShelbyUSD are paid through Shelby's native path where applicable.
+- Non-Aptos users are not required to hold APT or ShelbyUSD; Vessel sponsors those costs and recovers them through source-chain payment.
 
 If the Move contract currently records broader settlement wording, rename public copy and server adapters first. Rename Move structs only if migration cost is acceptable before submission.
 
@@ -208,6 +220,8 @@ Use this wording consistently:
 - "Powered by Shelby DAA"
 - "Shelby Storage Account"
 - "Vessel fee receipt"
+- "Non-Aptos users do not need APT or ShelbyUSD"
+- "Vessel sponsors ShelbyNet gas and storage, then recovers the cost through a source-chain fee receipt"
 - "Vessel contract vault"
 - "ShelbyNet storage"
 
@@ -224,7 +238,8 @@ Add or keep tests proving:
 
 - Solana and Ethereum browser integrations call the official Shelby hook boundary.
 - The old custom DAA adapters are no longer the primary upload path.
-- Vessel fee quote amount is separated from Shelby storage cost and sponsored gas.
+- Quote UI separates Shelby storage cost, sponsored ShelbyNet gas, Vessel service fee, and total source-chain payment.
+- Solana and Ethereum users are never prompted for APT or ShelbyUSD.
 - Solana and EVM fee receipts cannot be replayed against a different file, payer, storage account, retention, or config version.
 - Gallery and proof pages label fee receipts separately from Shelby storage evidence.
 - Production `/api/config` exposes only non-secret network and contract metadata.
@@ -243,7 +258,8 @@ Add or keep tests proving:
 ## Acceptance Criteria
 
 - Shelby DAA/storage integration is demonstrably backed by official Shelby browser SDK entrypoints or a documented compatibility wrapper around those entrypoints.
-- Vessel contracts are documented and named as fee settlement only.
+- Vessel contracts are documented and named as source-chain fee settlement only.
+- Non-Aptos users can complete the intended flow without APT or ShelbyUSD.
 - Solana and Ethereum uploads still produce ShelbyNet media URLs.
 - Metadata TokenURI hosting still works.
 - Gallery and proof pages show both Shelby storage evidence and Vessel fee receipt evidence.
