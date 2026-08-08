@@ -120,7 +120,7 @@ export function calculateUploadQuote({
     100_000_000n,
   );
   const subtotalMicro = storageMicro + gasMicro;
-  const markedUpMicro = ceilDiv(subtotalMicro * 102n, 100n);
+  const markedUpMicro = ceilDiv(subtotalMicro * 101n, 100n);
   const totalMicro = markedUpMicro < 10_000n ? 10_000n : markedUpMicro;
   const serviceFeeMicro = totalMicro - subtotalMicro;
 

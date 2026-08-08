@@ -166,6 +166,8 @@ test('Gallery retains its grid hook and Vault composition', () => {
   assert.equal(getIds(html).has('fee-unitemized'), true);
   assert.match(html, />\s*The Vault\s*</);
   assert.match(html, /Your wallet-owned artifacts/i);
+  assert.match(html, /1% service fee with the configured minimum/i);
+  assert.doesNotMatch(html, /2% service fee/i);
 });
 
 test('Gallery renders an aggregate fee dashboard from local upload history', () => {

@@ -29,6 +29,12 @@ test('README describes the deployed product and current network availability', (
   assert.doesNotMatch(readme, /Production currently runs with `SHELBY_WRITES_ENABLED=false`/i);
 });
 
+test('README documents the current one percent Vessel fee policy', () => {
+  assert.match(readme, /1% Vessel service fee/i);
+  assert.match(readme, /USD 0\.01 minimum/i);
+  assert.doesNotMatch(readme, /2% Vessel service fee/i);
+});
+
 test('README exposes current testnet deployments and verification commands', () => {
   assert.match(readme, /0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15/i);
   assert.match(readme, /G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx/);

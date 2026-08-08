@@ -65,7 +65,7 @@ Wallet state is restored silently when the extension supports it. Selecting a co
 
 ### 2. Prepare storage
 
-Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, network and protocol cost, sponsored gas, a 2% Vessel service fee, and a USD 0.01 minimum.
+Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, network and protocol cost, sponsored gas, a 1% Vessel service fee, and a USD 0.01 minimum.
 
 When the active ShelbyNet write gate is enabled, the user reviews the quote, approves the settlement transaction, and receives wallet-owned storage evidence. If the gate is disabled for maintenance, the UI remains usable for inspection and does not present a disabled network as a successful upload.
 

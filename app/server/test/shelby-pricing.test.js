@@ -98,6 +98,29 @@ test('upload quote uses integer epoch, storage, gas, service fee, and minimum ar
   );
 });
 
+test('upload quote charges one percent Vessel service fee before the minimum floor', () => {
+  const result = calculateUploadQuote({
+    intent: { sizeBytes: 1, expirationMicros: 2_000_000 },
+    pricing: {
+      tierId: 3,
+      spUnitsPerChunkEpoch: 10_000_000n,
+      adminUnitsPerChunkEpoch: 0n,
+      epochDurationMicros: 1_000_000n,
+      serverTimeMicros: 1_000_000n,
+      configVersion: 'cfg-one-percent',
+    },
+    chunksetCount: 1,
+    gasUnits: 0n,
+    gasUnitPriceOctas: 0n,
+    aptUsdMicros: 5_000_000n,
+  });
+
+  assert.equal(result.subtotalAccountingMicro, '100000');
+  assert.equal(result.totalAccountingMicro, '101000');
+  assert.equal(result.serviceFeeAccountingMicro, '1000');
+  assert.equal(result.minimumApplied, false);
+});
+
 test('upload quote applies the one-cent minimum without losing the uplift amount', () => {
   const result = calculateUploadQuote({
     intent: { sizeBytes: 1, expirationMicros: 2_000_000 },

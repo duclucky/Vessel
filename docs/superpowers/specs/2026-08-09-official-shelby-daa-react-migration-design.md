@@ -65,7 +65,7 @@ The source-chain Vessel charge includes the costs Vessel needs to recover for th
 
 - Shelby storage cost,
 - sponsored ShelbyNet gas or gas-station cost,
-- Vessel service fee, currently 2% with the configured minimum.
+- Vessel service fee, currently 1% with the configured minimum.
 
 Non-Aptos users never need APT or ShelbyUSD. Vessel sponsors the ShelbyNet side of the upload and recovers that cost through the user's Solana or EVM source-chain payment.
 

@@ -56,6 +56,7 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Wallet-owned upload/i);
   assert.match(html, /Vessel contract fee/i);
+  assert.match(html, /Vessel service fee \(1%\)/i);
   assert.match(html, /APT \+ ShelbyUSD protocol costs/i);
   assert.match(html, /Solana wallets use sponsored DAA/i);
   assert.match(html, /testnet USDC/i);
@@ -73,6 +74,7 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.match(html, /mainnet release will support larger batches/i);
   assert.match(html, /wallet may request approval for each file/i);
   assert.doesNotMatch(html, /faucet/i);
+  assert.doesNotMatch(html, /Vessel service fee \(2%\)/i);
   assert.doesNotMatch(html, /AES|encrypted|immutable|weekly/i);
 });
 

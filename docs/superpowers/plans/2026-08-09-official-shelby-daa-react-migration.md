@@ -724,7 +724,7 @@ git commit -m "Label source-chain receipts as Vessel fees"
 
 **Interfaces:**
 - Consumes: quote fields from `ContractQuoteManager`.
-- Produces: source-chain contracts that are explicitly fee-settlement-only in names and emitted receipt semantics. The contract amount is the total source-chain Vessel charge, not just the 2% service fee.
+- Produces: source-chain contracts that are explicitly fee-settlement-only in names and emitted receipt semantics. The contract amount is the total source-chain Vessel charge, not just the 1% service fee.
 
 - [ ] **Step 1: Write failing source-chain contract semantics test**
 
