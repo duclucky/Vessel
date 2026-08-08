@@ -166,6 +166,27 @@ test('Gallery separates media collections from hosted metadata TokenURIs', () =>
   assert.doesNotMatch(source.slice(metadataCardStart, metadataCardEnd), /js-meta/);
 });
 
+test('Gallery exposes absolute URLs and a visible CSV export for external use', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const html = readPage('gallery.html');
+  const ids = getIds(html);
+  const cardStart = source.indexOf('function gcard');
+  const cardEnd = source.indexOf('function folderCollectionCard', cardStart);
+  const card = source.slice(cardStart, cardEnd);
+  const metadataCardStart = source.indexOf('function metadataCard');
+  const metadataCardEnd = source.indexOf('function newSlot', metadataCardStart);
+  const metadataCard = source.slice(metadataCardStart, metadataCardEnd);
+
+  assert.equal(ids.has('gallery-export-csv'), true, 'Gallery should expose a CSV export button');
+  assert.match(html, /Export Gallery CSV/i);
+  assert.match(source, /function toAppUrl/);
+  assert.match(source, /function galleryManifestCsv/);
+  assert.match(source, /gallery-export-csv/);
+  assert.match(card, /toAppUrl\(it\.url\)/);
+  assert.match(metadataCard, /toAppUrl\(it\.tokenUri \|\| it\.metadataUrl \|\| it\.url\)/);
+  assert.match(metadataCard, /toAppUrl\(it\.sourceArtifactUrl/);
+});
+
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {
   const html = readPage('collection.html');
   const ids = getIds(html);
@@ -373,6 +394,18 @@ test('Proof page can recover a missing Media URL from the TokenURI JSON', () => 
   assert.match(source, /properties\?\.files/);
   assert.match(proof, /!mediaUrl && tokenUriUrl/);
   assert.match(proof, /history\.replaceState/);
+});
+
+test('Proof page canonicalizes relative media and TokenURI links before display', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const proofStart = source.indexOf('async function initProof()');
+  const proofEnd = source.indexOf('async function initLatency()', proofStart);
+  const proof = source.slice(proofStart, proofEnd);
+
+  assert.match(proof, /let mediaUrl = toAppUrl\(params\.get\('url'\) \|\| ''\)/);
+  assert.match(proof, /let tokenUriUrl = toAppUrl\(params\.get\('tokenuri'\) \|\| ''\)/);
+  assert.match(proof, /params\.set\('url', mediaUrl\)/);
+  assert.match(proof, /params\.set\('tokenuri', tokenUriUrl\)/);
 });
 
 test('Metadata loader reconciles local collection paths with remote Shelby artifacts', () => {

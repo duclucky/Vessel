@@ -931,6 +931,16 @@ function safeHtml(value) {
   })[char]);
 }
 
+function toAppUrl(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  try {
+    return new URL(text, location.origin).href;
+  } catch {
+    return text;
+  }
+}
+
 function sourceDisplayName(it) {
   const source = String(it?.sourcePath || '').split('/').filter(Boolean).pop();
   const key = String(it?.key || '').split('/').filter(Boolean).pop();
@@ -996,6 +1006,7 @@ async function initGallery() {
   const imageEmpty = $('#gallery-image-empty');
   const metadataEmpty = $('#gallery-metadata-empty');
   const search = $('#gallery-search');
+  const exportCsv = $('#gallery-export-csv');
   const status = $('#gallery-view-status');
   const back = $('#gallery-back-collections');
   if (!grid || !imageGrid || !metadataGrid) return;
@@ -1015,6 +1026,10 @@ async function initGallery() {
   const count = $('#artifact-count');
   if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
   renderFeeDashboard(items);
+  if (exportCsv) {
+    exportCsv.disabled = !items.length;
+    exportCsv.onclick = () => downloadBlob(galleryManifestCsv(items), 'vessel-gallery-manifest.csv', document);
+  }
 
   const bindGalleryActions = () => {
     $$('.js-artifact-image', grid).forEach((img) => {
@@ -1162,7 +1177,7 @@ function gcard(it) {
   const k = ttl(it.expiresAt);
   const isImg = isRenderableImageArtifact(it);
   const isVideo = isRenderableVideoArtifact(it);
-  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || ''); const type = safeHtml((it.contentType || 'artifact').toUpperCase()); const name = safeHtml(sourceDisplayName(it));
+  const url = safeHtml(toAppUrl(it.url)); const key = safeHtml(it.key); const tokenUri = safeHtml(toAppUrl(it.tokenUri || it.metadataUrl || '')); const type = safeHtml((it.contentType || 'artifact').toUpperCase()); const name = safeHtml(sourceDisplayName(it));
   return `<article class="vessel-artifact group flex min-h-[30rem] flex-col">
     <div class="relative aspect-square overflow-hidden bg-surface-lowest">
       <span class="vessel-technical absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-surface-lowest/80 px-3 py-2 text-[10px] ${k.c}">${k.t}</span>
@@ -1182,7 +1197,7 @@ function folderCollectionCard(collection) {
 }
 function metadataCard(it) {
   const k = ttl(it.expiresAt);
-  const url = safeHtml(it.url); const key = safeHtml(it.key); const tokenUri = safeHtml(it.tokenUri || it.metadataUrl || it.url); const name = safeHtml(sourceDisplayName(it)); const mediaUrl = safeHtml(it.sourceArtifactUrl || it.sourceMediaUrl || it.imageUrl || ''); const proofKey = safeHtml(it.sourceArtifactKey || it.key);
+  const url = safeHtml(toAppUrl(it.url)); const key = safeHtml(it.key); const tokenUri = safeHtml(toAppUrl(it.tokenUri || it.metadataUrl || it.url)); const name = safeHtml(sourceDisplayName(it)); const mediaUrl = safeHtml(toAppUrl(it.sourceArtifactUrl || it.sourceMediaUrl || it.imageUrl || '')); const proofKey = safeHtml(it.sourceArtifactKey || it.key);
   return `<article class="vessel-glass flex flex-col gap-4 rounded-3xl p-5">
     <div class="flex items-start justify-between gap-4"><div class="min-w-0"><p class="vessel-kicker text-secondary">Metadata TokenURI</p><h2 class="mt-2 truncate font-display text-xl font-semibold text-on-surface" title="${name}">${name}</h2><p class="vessel-technical mt-2 truncate text-xs text-outline">${shortMid(key, 10)}</p></div><span class="vessel-technical shrink-0 rounded-full border border-white/10 px-3 py-2 text-[10px] ${k.c}">${k.t}</span></div>
     <label class="block"><span class="vessel-kicker text-outline">TokenURI / JSON URL</span><input class="vessel-input mt-2 text-xs" readonly value="${tokenUri}"></label>
@@ -1205,10 +1220,34 @@ function collectionManifestCsv(manifest) {
       manifest.name,
       row.itemName,
       row.sourcePath,
-      row.imageUrl,
+      toAppUrl(row.imageUrl),
       row.metadataPath,
-      row.metadataUrl,
+      toAppUrl(row.metadataUrl),
     ]),
+  ].map((row) => row.map(csvCell).join(','));
+  return new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
+}
+
+function galleryManifestCsv(items) {
+  const lines = [
+    ['kind', 'collection', 'display_name', 'source_path', 'media_url', 'token_uri', 'metadata_url', 'content_type', 'size_bytes', 'expires_at'],
+    ...(items || []).map((item) => {
+      const metadata = isMetadataArtifact(item);
+      const mediaUrl = metadata ? toAppUrl(item.sourceArtifactUrl || item.sourceMediaUrl || item.imageUrl || '') : toAppUrl(item.url);
+      const metadataUrl = metadata ? toAppUrl(item.tokenUri || item.metadataUrl || item.url) : toAppUrl(item.metadataUrl || '');
+      return [
+        metadata ? 'metadata' : 'media',
+        folderCollectionId(item),
+        sourceDisplayName(item),
+        item.sourcePath || '',
+        mediaUrl,
+        toAppUrl(item.tokenUri || metadataUrl),
+        metadataUrl,
+        item.contentType || '',
+        item.size || 0,
+        item.expiresAt ? new Date(item.expiresAt).toISOString() : '',
+      ];
+    }),
   ].map((row) => row.map(csvCell).join(','));
   return new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
 }
@@ -1241,12 +1280,12 @@ async function initCollection() {
   title.textContent = manifest.name;
   if (status) status.textContent = `Saved manifest for ${shortMid(state.session.storageAddress, 8)}. Export it before the current testnet wipe.`;
   if (count) count.textContent = `${manifest.rows.length} ${manifest.rows.length === 1 ? 'item' : 'items'}`;
-  const tokenText = manifest.tokenUris.length ? `${manifest.tokenUris.join('\n')}\n` : '';
-  if (tokenList) tokenList.value = tokenText;
+  const absoluteTokenText = manifest.tokenUris.length ? `${manifest.tokenUris.map(toAppUrl).join('\n')}\n` : '';
+  if (tokenList) tokenList.value = absoluteTokenText;
   if (copyTokenUris) {
-    copyTokenUris.disabled = !tokenText;
+    copyTokenUris.disabled = !absoluteTokenText;
     copyTokenUris.onclick = () => {
-      copy(tokenText);
+      copy(absoluteTokenText);
       toast('Collection TokenURIs copied', 'ok');
     };
   }
@@ -1261,17 +1300,19 @@ async function initCollection() {
     item.textContent = row.itemName || row.sourcePath || 'Untitled item';
     const image = document.createElement('td');
     const imageLink = document.createElement('a');
-    imageLink.href = row.imageUrl;
+    const imageUrl = toAppUrl(row.imageUrl);
+    imageLink.href = imageUrl;
     imageLink.target = '_blank';
     imageLink.rel = 'noreferrer';
-    imageLink.textContent = row.imageUrl;
+    imageLink.textContent = imageUrl;
     image.appendChild(imageLink);
     const metadata = document.createElement('td');
     const metadataLink = document.createElement('a');
-    metadataLink.href = row.metadataUrl;
+    const metadataUrl = toAppUrl(row.metadataUrl);
+    metadataLink.href = metadataUrl;
     metadataLink.target = '_blank';
     metadataLink.rel = 'noreferrer';
-    metadataLink.textContent = row.metadataUrl || 'Not hosted';
+    metadataLink.textContent = metadataUrl || 'Not hosted';
     metadata.appendChild(metadataLink);
     tr.append(item, image, metadata);
     return tr;
@@ -1280,7 +1321,7 @@ async function initCollection() {
 }
 
 async function resolveProofMediaUrlFromTokenUri(tokenUriUrl) {
-  const href = String(tokenUriUrl || '').trim();
+  const href = toAppUrl(tokenUriUrl);
   if (!href) return '';
   try {
     const response = await fetch(href, { headers: { accept: 'application/json' } });
@@ -1308,18 +1349,28 @@ async function initProof() {
   const tokenUri = $('#proof-tokenuri-url');
   const collectionList = $('#proof-collection-list');
   const copyLink = $('#proof-copy-link');
-  let mediaUrl = params.get('url') || '';
-  const tokenUriUrl = params.get('tokenuri') || '';
+  let mediaUrl = toAppUrl(params.get('url') || '');
+  let tokenUriUrl = toAppUrl(params.get('tokenuri') || '');
   const key = params.get('key') || '';
   const collectionId = params.get('collection') || '';
+  let canonicalizedProofUrl = false;
+  if (mediaUrl && mediaUrl !== (params.get('url') || '')) {
+    params.set('url', mediaUrl);
+    canonicalizedProofUrl = true;
+  }
+  if (tokenUriUrl && tokenUriUrl !== (params.get('tokenuri') || '')) {
+    params.set('tokenuri', tokenUriUrl);
+    canonicalizedProofUrl = true;
+  }
   if (!mediaUrl && tokenUriUrl) {
     const recoveredMediaUrl = await resolveProofMediaUrlFromTokenUri(tokenUriUrl);
     if (recoveredMediaUrl) {
       mediaUrl = recoveredMediaUrl;
       params.set('url', mediaUrl);
-      history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
+      canonicalizedProofUrl = true;
     }
   }
+  if (canonicalizedProofUrl) history.replaceState(null, '', `${location.pathname}?${params.toString()}`);
 
   if (media) media.value = mediaUrl;
   if (tokenUri) tokenUri.value = tokenUriUrl;
@@ -1360,7 +1411,7 @@ async function initProof() {
       name.textContent = row.itemName || row.sourcePath || 'Collection item';
       const uri = document.createElement('p');
       uri.className = 'vessel-technical mt-2 break-all text-xs text-primary';
-      uri.textContent = row.metadataUrl;
+      uri.textContent = toAppUrl(row.metadataUrl);
       item.append(name, uri);
       return item;
     }));
