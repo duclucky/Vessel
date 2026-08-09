@@ -19,7 +19,10 @@ import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pr
 import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
 import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
 import { validatePaidUploadAuthorization } from './lib/paid-upload-access.js';
-import { buildDirectRegisterTransaction } from './lib/shelby-register-builder.js';
+import {
+  buildDirectRegisterTransaction,
+  directDaaTransactionOptions,
+} from './lib/shelby-register-builder.js';
 import { ShelbyUploadGateway } from './lib/shelby-upload-gateway.js';
 import { ensureShelbyDaaFunding } from './lib/shelby-daa-funding.js';
 import { targetExpirationMicros } from '../public/retention.js';
@@ -454,7 +457,7 @@ app.post('/api/shelby/commit', async (req, res) => {
     const transaction = await shelbyClient.aptos.transaction.build.simple({
       sender: signedQuote.context.storageAddress,
       data: req.body?.commitPayload,
-      options: { maxGasAmount: sponsoredMaxGasAmount() },
+      options: directDaaTransactionOptions(sponsoredMaxGasAmount()),
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),

@@ -20,7 +20,7 @@ test('Shelby API key stays server-side across register, multipart write, list, a
   assert.match(server, /ensureShelbyDaaFunding\(\{[\s\S]*address:\s*signedQuote\.context\.storageAddress/);
   assert.match(server, /build\.simple\(\{\s*sender:\s*signedQuote\.context\.storageAddress[\s\S]*data:\s*req\.body\?\.commitPayload/s);
   assert.doesNotMatch(server, /data:\s*req\.body\?\.commitPayload[\s\S]{0,160}withFeePayer:\s*true/);
-  assert.match(server, /build\.simple\(\{[\s\S]*options:\s*\{ maxGasAmount:\s*sponsoredMaxGasAmount\(\) \}[\s\S]*transactionKind:\s*'simple'/);
+  assert.match(server, /build\.simple\(\{[\s\S]*options:\s*directDaaTransactionOptions\(sponsoredMaxGasAmount\(\)\)[\s\S]*transactionKind:\s*'simple'/);
   assert.match(server, /submitMode:\s*'direct'/);
   assert.match(server, /transactionKind:\s*'simple'/);
   assert.doesNotMatch(server, /data:\s*req\.body\?\.commitPayload[\s\S]{0,160}secondarySignerAddresses/);

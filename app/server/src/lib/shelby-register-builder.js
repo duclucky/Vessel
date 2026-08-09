@@ -4,6 +4,14 @@ import {
 } from '@shelby-protocol/sdk/node';
 
 const ROOT = /^(?:0x)?[0-9a-f]{64}$/i;
+const DAA_TRANSACTION_TTL_SECONDS = 300;
+
+export function directDaaTransactionOptions(maxGasAmount, nowMs = Date.now()) {
+  return {
+    maxGasAmount,
+    expireTimestamp: Math.floor(nowMs / 1_000) + DAA_TRANSACTION_TTL_SECONDS,
+  };
+}
 
 const registerError = (message, code) => Object.assign(
   new Error(message),
@@ -60,6 +68,7 @@ export async function buildDirectRegisterTransaction({
   signedQuote,
   blobMerkleRoot,
   maxGasAmount,
+  nowMs = Date.now(),
 }) {
   const context = signedQuote?.context;
   if (!context?.storageAddress) {
@@ -93,6 +102,6 @@ export async function buildDirectRegisterTransaction({
   return shelbyClient.aptos.transaction.build.simple({
     sender: context.storageAddress,
     data: payload,
-    options: { maxGasAmount: gasLimit },
+    options: directDaaTransactionOptions(gasLimit, nowMs),
   });
 }

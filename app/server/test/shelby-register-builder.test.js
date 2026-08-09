@@ -3,7 +3,15 @@ import assert from 'node:assert/strict';
 import {
   buildDirectRegisterTransaction,
   buildSponsoredRegisterTransaction,
+  directDaaTransactionOptions,
 } from '../src/lib/shelby-register-builder.js';
+
+test('direct DAA transactions remain valid for a five-minute wallet approval window', () => {
+  assert.deepEqual(directDaaTransactionOptions(25_000, 1_786_267_000_000), {
+    maxGasAmount: 25_000,
+    expireTimestamp: 1_786_267_300,
+  });
+});
 
 test('server builds a Shelby sponsored registration from the paid quote binding', async () => {
   const builds = [];
@@ -111,13 +119,17 @@ test('server can build a direct DAA Shelby registration without gas station spon
     signedQuote,
     blobMerkleRoot: `0x${'44'.repeat(32)}`,
     maxGasAmount: 25_000,
+    nowMs: 1_786_267_000_000,
   });
 
   assert.equal(result, transaction);
   assert.equal(builds[0].sender, signedQuote.context.storageAddress);
   assert.equal(builds[0].withFeePayer, undefined);
   assert.equal(builds[0].secondarySignerAddresses, undefined);
-  assert.deepEqual(builds[0].options, { maxGasAmount: 25_000 });
+  assert.deepEqual(builds[0].options, {
+    maxGasAmount: 25_000,
+    expireTimestamp: 1_786_267_300,
+  });
   assert.match(builds[0].data.function, /::blob_metadata::register_blob$/);
   assert.equal(builds[0].data.functionArguments.length, 10);
   assert.equal(builds[0].data.functionArguments[0], signedQuote.context.blobName);
