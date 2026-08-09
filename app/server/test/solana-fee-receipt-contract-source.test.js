@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { Keypair } from '@solana/web3.js';
 
 const solanaRoot = new URL('../../../contracts/solana/vessel-settlement/', import.meta.url);
 const source = (relativePath) => readFileSync(new URL(relativePath, solanaRoot), 'utf8');
+const serverFile = (relativePath) => readFileSync(new URL(relativePath, import.meta.url), 'utf8');
 const accountDiscriminator = (name) => (
   createHash('sha256').update(`account:${name}`).digest().subarray(0, 8)
 );
@@ -34,13 +34,31 @@ test('Solana receipt verifier expects the Anchor discriminator for VesselFeeRece
   assert.ok(adapter.includes(expected), `expected adapter to contain: ${expected}`);
 });
 
-test('Solana source program id matches the deploy keypair used for SBF artifacts', () => {
-  const deployKeypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(
-    source('target/deploy/vessel_settlement-keypair.json'),
-  ))).publicKey.toBase58();
+test('Solana source program id matches runtime manifests and documentation', () => {
   const lib = source('programs/vessel-settlement/src/lib.rs');
   const anchor = source('Anchor.toml');
+  const readme = readFileSync(new URL('../../../README.md', import.meta.url), 'utf8');
+  const runtimeTestnet = JSON.parse(serverFile('../deployments/vessel-settlement.testnet.json'));
+  const runtimeShelbynet = JSON.parse(serverFile('../deployments/vessel-settlement.shelbynet.json'));
+  const repositoryTestnet = JSON.parse(readFileSync(
+    new URL('../../../deployments/vessel-settlement.testnet.json', import.meta.url),
+    'utf8',
+  ));
+  const repositoryShelbynet = JSON.parse(readFileSync(
+    new URL('../../../deployments/vessel-settlement.shelbynet.json', import.meta.url),
+    'utf8',
+  ));
+  const bundled = readFileSync(
+    new URL('../src/lib/settlement/bundled-testnet-manifest.js', import.meta.url),
+    'utf8',
+  );
+  const programId = runtimeShelbynet.solana.programId;
 
-  assert.match(lib, new RegExp(`declare_id!\\("${deployKeypair}"\\);`));
-  assert.match(anchor, new RegExp(`vessel_settlement = "${deployKeypair}"`));
+  assert.equal(runtimeTestnet.solana.programId, programId);
+  assert.equal(repositoryTestnet.solana.programId, programId);
+  assert.equal(repositoryShelbynet.solana.programId, programId);
+  assert.match(lib, new RegExp(`declare_id!\\("${programId}"\\);`));
+  assert.match(anchor, new RegExp(`vessel_settlement = "${programId}"`));
+  assert.match(readme, new RegExp(programId));
+  assert.match(bundled, new RegExp(programId));
 });

@@ -94,7 +94,7 @@ function harness(chain, { pendingOnce = false } = {}) {
   });
   const deploymentId = chain === 'aptos'
     ? `0x${'aa'.repeat(32)}::vessel_settlement`
-    : '6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b';
+    : 'CGsM9YkQZEvyfkKrVwNxuQfoXrw7U4AytLEiQz2GH2Th';
   let pending = pendingOnce;
   let block = 100;
   const adapter = {

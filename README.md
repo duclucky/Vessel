@@ -135,11 +135,16 @@ The Aptos Move fee contract records the source-chain Vessel charge in the contra
 
 | Item | Value |
 |---|---|
-| Solana fee program | `6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b` |
-| Config PDA | `GmpJ3ZMuKnnqzEGCWwdeqD1MZMhrq1vPkMr2SP5WBaZ3` |
-| Vault ATA | `2GxSbbAGtiLJUY8puqqqyfJugRRiMbi6GZJMhPjPep8P` |
+| Solana fee program | `CGsM9YkQZEvyfkKrVwNxuQfoXrw7U4AytLEiQz2GH2Th` |
+| Program Data | `5rPRsTDuexph8qLVanQt3wDDjwtKqVkcmnuPrVfwNjYN` |
+| Upgrade authority | `5dtfsZNnhctzxFq5f2g3PqYj5eSz9Ab6Tk38Wxgp72g` |
+| Config PDA | `Gu83vmdUDm8eMfb4cNfucLLe3ep7wib29xiGqwom7otj` |
+| Vault ATA | `GNWYKt5qpXWdRqH4cac3qv6r8wWKH9S1V6ftgHZmpdRL` |
 | Squads multisig | `GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh` |
 | Accepted mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+| Program deploy tx | `kZefgseB1zuxt1Ex7JfYsHgvXof3WzQiAN3NwhJBE4naU13AoAFzLyxktTdZmrxjKf8gVpygoW7rezdwpcmZod2` |
+| Config initialize tx | `3a7yPEkKqhaBF9gGWM3hubkk8BJs36CTS6HhpNosnumuYe27EEPwCpFzrbn4KyXpo9skjhCLBdpp9aDUAAejzdVw` |
+| Authority transfer tx | `331WZLKW27Wxhx2XEvbLdbiiS9WduKHQtVkP2u7vC8TYndWvHYnD74oKodiPyAtB8mPpb53fNmuw1QD8QFNURDMy` |
 
 The Solana fee program vault records the source-chain Vessel charge. Solana users do not need APT or ShelbyUSD; they approve the Solana-side receipt while Vessel sponsors ShelbyNet-side gas and storage.
 
