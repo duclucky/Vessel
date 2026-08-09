@@ -31,12 +31,14 @@ test('server builds a Shelby sponsored registration from the paid quote binding'
     gasStationAccount: `0x${'33'.repeat(32)}`,
     signedQuote,
     blobMerkleRoot: `0x${'44'.repeat(32)}`,
+    maxGasAmount: 8_400,
   });
 
   assert.equal(result, transaction);
   assert.equal(builds[0].sender, signedQuote.context.storageAddress);
   assert.deepEqual(builds[0].secondarySignerAddresses, [`0x${'33'.repeat(32)}`]);
   assert.equal(builds[0].withFeePayer, true);
+  assert.deepEqual(builds[0].options, { maxGasAmount: 8_400 });
   assert.match(builds[0].data.function, /::blob_metadata::register_blob_with_sponsor$/);
   assert.equal(builds[0].data.functionArguments.length, 10);
   assert.equal(builds[0].data.functionArguments[0], signedQuote.context.blobName);

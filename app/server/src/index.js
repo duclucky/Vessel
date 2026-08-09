@@ -227,6 +227,21 @@ function validatePaidUploadBody(body = {}) {
   });
 }
 
+function sponsoredMaxGasAmount() {
+  const gasUnits = (
+    config.registerGasUnitsEstimate * config.gasSafetyBps + 9_999n
+  ) / 10_000n;
+  const minGasUnits = 28n;
+  const boundedGasUnits = gasUnits > minGasUnits ? gasUnits : minGasUnits;
+  if (boundedGasUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+    const error = new Error('Sponsored gas limit is too large');
+    error.status = 500;
+    error.code = 'invalid_sponsored_gas_limit';
+    throw error;
+  }
+  return Number(boundedGasUnits);
+}
+
 const encodeBlobPath = (blobName) => String(blobName)
   .split('/')
   .map((segment) => encodeURIComponent(segment))
@@ -404,6 +419,7 @@ app.post('/api/shelby/register', async (req, res) => {
       gasStationAccount: config.gasStationAccount,
       signedQuote,
       blobMerkleRoot: req.body?.blobMerkleRoot,
+      maxGasAmount: sponsoredMaxGasAmount(),
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
@@ -425,6 +441,7 @@ app.post('/api/shelby/commit', async (req, res) => {
       sender: signedQuote.context.storageAddress,
       data: req.body?.commitPayload,
       withFeePayer: true,
+      options: { maxGasAmount: sponsoredMaxGasAmount() },
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),

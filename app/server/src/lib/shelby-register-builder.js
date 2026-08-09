@@ -15,6 +15,7 @@ export async function buildSponsoredRegisterTransaction({
   gasStationAccount,
   signedQuote,
   blobMerkleRoot,
+  maxGasAmount,
 }) {
   const context = signedQuote?.context;
   if (!context?.storageAddress || !gasStationAccount) {
@@ -26,6 +27,10 @@ export async function buildSponsoredRegisterTransaction({
   const paymentTier = Number(signedQuote?.breakdown?.tierId);
   if (!Number.isSafeInteger(paymentTier) || paymentTier < 0) {
     throw registerError('Invalid Shelby payment tier', 'invalid_payment_tier');
+  }
+  const sponsoredGasLimit = Number(maxGasAmount);
+  if (!Number.isSafeInteger(sponsoredGasLimit) || sponsoredGasLimit < 28) {
+    throw registerError('Invalid sponsored gas limit', 'invalid_sponsored_gas_limit');
   }
   const payload = ShelbyBlobClient.createRegisterBlobPayload({
     account: context.storageAddress,
@@ -46,5 +51,6 @@ export async function buildSponsoredRegisterTransaction({
     data: payload,
     secondarySignerAddresses: [gasStationAccount],
     withFeePayer: true,
+    options: { maxGasAmount: sponsoredGasLimit },
   });
 }
