@@ -40,13 +40,13 @@ test('server builds a Shelby sponsored registration from the paid quote binding'
   assert.match(builds[0].data.function, /::blob_metadata::register_blob_with_sponsor$/);
   assert.equal(builds[0].data.functionArguments.length, 10);
   assert.equal(builds[0].data.functionArguments[0], signedQuote.context.blobName);
-  assert.equal(builds[0].data.functionArguments[1], 'shelbynet-1');
+  assert.equal(builds[0].data.functionArguments[1], null);
   assert.equal(builds[0].data.functionArguments[2], null);
   assert.equal(builds[0].data.functionArguments[3], signedQuote.context.expirationMicros);
   assert.deepEqual(builds[0].data.functionArguments[4], Uint8Array.from({ length: 32 }, () => 0x44));
   assert.equal(builds[0].data.functionArguments[5], 1);
   assert.equal(builds[0].data.functionArguments[6], signedQuote.context.sizeBytes);
-  assert.equal(builds[0].data.functionArguments[7], 3);
+  assert.equal(builds[0].data.functionArguments[7], 0);
   assert.equal(builds[0].data.functionArguments[8], 0);
   assert.equal(builds[0].data.functionArguments[9], 0);
 });
