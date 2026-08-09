@@ -34,6 +34,7 @@ export async function buildSponsoredRegisterTransaction({
     blobMerkleRoot,
     numChunksets: expectedTotalChunksets(context.sizeBytes),
     expirationMicros: context.expirationMicros,
+    selectedLocation: 'shelbynet-1',
     useSponsoredUsdVariant: true,
     encoding: context.encoding,
   });
