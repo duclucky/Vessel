@@ -10,7 +10,7 @@ export function supportsLegacyTransactions(wallet) {
   return versions != null && Array.from(versions).includes('legacy');
 }
 
-export function createSolanaAdapter(descriptor) {
+export function createSolanaAdapter(descriptor, { legacyProvider } = {}) {
   const wallet = descriptor.provider;
   if (!supportsLegacyTransactions(wallet)) {
     throw adapterError(
@@ -62,8 +62,21 @@ export function createSolanaAdapter(descriptor) {
       return { publicKey: new PublicKey(selected.publicKey) };
     },
     async signMessage(message) {
+      const selected = requireAccount();
+      const legacyKey = legacyProvider?.publicKey?.toString?.();
+      if (
+        typeof legacyProvider?.signMessage === 'function'
+        && legacyKey === selected.address
+      ) {
+        const output = await legacyProvider.signMessage(message, 'utf8');
+        const signature = output?.signature ?? output;
+        if (!(signature instanceof Uint8Array)) {
+          throw adapterError('Wallet did not return a message signature', 'provider_unavailable');
+        }
+        return { signature, signedMessage: message };
+      }
       const [output] = await feature('solana:signMessage', 'signMessage').signMessage({
-        account: requireAccount(),
+        account: selected,
         message,
       });
       if (!output?.signature) {
@@ -176,8 +189,9 @@ export function createSolanaDaaAdapter({
   daaClient,
   officialShelby,
   uploadClient,
+  legacyProvider,
 }) {
-  const standard = createSolanaAdapter(descriptor);
+  const standard = createSolanaAdapter(descriptor, { legacyProvider });
   let derivation = 0;
 
   const deriveWithOfficialShelby = async (session) => {

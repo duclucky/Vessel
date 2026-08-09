@@ -88,6 +88,35 @@ test('standard signMessage is normalized to the proven DAA provider contract', a
   assert.deepEqual([...signed.signedMessage], [1, 2, 3]);
 });
 
+test('Phantom DAA signing uses the matching injected provider when Wallet Standard stalls', async () => {
+  const wallet = standardWallet();
+  wallet.features['solana:signMessage'].signMessage = async () => {
+    assert.fail('Wallet Standard signMessage must not be used when matching Phantom is available');
+  };
+  let legacyMessage;
+  const adapter = createSolanaAdapter({
+    id: 'solana:phantom:1',
+    name: 'Phantom',
+    provider: wallet,
+  }, {
+    legacyProvider: {
+      publicKey: key,
+      async signMessage(message) {
+        legacyMessage = message;
+        return { signature: Uint8Array.from({ length: 64 }, () => 9) };
+      },
+    },
+  });
+
+  const daa = adapter.daaProvider();
+  await daa.connect();
+  const signed = await daa.signMessage(Uint8Array.from([4, 5, 6]));
+
+  assert.deepEqual([...legacyMessage], [4, 5, 6]);
+  assert.deepEqual([...signed.signedMessage], [4, 5, 6]);
+  assert.equal(signed.signature[0], 9);
+});
+
 test('standard signAndSendTransaction returns a base58 signature', async () => {
   const adapter = createSolanaAdapter({
     id: 'solana:standard:1',

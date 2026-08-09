@@ -57881,7 +57881,7 @@ Message: ${transactionMessage}.
     const versions2 = wallet?.features?.["solana:signAndSendTransaction"]?.supportedTransactionVersions;
     return versions2 != null && Array.from(versions2).includes("legacy");
   }
-  function createSolanaAdapter(descriptor) {
+  function createSolanaAdapter(descriptor, { legacyProvider } = {}) {
     const wallet = descriptor.provider;
     if (!supportsLegacyTransactions(wallet)) {
       throw adapterError(
@@ -57926,8 +57926,18 @@ Message: ${transactionMessage}.
         return { publicKey: new PublicKey(selected.publicKey) };
       },
       async signMessage(message) {
+        const selected = requireAccount();
+        const legacyKey = legacyProvider?.publicKey?.toString?.();
+        if (typeof legacyProvider?.signMessage === "function" && legacyKey === selected.address) {
+          const output3 = await legacyProvider.signMessage(message, "utf8");
+          const signature = output3?.signature ?? output3;
+          if (!(signature instanceof Uint8Array)) {
+            throw adapterError("Wallet did not return a message signature", "provider_unavailable");
+          }
+          return { signature, signedMessage: message };
+        }
         const [output2] = await feature("solana:signMessage", "signMessage").signMessage({
-          account: requireAccount(),
+          account: selected,
           message
         });
         if (!output2?.signature) {
@@ -58035,9 +58045,10 @@ Message: ${transactionMessage}.
     descriptor,
     daaClient,
     officialShelby,
-    uploadClient
+    uploadClient,
+    legacyProvider
   }) {
-    const standard = createSolanaAdapter(descriptor);
+    const standard = createSolanaAdapter(descriptor, { legacyProvider });
     let derivation = 0;
     const deriveWithOfficialShelby = async (session) => {
       const result = await officialShelby.connectWallet({
@@ -58198,7 +58209,8 @@ Message: ${transactionMessage}.
           adapters.set(wallet.id, (descriptor) => createSolanaDaaAdapter({
             descriptor,
             officialShelby: window.VesselOfficialShelby,
-            uploadClient: window.VesselSolana
+            uploadClient: window.VesselSolana,
+            legacyProvider: /phantom/i.test(wallet.name) ? window.phantom?.solana || window.solana : null
           }));
           return wallet;
         }

@@ -48,6 +48,7 @@ test('wallet bootstrap routes Solana DAA through the official Shelby bridge', ()
   const solanaBlock = source.slice(solanaBlockStart, solanaBlockEnd);
 
   assert.match(solanaBlock, /officialShelby:\s*window\.VesselOfficialShelby/);
+  assert.match(solanaBlock, /legacyProvider:\s*\/phantom\/i\.test\(wallet\.name\)/);
   assert.doesNotMatch(solanaBlock, /daaClient:\s*window\.VesselSolana/);
 });
 

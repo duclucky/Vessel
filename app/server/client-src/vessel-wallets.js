@@ -46,6 +46,9 @@ const availableRegistry = {
           descriptor,
           officialShelby: window.VesselOfficialShelby,
           uploadClient: window.VesselSolana,
+          legacyProvider: /phantom/i.test(wallet.name)
+            ? window.phantom?.solana || window.solana
+            : null,
         }));
         return wallet;
       }
