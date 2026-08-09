@@ -180,7 +180,7 @@ describe('Vessel Solana settlement', () => {
     assert.equal(payerBefore - payerAfter, 84_100n);
     assert.equal(vaultAfter - vaultBefore, 84_100n);
 
-    const stored = await program.account.settlementReceiptV1.fetch(receipt);
+    const stored = await program.account.vesselFeeReceiptV1.fetch(receipt);
     assert.deepEqual(Buffer.from(stored.quoteId), Buffer.from(quote.quoteId));
     assert.equal(stored.payer.toBase58(), payer.publicKey.toBase58());
     assert.equal(stored.amount.toString(), '84100');

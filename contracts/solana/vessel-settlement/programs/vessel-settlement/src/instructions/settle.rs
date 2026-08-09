@@ -8,7 +8,7 @@ use crate::{
     ed25519_ix::verify_preceding_ed25519,
     error::VesselError,
     quote_v1::QuoteV1,
-    state::{Config, SettlementReceiptCreatedV1, SettlementReceiptV1},
+    state::{Config, VesselFeeReceiptCreatedV1, VesselFeeReceiptV1},
 };
 
 const QUOTE_VERSION: u8 = 1;
@@ -24,11 +24,11 @@ pub struct Settle<'info> {
     #[account(
         init,
         payer = payer,
-        space = 8 + SettlementReceiptV1::INIT_SPACE,
+        space = 8 + VesselFeeReceiptV1::INIT_SPACE,
         seeds = [b"receipt", quote.quote_id.as_ref()],
         bump,
     )]
-    pub receipt: Account<'info, SettlementReceiptV1>,
+    pub receipt: Account<'info, VesselFeeReceiptV1>,
     #[account(address = config.accepted_mint)]
     pub mint: Account<'info, Mint>,
     #[account(
@@ -114,7 +114,7 @@ pub fn handle(ctx: Context<Settle>, quote: QuoteV1) -> Result<()> {
         ctx.accounts.mint.decimals,
     )?;
 
-    let receipt = SettlementReceiptV1 {
+    let receipt = VesselFeeReceiptV1 {
         quote_id: quote.quote_id,
         payer: ctx.accounts.payer.key(),
         storage_address: quote.storage_address,
@@ -127,7 +127,7 @@ pub fn handle(ctx: Context<Settle>, quote: QuoteV1) -> Result<()> {
         settled_at_secs: clock.unix_timestamp,
     };
     ctx.accounts.receipt.set_inner(receipt);
-    emit!(SettlementReceiptCreatedV1 {
+    emit!(VesselFeeReceiptCreatedV1 {
         quote_id: quote.quote_id,
         payer: ctx.accounts.payer.key(),
         storage_address: quote.storage_address,

@@ -56,6 +56,8 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Wallet-owned upload/i);
   assert.match(html, /source-chain Vessel charge/i);
+  assert.match(html, /Aptos, Solana, and Ethereum wallets/i);
+  assert.match(html, /official Shelby DAA/i);
   assert.match(html, /Vessel service fee \(1%\)/i);
   assert.match(html, /Shelby storage cost/i);
   assert.match(html, /sponsored ShelbyNet gas/i);

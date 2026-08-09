@@ -1,13 +1,13 @@
 # Vessel
 
-Wallet-owned hot storage, cross-chain fee receipts, and canonical NFT metadata for Aptos and Solana, powered by Shelby.
+Wallet-owned hot storage, cross-chain fee receipts, and canonical NFT metadata for Aptos, Solana, and Ethereum wallets, powered by Shelby.
 
 ## Live beta
 
 - Application: [https://vessel-sage.vercel.app](https://vessel-sage.vercel.app)
 - Supported storage runtimes: Aptos Testnet and ShelbyNet
 - Currently available runtime: ShelbyNet
-- Fee receipt networks: Aptos Testnet and Solana Devnet
+- Fee receipt networks: Aptos Testnet, Solana Devnet, and Ethereum Sepolia
 - Status: public testnet beta
 - Source: [github.com/duclucky/Vessel](https://github.com/duclucky/Vessel)
 
@@ -27,7 +27,7 @@ For mainnet readiness, the important boundary is already in place: storage opera
 
 Vessel currently combines these journeys in one web application:
 
-1. **Wallet discovery and identity**: detects supported Aptos and Solana browser wallets, connects the selected wallet, and shows the resulting Shelby storage identity.
+1. **Wallet discovery and identity**: detects supported Aptos, Solana, and Ethereum browser wallets, connects the selected wallet, and shows the resulting Shelby storage identity.
 2. **Single media preparation**: validates an image or other supported asset, selects retention from 1 to 365 days, and presents an itemized quote before approval.
 3. **Batch collection preparation**: accepts a folder as one collection workflow, preserves relative source paths, and tracks progress as a batch.
 4. **Wallet-scoped Vault and Gallery**: records successful artifacts for the connected wallet and exposes copy, preview, and removal actions.
@@ -45,7 +45,8 @@ Current behavior:
 - ShelbyNet is the default storage runtime for the public Vercel deployment.
 - Aptos Testnet runtime values and tests remain in the repository and deployment manifest.
 - Aptos wallet users connect natively to the active Aptos-family runtime.
-- Solana users settle through the Solana Devnet program and authorize a deterministic Aptos storage identity for Shelby.
+- Solana users settle through the Solana Devnet program and authorize a deterministic Aptos storage identity through official Shelby DAA.
+- Ethereum users settle through the Sepolia EVM fee contract and authorize a deterministic Aptos storage identity through official Shelby DAA.
 - Single NFT JSON can be generated, downloaded locally, and hosted through the active Shelby runtime when writes are enabled.
 - Batch collection JSON and ZIP export can use active Shelby artifacts or unexpired **browser-local Vault history** for the connected storage address.
 - The application labels local Vault cache separately and does not claim a fresh remote or on-chain reconciliation when it is using browser-local history.
@@ -60,6 +61,7 @@ Open Identity and choose a compatible wallet from the in-page wallet picker.
 
 - **Aptos**: the connected Aptos account is the storage identity and fee receipt sender.
 - **Solana**: the wallet authorizes a deterministic Aptos Derived Account Abstraction identity for Shelby, while the Vessel fee receipt stays on Solana.
+- **Ethereum**: the wallet authorizes a deterministic Aptos Derived Account Abstraction identity for Shelby, while the Vessel fee receipt stays on Sepolia.
 
 Wallet state is restored silently when the extension supports it. Selecting a connected address opens an account menu with copy, switch, and logout actions.
 
@@ -96,10 +98,13 @@ Supported wallet
   |                                              v
   +-- Solana wallet --> deterministic Aptos DAA --> Shelby storage
   |                                              |
+  +-- Ethereum wallet -> deterministic Aptos DAA-+
+  |                                              |
   +-- chain-specific signed quote                +--> media URL
       |                                          +--> NFT metadata
       +-- Aptos Move fee receipt
       +-- Solana Program fee receipt
+      +-- Sepolia EVM fee receipt
 ```
 
 The browser owns wallet interaction and user approval. Server routes provide public configuration, quote signing and validation, storage coordination, transaction verification, and protected provider credentials. Client-facing secrets are never embedded in the browser bundles.
@@ -108,12 +113,12 @@ Storage code remains behind provider boundaries:
 
 - `app/server/src/storage/shelby.js`: Shelby-backed server provider.
 - `app/server/src/storage/mock.js`: local in-memory development provider.
-- `app/server/client-src/`: wallet-native Aptos and Solana browser clients bundled into `public/`.
+- `app/server/client-src/`: wallet-native Aptos, Solana, and Ethereum browser clients bundled into `public/`.
 - `app/server/public/ledger.js`: wallet-scoped browser history and recovery state.
 
 ## Fee receipt contracts
 
-Vessel deploys one fee contract or program for each supported chain. Both consume the same public-key-signed `QuoteV1` model and issue a single-use Vessel fee receipt. The source-chain Vessel charge includes Shelby storage cost, sponsored ShelbyNet gas or gas-station cost, and the 1% Vessel service fee.
+Vessel deploys one fee contract or program for each supported chain. All consume the same public-key-signed `QuoteV1` model and issue a single-use Vessel fee receipt. The source-chain Vessel charge includes Shelby storage cost, sponsored ShelbyNet gas or gas-station cost, and the 1% Vessel service fee.
 
 ### Aptos Testnet
 
@@ -130,15 +135,27 @@ The Aptos Move fee contract records the source-chain Vessel charge in the contra
 
 | Item | Value |
 |---|---|
-| Solana fee program | `G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx` |
-| Config PDA | `cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA` |
-| Vault ATA | `Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7` |
+| Solana fee program | `6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b` |
+| Config PDA | `GmpJ3ZMuKnnqzEGCWwdeqD1MZMhrq1vPkMr2SP5WBaZ3` |
+| Vault ATA | `2GxSbbAGtiLJUY8puqqqyfJugRRiMbi6GZJMhPjPep8P` |
 | Squads multisig | `GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh` |
 | Accepted mint | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
 The Solana fee program vault records the source-chain Vessel charge. Solana users do not need APT or ShelbyUSD; they approve the Solana-side receipt while Vessel sponsors ShelbyNet-side gas and storage.
 
-The public source of truth for all addresses is [`deployments/vessel-settlement.testnet.json`](deployments/vessel-settlement.testnet.json). Contract-specific operating instructions live in [`contracts/aptos/vessel_settlement/README.md`](contracts/aptos/vessel_settlement/README.md) and [`contracts/solana/vessel-settlement/README.md`](contracts/solana/vessel-settlement/README.md).
+### Ethereum Sepolia
+
+| Item | Value |
+|---|---|
+| Sepolia EVM fee contract | `0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64` |
+| Service-fee vault | `0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64` |
+| Multisig address | `0xF670Ee2611Afb7633508B525bA43398C6fc898A8` |
+| Accepted asset | Native Sepolia ETH |
+| Deployment transaction | `0xab46bc0bec95ae028eaa5054b4614c700000ce2d2505b76799dd89bad280b2ad` |
+
+The Sepolia EVM fee contract records the source-chain Vessel charge. Ethereum users do not need APT or ShelbyUSD; they approve the Sepolia-side receipt while Vessel sponsors ShelbyNet-side gas and storage through the official Shelby Ethereum DAA path.
+
+The public source of truth for all ShelbyNet beta addresses is [`deployments/vessel-settlement.shelbynet.json`](deployments/vessel-settlement.shelbynet.json). Aptos Testnet fallback addresses are retained in [`deployments/vessel-settlement.testnet.json`](deployments/vessel-settlement.testnet.json). Contract-specific operating instructions live in [`contracts/aptos/vessel_settlement/README.md`](contracts/aptos/vessel_settlement/README.md), [`contracts/solana/vessel-settlement/README.md`](contracts/solana/vessel-settlement/README.md), and [`contracts/evm/vessel-settlement`](contracts/evm/vessel-settlement).
 
 ## NFT metadata and batch collections
 

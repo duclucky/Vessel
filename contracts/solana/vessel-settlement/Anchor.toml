@@ -7,10 +7,10 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-vessel_settlement = "G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx"
+vessel_settlement = "6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b"
 
 [programs.devnet]
-vessel_settlement = "G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx"
+vessel_settlement = "6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b"
 
 [registry]
 url = "https://api.apr.dev"

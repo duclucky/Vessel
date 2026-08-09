@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { getAssociatedTokenAddressSync } from '@solana/spl-token';
+import { PublicKey } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { loadSettlementDeployments } from '../src/lib/settlement/deployments.js';
 import bundledTestnetManifest from '../src/lib/settlement/bundled-testnet-manifest.js';
@@ -131,6 +133,28 @@ test('Vercel runtime manifest stays identical to the repository deployment recor
   const vercel = JSON.parse(readFileSync('vercel.json', 'utf8'));
   const apiBuild = vercel.builds.find((build) => build.src === 'api/index.js');
   assert.ok(apiBuild.config.includeFiles.includes('deployments/**'));
+});
+
+test('Solana manifest PDAs are derived from the configured program and mint', () => {
+  for (const file of [
+    '../../deployments/vessel-settlement.testnet.json',
+    '../../deployments/vessel-settlement.shelbynet.json',
+    'deployments/vessel-settlement.testnet.json',
+    'deployments/vessel-settlement.shelbynet.json',
+  ]) {
+    const manifest = JSON.parse(readFileSync(file, 'utf8'));
+    const program = new PublicKey(manifest.solana.programId);
+    const mint = new PublicKey(manifest.solana.acceptedMint);
+    const [configPda] = PublicKey.findProgramAddressSync([Buffer.from('config')], program);
+    const [vaultAuthority] = PublicKey.findProgramAddressSync(
+      [Buffer.from('vault-authority')],
+      program,
+    );
+    const vaultAta = getAssociatedTokenAddressSync(mint, vaultAuthority, true);
+
+    assert.equal(manifest.solana.configPda, configPda.toBase58(), `${file} configPda`);
+    assert.equal(manifest.solana.vaultAta, vaultAta.toBase58(), `${file} vaultAta`);
+  }
 });
 
 test('bundled manifest keeps serverless startup independent from the process cwd', () => {

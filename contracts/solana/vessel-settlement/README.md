@@ -1,7 +1,12 @@
-# Vessel Solana settlement
+# Vessel Solana fee receipt program
 
-Anchor program for quote-verified Devnet USDC settlement into a PDA-controlled
-vault. A receipt PDA at `['receipt', quote_id]` makes every quote single-use.
+Anchor program for quote-verified Devnet USDC Vessel fee receipts into a
+PDA-controlled vault. A receipt PDA at `['receipt', quote_id]` makes every quote
+single-use.
+
+The program does not store Shelby bytes and does not implement Shelby DAA. The
+browser uses the official Shelby Solana bridge for the storage identity, then
+this program records the source-chain Vessel charge.
 
 ## Governance and deployment
 

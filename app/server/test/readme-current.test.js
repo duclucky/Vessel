@@ -18,6 +18,8 @@ test('README describes the deployed product and current network availability', (
     'browser-local Vault history',
     'Aptos Move fee contract',
     'Solana fee program',
+    'Sepolia EVM fee contract',
+    'official Shelby DAA',
     'canonical NFT metadata',
     'batch collection',
     'mainnet readiness',
@@ -40,7 +42,8 @@ test('README documents the current one percent Vessel fee policy', () => {
 
 test('README exposes current testnet deployments and verification commands', () => {
   assert.match(readme, /0x9885a9a0e382335d0f801301d43b451facaa6e768d31e5c9903b2a0dd9efef15/i);
-  assert.match(readme, /G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx/);
+  assert.match(readme, /6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b/);
+  assert.match(readme, /0x71D48A95c55d3eBd260A2dF52dc41F9DbaBD0F64/i);
   assert.match(readme, /npm test/);
   assert.match(readme, /npm run build:client/);
   assert.match(readme, /Root Directory.*app\/server/i);

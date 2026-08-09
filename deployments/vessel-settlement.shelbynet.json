@@ -14,12 +14,12 @@
   },
   "solana": {
     "cluster": "devnet",
-    "programId": "G2dA3Sz1XxvJ4ppkvwb95kfy5w6M9ip2KiZBmt7xbsBx",
-    "configPda": "cdKfmtYBndH3DM6B4B1UeeaaCBYRMTsBcJ9irQ5M4cA",
-    "vaultAta": "Ac7fiHCWCnWFkPUE6xgsginTqQmfUE6uwFkPUN7Pv8y7",
+    "programId": "6K7MzA7zbRkgxKmQikZzawYxmDHv3LWK8XFjHhqChi1b",
+    "configPda": "GmpJ3ZMuKnnqzEGCWwdeqD1MZMhrq1vPkMr2SP5WBaZ3",
+    "vaultAta": "2GxSbbAGtiLJUY8puqqqyfJugRRiMbi6GZJMhPjPep8P",
     "squadsMultisig": "GuoEcd5vAUctrhNbiS8WygVBMFL85kR4GN6yJFuK6zRh",
     "acceptedMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
-    "deploymentSignature": "49KFbqx2eEUTMLfG7CGPvSvgswtu4ye2mJ1vxDmxPJwCSrKpGMK9ngdZqMChGzvhmKPYcen4pY1WFQZ3mE2SXAja",
+    "deploymentSignature": "5kNF32N2a69LJdB4VckgWLPDAAa9uw52pimeJQZU7PYDYrTjD3brwjX3nfxFDcXJvHUNXBYgUqCz8LAqGVzx9xBx",
     "timelockSeconds": 0
   },
   "evm": {

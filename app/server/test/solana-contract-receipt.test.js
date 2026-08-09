@@ -44,7 +44,7 @@ function receiptData(patch = {}) {
     ...patch,
   };
   const data = Buffer.alloc(208);
-  Buffer.from([26, 164, 173, 120, 100, 37, 178, 163]).copy(data, 0);
+  Buffer.from([140, 122, 222, 169, 75, 250, 90, 234]).copy(data, 0);
   fields.quoteId.copy(data, 8);
   Buffer.from(fields.payer.toBytes()).copy(data, 40);
   fields.storageAddress.copy(data, 72);

@@ -1,7 +1,7 @@
 import { PublicKey } from '@solana/web3.js';
 import { normalizeSettlementReceipt } from './receipt.js';
 
-const RECEIPT_DISCRIMINATOR = Buffer.from([26, 164, 173, 120, 100, 37, 178, 163]);
+const RECEIPT_DISCRIMINATOR = Buffer.from([140, 122, 222, 169, 75, 250, 90, 234]);
 const RECEIPT_LENGTH = 208;
 
 const pendingError = () => Object.assign(new Error('Settlement receipt is not finalized yet'), {

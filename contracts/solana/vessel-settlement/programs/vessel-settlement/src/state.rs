@@ -15,7 +15,7 @@ pub struct Config {
 
 #[account]
 #[derive(InitSpace)]
-pub struct SettlementReceiptV1 {
+pub struct VesselFeeReceiptV1 {
     pub quote_id: [u8; 32],
     pub payer: Pubkey,
     pub storage_address: [u8; 32],
@@ -37,7 +37,7 @@ pub struct PendingChange {
 }
 
 #[event]
-pub struct SettlementReceiptCreatedV1 {
+pub struct VesselFeeReceiptCreatedV1 {
     pub quote_id: [u8; 32],
     pub payer: Pubkey,
     pub storage_address: [u8; 32],

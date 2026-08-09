@@ -2,7 +2,7 @@
   "name": "vessel-settlement-program",
   "private": true,
   "scripts": {
-    "build": "anchor build",
+    "build": "cargo build-sbf --manifest-path programs/vessel-settlement/Cargo.toml --sbf-out-dir target/deploy -j 1 && anchor idl build -o target/idl/vessel_settlement.json -t target/types/vessel_settlement.ts",
     "test": "anchor test"
   },
   "devDependencies": {

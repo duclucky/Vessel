@@ -1,7 +1,7 @@
 [package]
 name = "vessel-settlement"
 version = "0.1.0"
-description = "Vessel quote-verified settlement vault for Solana"
+description = "Vessel quote-verified fee receipt vault for Solana"
 edition = "2021"
 
 [lib]

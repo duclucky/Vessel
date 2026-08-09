@@ -55,8 +55,8 @@ test('dApp wallet actions no longer use the legacy MetaMask ownership path', () 
 test('Landing presents the implemented platform scale and workflow', () => {
   const html = readPage('index.html');
   assert.match(html, /Wallet-owned hot storage for NFT media/i);
-  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Wallet ecosystems/i);
-  assert.match(html, />\s*2\s*<[^>]*>[\s\S]*Fee receipt contracts/i);
+  assert.match(html, />\s*3\s*<[^>]*>[\s\S]*Wallet ecosystems/i);
+  assert.match(html, />\s*3\s*<[^>]*>[\s\S]*Fee receipt contracts/i);
   assert.match(html, />\s*1\s*<[^>]*>[\s\S]*Canonical NFT schema/i);
   assert.match(html, /id="how-it-works"/);
   for (const label of ['Connect', 'Store', 'Publish']) {
@@ -85,6 +85,8 @@ test('Landing explains both chain paths and honest beta safeguards', () => {
   assert.match(html, /\/assets\/hero-crystals\.png/);
   assert.match(html, /Aptos native/i);
   assert.match(html, /Solana DAA/i);
+  assert.match(html, /Ethereum DAA/i);
+  assert.match(html, /Sepolia/i);
   assert.match(html, /Ed25519-signed quotes/i);
   assert.match(html, /Aptos Multisig Account/i);
   assert.match(html, /Squads/i);
