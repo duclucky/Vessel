@@ -23,7 +23,7 @@ const authFn = defaultSolanaAuthenticationFunction;
 let provider = null;
 let pubkey = null;
 let storageAddr = null;
-let DOMAIN = (typeof window !== 'undefined' && window.VESSEL_DOMAIN) || 'vessel.demo';
+const DOMAIN = typeof window !== 'undefined' ? window.location.host : 'vessel.demo';
 let serverCfg = null;
 
 function clearProvider() {
@@ -43,6 +43,10 @@ function acceptOfficialSession({ provider: nextProvider, solana, storageAccount 
   selectProvider(nextProvider);
   if (!solana || !storageAccount) throw new Error('Official Shelby Solana session is incomplete');
   pubkey = String(solana);
+  const expectedStorageAddress = deriveAddress(pubkey).toString();
+  if (expectedStorageAddress.toLowerCase() !== String(storageAccount).toLowerCase()) {
+    throw new Error('Official Shelby storage identity does not match the signing domain');
+  }
   storageAddr = storageAccount;
   return { solana: pubkey, storageAccount: storageAddr.toString(), network: NET };
 }
@@ -50,7 +54,6 @@ function acceptOfficialSession({ provider: nextProvider, solana, storageAccount 
 async function loadConfig() {
   if (serverCfg) return serverCfg;
   serverCfg = await fetch('/api/config').then((response) => response.json()).catch(() => ({}));
-  if (serverCfg.domain) DOMAIN = serverCfg.domain;
   return serverCfg;
 }
 

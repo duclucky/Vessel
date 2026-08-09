@@ -65579,7 +65579,7 @@ ${fields.join("\n")}`;
   var provider = null;
   var pubkey2 = null;
   var storageAddr = null;
-  var DOMAIN3 = typeof window !== "undefined" && window.VESSEL_DOMAIN || "vessel.demo";
+  var DOMAIN3 = typeof window !== "undefined" ? window.location.host : "vessel.demo";
   var serverCfg = null;
   function clearProvider() {
     provider = null;
@@ -65596,13 +65596,16 @@ ${fields.join("\n")}`;
     selectProvider(nextProvider);
     if (!solana || !storageAccount) throw new Error("Official Shelby Solana session is incomplete");
     pubkey2 = String(solana);
+    const expectedStorageAddress = deriveAddress(pubkey2).toString();
+    if (expectedStorageAddress.toLowerCase() !== String(storageAccount).toLowerCase()) {
+      throw new Error("Official Shelby storage identity does not match the signing domain");
+    }
     storageAddr = storageAccount;
     return { solana: pubkey2, storageAccount: storageAddr.toString(), network: NET };
   }
   async function loadConfig() {
     if (serverCfg) return serverCfg;
     serverCfg = await fetch("/api/config").then((response) => response.json()).catch(() => ({}));
-    if (serverCfg.domain) DOMAIN3 = serverCfg.domain;
     return serverCfg;
   }
   async function connect(nextProvider) {

@@ -16,6 +16,12 @@ test('DAA client no longer exposes funding URLs', () => {
   assert.doesNotMatch(source, /faucets/);
 });
 
+test('Solana DAA derives and signs with the same browser host as the official Shelby hook', () => {
+  assert.match(source, /window\.location\.host/);
+  assert.doesNotMatch(source, /if \(serverCfg\.domain\) DOMAIN = serverCfg\.domain/);
+  assert.match(source, /Official Shelby storage identity does not match the signing domain/);
+});
+
 test('DAA upload binds the sponsor request to quote, authorization, hash, tier, and expiration', () => {
   assert.match(source, /quoteToken/);
   assert.match(source, /paidAuthorization/);

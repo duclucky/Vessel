@@ -52,7 +52,7 @@ const availableRegistry = {
       if (wallet.chain === 'evm' && wallet.enabled) {
         adapters.set(wallet.id, (descriptor) => createEvmDaaAdapter({
           descriptor,
-          domain: publicConfig.domain,
+          domain: window.location.host,
           officialShelby: window.VesselOfficialShelby,
         }));
         return wallet;

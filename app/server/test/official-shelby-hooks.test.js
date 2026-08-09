@@ -50,3 +50,10 @@ test('wallet bootstrap routes Solana DAA through the official Shelby bridge', ()
   assert.match(solanaBlock, /officialShelby:\s*window\.VesselOfficialShelby/);
   assert.doesNotMatch(solanaBlock, /daaClient:\s*window\.VesselSolana/);
 });
+
+test('EVM fallback derivation uses the browser host used by the official Shelby hook', () => {
+  const source = readFileSync('client-src/vessel-wallets.js', 'utf8');
+
+  assert.match(source, /domain:\s*window\.location\.host/);
+  assert.doesNotMatch(source, /domain:\s*publicConfig\.domain/);
+});
