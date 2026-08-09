@@ -17,7 +17,7 @@ test('native Aptos routes only to the direct wallet upload', async () => {
   assert.equal(result.paymentMode, 'native-aptos');
 });
 
-test('Solana DAA routes only to the sponsored compatibility upload', async () => {
+test('Solana DAA routes only to the cross-chain wallet-owned upload', async () => {
   const calls = [];
   const router = createUploadRouter({
     aptosUpload: async () => { calls.push('aptos'); },
@@ -32,7 +32,7 @@ test('Solana DAA routes only to the sponsored compatibility upload', async () =>
   assert.equal(result.paymentMode, 'solana-usdc');
 });
 
-test('Ethereum DAA routes to the sponsored ShelbyNet upload', async () => {
+test('Ethereum DAA routes to the cross-chain ShelbyNet upload', async () => {
   const calls = [];
   const router = createUploadRouter({
     aptosUpload: async () => { calls.push('aptos'); },

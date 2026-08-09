@@ -60,7 +60,7 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.match(html, /official Shelby DAA/i);
   assert.match(html, /Vessel service fee \(1%\)/i);
   assert.match(html, /Shelby storage cost/i);
-  assert.match(html, /sponsored ShelbyNet gas/i);
+  assert.match(html, /testnet DAA gas funding/i);
   assert.match(html, /Vessel fee receipt/i);
   assert.doesNotMatch(html, /Aptos sends the Vessel contract fee/i);
   assert.match(html, /Test tokens — no real monetary value/);

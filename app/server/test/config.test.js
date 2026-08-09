@@ -14,7 +14,7 @@ const config = fs.readFileSync(new URL('../src/config.js', import.meta.url), 'ut
 const app = fs.readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
 const publicConfigRoute = server.slice(
   server.indexOf("app.get('/api/config'"),
-  server.indexOf('// ---- Sponsored on-chain submit'),
+  server.indexOf('// ---- On-chain submit'),
 );
 
 test('deployment manifest paths resolve from the app root, not the serverless cwd', () => {
@@ -43,8 +43,8 @@ test('public config exposes server-gated wallet families without secrets', () =>
   assert.match(server, /walletFamilies/);
   assert.match(publicConfigRoute, /shelbyWritesEnabled:\s*config\.shelbyWritesEnabled/);
   assert.match(config, /walletEvmEnabled/);
-  assert.match(server, /evm:\s*config\.walletEvmEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*!!settlementDeployments\.evm/);
-  assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!sponsor\s*&&\s*!!paidAuthorizations\s*&&\s*settlementDeployments\.enabled/);
+  assert.match(server, /evm:\s*config\.walletEvmEnabled\s*&&\s*!!paidAuthorizations\s*&&\s*!!shelbyGateway\s*&&\s*!!settlementDeployments\.evm/);
+  assert.match(server, /solana:\s*config\.walletSolanaEnabled\s*&&\s*!!paidAuthorizations\s*&&\s*!!shelbyGateway\s*&&\s*settlementDeployments\.enabled/);
   assert.doesNotMatch(publicConfigRoute, /gasStationApiKey:\s*config\.gasStationApiKey/);
   assert.doesNotMatch(publicConfigRoute, /paySecret:\s*config\.paySecret/);
 });

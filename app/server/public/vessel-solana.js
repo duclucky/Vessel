@@ -65655,6 +65655,7 @@ ${fields.join("\n")}`;
     contractQuote,
     contractSignature,
     transactionKind,
+    submitMode,
     expectRegistrationEvidence = true
   }) {
     const signed = await signAptosTransactionWithSolana({
@@ -65675,8 +65676,13 @@ ${fields.join("\n")}`;
       contractQuote,
       contractSignature,
       transactionKind,
+      submitMode,
       expectRegistrationEvidence
     });
+  }
+  function deserializeServerTransaction(built) {
+    const bytes = new a5(fromB64(built.transaction));
+    return built.transactionKind === "simple" ? lr.deserialize(bytes) : gr.deserialize(bytes);
   }
   async function buildSponsoredCommitTransaction({
     quoteToken,
@@ -65732,8 +65738,6 @@ ${fields.join("\n")}`;
     if (uploadContext?.chain !== "solana" || uploadContext.sourceAddress !== pubkey2 || String(uploadContext.storageAddress).toLowerCase() !== storageAddr.toString().toLowerCase() || Number(uploadContext.sizeBytes) !== Number(file.size) || uploadContext.fileHash !== expectedFileHash || sha !== expectedFileHash || uploadContext.blobName !== blobName || uploadContext.expirationMicros !== expirationMicros || !Number.isSafeInteger(expirationMicros) || !Number.isSafeInteger(paymentTier) || paymentTier < 0 || !quoteToken || !paidAuthorization || !contractQuote || !contractSignature) {
       throw new Error("Paid upload context does not match the connected wallet and file");
     }
-    const cfg = await loadConfig();
-    if (!cfg.gasStationAccount) throw new Error("server sponsor not configured");
     onStep?.("encoding");
     const erasureProvider = await createDefaultErasureCodingProvider();
     const commitments = await generateCommitments(erasureProvider, data);
@@ -65748,17 +65752,17 @@ ${fields.join("\n")}`;
     if (!built.transaction) {
       throw new Error("Vessel did not return a Shelby registration transaction");
     }
-    const transaction = gr.deserialize(
-      new a5(fromB64(built.transaction))
-    );
+    const transaction = deserializeServerTransaction(built);
     onStep?.("signing");
-    onStep?.("sponsoring");
+    onStep?.("submitting");
     const registered = await signAndSponsorAptosTransaction(transaction, {
       quoteToken,
       paidAuthorization,
       uploadContext,
       contractQuote,
-      contractSignature
+      contractSignature,
+      transactionKind: built.transactionKind,
+      submitMode: built.submitMode
     });
     const registrationEvidence = {
       transactionHash: registered.transactionHash || registered.hash,
@@ -65805,6 +65809,7 @@ ${fields.join("\n")}`;
       contractQuote,
       contractSignature,
       transactionKind: "simple",
+      submitMode: "direct",
       expectRegistrationEvidence: false
     });
     onCheckpoint?.("committed", {
@@ -65900,6 +65905,7 @@ ${fields.join("\n")}`;
       contractQuote,
       contractSignature,
       transactionKind: "simple",
+      submitMode: "direct",
       expectRegistrationEvidence: false
     });
     return {

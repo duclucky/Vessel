@@ -52469,6 +52469,7 @@ ${suffix}`;
     contractQuote,
     contractSignature,
     transactionKind,
+    submitMode,
     expectRegistrationEvidence = true
   }) {
     const authenticator = await adapter.signAptosTransaction(transaction);
@@ -52481,8 +52482,13 @@ ${suffix}`;
       contractQuote,
       contractSignature,
       transactionKind,
+      submitMode,
       expectRegistrationEvidence
     });
+  }
+  function deserializeServerTransaction(built) {
+    const bytes2 = new a5(fromB64(built.transaction));
+    return built.transactionKind === "simple" ? lr.deserialize(bytes2) : gr.deserialize(bytes2);
   }
   async function buildSponsoredCommitTransaction({
     quoteToken,
@@ -52577,15 +52583,17 @@ ${suffix}`;
       blobMerkleRoot: commitments.blob_merkle_root
     });
     if (!built.transaction) throw evmUploadError("Vessel did not return a Shelby registration transaction", "register_transaction_missing");
-    const transaction = gr.deserialize(new a5(fromB64(built.transaction)));
+    const transaction = deserializeServerTransaction(built);
     onStep?.("signing");
-    onStep?.("sponsoring");
+    onStep?.("submitting");
     const registered = await signAndSponsorAptosTransaction(adapter, transaction, {
       quoteToken,
       paidAuthorization,
       uploadContext,
       contractQuote,
-      contractSignature
+      contractSignature,
+      transactionKind: built.transactionKind,
+      submitMode: built.submitMode
     });
     const registrationEvidence = {
       transactionHash: registered.transactionHash || registered.hash,
@@ -52630,6 +52638,7 @@ ${suffix}`;
       contractQuote,
       contractSignature,
       transactionKind: "simple",
+      submitMode: "direct",
       expectRegistrationEvidence: false
     });
     onCheckpoint?.("committed", {
@@ -52698,6 +52707,7 @@ ${suffix}`;
       contractQuote,
       contractSignature,
       transactionKind: "simple",
+      submitMode: "direct",
       expectRegistrationEvidence: false
     });
     return {

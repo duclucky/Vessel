@@ -22,7 +22,7 @@ test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   assert.match(html, /Connected wallet/i);
   assert.match(html, /Shelby storage account/i);
   assert.match(html, /Aptos wallets use their own address/i);
-  assert.match(html, /Solana wallets control a derived Aptos storage account/i);
+  assert.match(html, /Solana and Ethereum wallets control a derived Aptos storage account/i);
   assert.match(html, /APT gas and ShelbyUSD storage fees directly/i);
-  assert.doesNotMatch(html, /Ethereum Wallet|encrypted|weekly/i);
+  assert.doesNotMatch(html, /encrypted|weekly/i);
 });

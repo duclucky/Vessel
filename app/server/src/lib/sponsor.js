@@ -66,3 +66,43 @@ export class SponsorManager {
     return { hash: pending?.hash || pending?.transactionHash };
   }
 }
+
+export class DirectAptosSubmitter {
+  constructor({ aptos, deserialize } = {}) {
+    if (!aptos) {
+      throw new Error('DirectAptosSubmitter requires Aptos client');
+    }
+    this.aptos = aptos;
+    this._deserialize = deserialize || ((txnB64, senderAuthB64) => ({
+      transaction: SimpleTransaction.deserialize(
+        new Deserializer(Buffer.from(txnB64, 'base64')),
+      ),
+      senderAuthenticator: AccountAuthenticator.deserialize(
+        new Deserializer(Buffer.from(senderAuthB64, 'base64')),
+      ),
+    }));
+  }
+
+  deserialize(txnB64, senderAuthB64) {
+    return this._deserialize(txnB64, senderAuthB64);
+  }
+
+  async submit(txnB64, senderAuthB64, { expectedSender } = {}) {
+    if (!expectedSender) {
+      throw Object.assign(new Error('Expected direct transaction sender is required'), {
+        status: 400,
+        code: 'sender_required',
+      });
+    }
+    const { transaction, senderAuthenticator } = this.deserialize(txnB64, senderAuthB64);
+    const actualSender = transaction.rawTransaction.sender.toString();
+    if (actualSender.toLowerCase() !== String(expectedSender).toLowerCase()) {
+      throw Object.assign(
+        new Error('Direct transaction sender does not match paid storage identity'),
+        { status: 403, code: 'sender_mismatch' },
+      );
+    }
+    const pending = await this.aptos.transaction.submit.simple({ transaction, senderAuthenticator });
+    return { hash: pending?.hash || pending?.transactionHash };
+  }
+}

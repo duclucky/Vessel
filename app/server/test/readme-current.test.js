@@ -35,7 +35,7 @@ test('README documents the current one percent Vessel fee policy', () => {
   assert.match(readme, /1% Vessel service fee/i);
   assert.match(readme, /USD 0\.01 minimum/i);
   assert.match(readme, /source-chain Vessel charge/i);
-  assert.match(readme, /sponsored ShelbyNet gas/i);
+  assert.match(readme, /testnet DAA gas funding/i);
   assert.doesNotMatch(readme, /2% Vessel service fee/i);
   assert.doesNotMatch(readme, /holds only the Vessel service fee/i);
 });

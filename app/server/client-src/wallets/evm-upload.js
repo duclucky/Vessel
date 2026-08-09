@@ -52,6 +52,7 @@ async function signAndSponsorAptosTransaction(adapter, transaction, {
   contractQuote,
   contractSignature,
   transactionKind,
+  submitMode,
   expectRegistrationEvidence = true,
 }) {
   const authenticator = await adapter.signAptosTransaction(transaction);
@@ -64,8 +65,16 @@ async function signAndSponsorAptosTransaction(adapter, transaction, {
     contractQuote,
     contractSignature,
     transactionKind,
+    submitMode,
     expectRegistrationEvidence,
   });
+}
+
+function deserializeServerTransaction(built) {
+  const bytes = new Deserializer(fromB64(built.transaction));
+  return built.transactionKind === 'simple'
+    ? SimpleTransaction.deserialize(bytes)
+    : MultiAgentTransaction.deserialize(bytes);
 }
 
 async function buildSponsoredCommitTransaction({
@@ -183,16 +192,18 @@ export async function uploadSponsoredEvm(file, {
     blobMerkleRoot: commitments.blob_merkle_root,
   });
   if (!built.transaction) throw evmUploadError('Vessel did not return a Shelby registration transaction', 'register_transaction_missing');
-  const transaction = MultiAgentTransaction.deserialize(new Deserializer(fromB64(built.transaction)));
+  const transaction = deserializeServerTransaction(built);
 
   onStep?.('signing');
-  onStep?.('sponsoring');
+  onStep?.('submitting');
   const registered = await signAndSponsorAptosTransaction(adapter, transaction, {
     quoteToken,
     paidAuthorization,
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind: built.transactionKind,
+    submitMode: built.submitMode,
   });
   const registrationEvidence = {
     transactionHash: registered.transactionHash || registered.hash,
@@ -243,6 +254,7 @@ export async function uploadSponsoredEvm(file, {
     contractQuote,
     contractSignature,
     transactionKind: 'simple',
+    submitMode: 'direct',
     expectRegistrationEvidence: false,
   });
   onCheckpoint?.('committed', {
@@ -314,6 +326,7 @@ export async function resumeEvmBlobWrite(file, {
     contractQuote,
     contractSignature,
     transactionKind: 'simple',
+    submitMode: 'direct',
     expectRegistrationEvidence: false,
   });
   return {

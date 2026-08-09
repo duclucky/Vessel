@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSponsoredRegisterTransaction } from '../src/lib/shelby-register-builder.js';
+import {
+  buildDirectRegisterTransaction,
+  buildSponsoredRegisterTransaction,
+} from '../src/lib/shelby-register-builder.js';
 
 test('server builds a Shelby sponsored registration from the paid quote binding', async () => {
   const builds = [];
@@ -76,4 +79,46 @@ test('server refuses an invalid commitment root or payment tier before building'
     () => buildSponsoredRegisterTransaction({ ...base, blobMerkleRoot: `0x${'44'.repeat(32)}` }),
     (error) => error.code === 'invalid_payment_tier',
   );
+});
+
+test('server can build a direct DAA Shelby registration without gas station sponsor signer', async () => {
+  const builds = [];
+  const transaction = { bcsToBytes: () => new Uint8Array([4, 5, 6]) };
+  const signedQuote = {
+    context: {
+      storageAddress: `0x${'11'.repeat(32)}`,
+      blobName: `media/${'22'.repeat(32)}.png`,
+      sizeBytes: 64,
+      expirationMicros: 2_592_001_000_000,
+      encoding: 0,
+    },
+    breakdown: { tierId: 2 },
+  };
+
+  const result = await buildDirectRegisterTransaction({
+    shelbyClient: {
+      aptos: {
+        transaction: {
+          build: {
+            async simple(input) {
+              builds.push(input);
+              return transaction;
+            },
+          },
+        },
+      },
+    },
+    signedQuote,
+    blobMerkleRoot: `0x${'44'.repeat(32)}`,
+    maxGasAmount: 25_000,
+  });
+
+  assert.equal(result, transaction);
+  assert.equal(builds[0].sender, signedQuote.context.storageAddress);
+  assert.equal(builds[0].withFeePayer, undefined);
+  assert.equal(builds[0].secondarySignerAddresses, undefined);
+  assert.deepEqual(builds[0].options, { maxGasAmount: 25_000 });
+  assert.match(builds[0].data.function, /::blob_metadata::register_blob$/);
+  assert.equal(builds[0].data.functionArguments.length, 10);
+  assert.equal(builds[0].data.functionArguments[0], signedQuote.context.blobName);
 });

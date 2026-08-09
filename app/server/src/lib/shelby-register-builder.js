@@ -54,3 +54,45 @@ export async function buildSponsoredRegisterTransaction({
     options: { maxGasAmount: sponsoredGasLimit },
   });
 }
+
+export async function buildDirectRegisterTransaction({
+  shelbyClient,
+  signedQuote,
+  blobMerkleRoot,
+  maxGasAmount,
+}) {
+  const context = signedQuote?.context;
+  if (!context?.storageAddress) {
+    throw registerError('Shelby DAA registration is not configured', 'daa_unavailable');
+  }
+  if (!ROOT.test(String(blobMerkleRoot || ''))) {
+    throw registerError('Invalid Shelby blob commitment', 'invalid_blob_commitment');
+  }
+  const paymentTier = Number(signedQuote?.breakdown?.tierId);
+  if (!Number.isSafeInteger(paymentTier) || paymentTier < 0) {
+    throw registerError('Invalid Shelby payment tier', 'invalid_payment_tier');
+  }
+  const gasLimit = Number(maxGasAmount);
+  if (!Number.isSafeInteger(gasLimit) || gasLimit < 28) {
+    throw registerError('Invalid Shelby gas limit', 'invalid_sponsored_gas_limit');
+  }
+  const payload = ShelbyBlobClient.createRegisterBlobPayload({
+    account: context.storageAddress,
+    blobName: context.blobName,
+    blobSize: context.sizeBytes,
+    blobMerkleRoot,
+    numChunksets: expectedTotalChunksets(context.sizeBytes),
+    expirationMicros: context.expirationMicros,
+    selectedLocation: 'shelbynet-1',
+    useSponsoredUsdVariant: false,
+    encoding: context.encoding,
+  });
+  if (!Array.isArray(payload.functionArguments) || payload.functionArguments.length !== 10) {
+    throw registerError('Unexpected Shelby register payload shape', 'invalid_register_payload');
+  }
+  return shelbyClient.aptos.transaction.build.simple({
+    sender: context.storageAddress,
+    data: payload,
+    options: { maxGasAmount: gasLimit },
+  });
+}

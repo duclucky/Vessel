@@ -224,7 +224,7 @@ function initUpload() {
     settlementPending: 65,
     receiptVerified: 72,
     confirming: 80,
-    sponsoring: 84,
+    submitting: 84,
     uploading: 92,
   };
   const stepMsg = {
@@ -234,7 +234,7 @@ function initUpload() {
     settlementPending: 'CONFIRMING FEE RECEIPT',
     receiptVerified: 'VESSEL RECEIPT VERIFIED',
     confirming: 'REGISTERING ON APTOS',
-    sponsoring: 'SPONSORING APTOS',
+    submitting: 'SUBMITTING TO SHELBYNET',
     uploading: 'WRITING TO SHELBY',
   };
   function setStep(s) { if (bar) bar.style.width = (stepPct[s] || 20) + '%'; if (pct) pct.textContent = stepMsg[s] || s; }
@@ -855,7 +855,7 @@ function initUpload() {
     const detail = document.createElement('p');
     detail.className = 'text-sm leading-6 text-on-surface-variant mb-4';
     const requiredUsdc = Number(quote.solanaAmountMicro) / 1_000_000;
-    detail.textContent = `This upload costs ${requiredUsdc} USDC; your wallet has ${have.toFixed(4)}. Vessel sponsors Aptos gas and ShelbyUSD for the Solana DAA path.`;
+    detail.textContent = `This upload costs ${requiredUsdc} USDC; your wallet has ${have.toFixed(4)}. Vessel testnet-funds the DAA account with APT gas and ShelbyUSD for the Solana path.`;
     const retry = document.createElement('button');
     retry.id = 'pay-retry';
     retry.type = 'button';
@@ -882,7 +882,7 @@ function initUpload() {
     ledger.commitUpload(r);
     if (r.ownedByYou) {
       const paid = r.paidUsdc ? ` · paid ${r.paidUsdc} USDC` : '';
-      toast('Stored on Shelby — owned by YOUR wallet ✓' + (r.paidUsdc ? `, sponsored${paid}` : ''), 'ok');
+      toast('Stored on Shelby — owned by YOUR wallet ✓' + (r.paidUsdc ? `, paid${paid}` : ''), 'ok');
       const k = $('#result-key'); if (k) k.textContent = r.key + '  (owned by your wallet' + paid + ')';
     }
     $('#copy-url')?.addEventListener('click', () => copy(r.url), { once: false });
@@ -1715,7 +1715,7 @@ async function initMetadata() {
         opener: $('#single-host-shelby') || $('#batch-host-shelby'),
         kicker: files.length > 1 ? `METADATA ${index + 1} OF ${files.length}` : 'TOKENURI QUOTE',
         title: `Host ${file.name} for ${quoted.quote.days} days?`,
-        message: `${total} total, including Shelby storage cost, sponsored ShelbyNet gas, and the Vessel service fee. Your connected wallet will approve the Vessel fee receipt.`,
+        message: `${total} total, including Shelby storage cost, testnet DAA gas funding, and the Vessel service fee. Your connected wallet will approve the Vessel fee receipt.`,
         cancelLabel: 'NOT NOW',
         confirmLabel: 'APPROVE & HOST',
       });

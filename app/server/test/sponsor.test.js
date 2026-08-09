@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SponsorManager, resolveGasStationNetwork } from '../src/lib/sponsor.js';
+import { DirectAptosSubmitter, SponsorManager, resolveGasStationNetwork } from '../src/lib/sponsor.js';
 
 const decoded = (value) => ({
   transaction: { rawTransaction: { sender: { toString: () => value } } },
@@ -55,4 +55,29 @@ test('sponsor requires a non-empty expected sender', async () => {
 test('sponsor resolves ShelbyNet for gas station submissions', () => {
   assert.equal(resolveGasStationNetwork('shelbynet'), 'shelbynet');
   assert.equal(resolveGasStationNetwork('testnet'), 'testnet');
+});
+
+test('direct submitter submits a signed simple DAA transaction without gas station', async () => {
+  const calls = [];
+  const submitter = new DirectAptosSubmitter({
+    aptos: {
+      transaction: {
+        submit: {
+          simple: async (input) => {
+            calls.push(input);
+            return { hash: '0xdirect' };
+          },
+        },
+      },
+    },
+    deserialize: () => decoded('0xpaid'),
+  });
+
+  assert.deepEqual(
+    await submitter.submit('txn', 'auth', { expectedSender: '0xPAID' }),
+    { hash: '0xdirect' },
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].transaction.rawTransaction.sender.toString(), '0xpaid');
+  assert.deepEqual(calls[0].senderAuthenticator, { kind: 'auth' });
 });

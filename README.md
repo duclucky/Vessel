@@ -67,7 +67,7 @@ Wallet state is restored silently when the extension supports it. Selecting a co
 
 ### 2. Prepare storage
 
-Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, Shelby storage cost, sponsored ShelbyNet gas, a 1% Vessel service fee, and a USD 0.01 minimum as one source-chain Vessel charge.
+Open Upload, select one file or a collection folder, and choose a retention preset or a custom duration from 1 to 365 days. Quote calculation accounts for file size and duration, Shelby storage cost, testnet DAA gas funding, a 1% Vessel service fee, and a USD 0.01 minimum as one source-chain Vessel charge.
 
 When the active ShelbyNet write gate is enabled, the user reviews the quote, approves the fee receipt transaction, and receives wallet-owned storage evidence. If the gate is disabled for maintenance, the UI remains usable for inspection and does not present a disabled network as a successful upload.
 
@@ -118,7 +118,7 @@ Storage code remains behind provider boundaries:
 
 ## Fee receipt contracts
 
-Vessel deploys one fee contract or program for each supported chain. All consume the same public-key-signed `QuoteV1` model and issue a single-use Vessel fee receipt. The source-chain Vessel charge includes Shelby storage cost, sponsored ShelbyNet gas or gas-station cost, and the 1% Vessel service fee.
+Vessel deploys one fee contract or program for each supported chain. All consume the same public-key-signed `QuoteV1` model and issue a single-use Vessel fee receipt. The source-chain Vessel charge includes Shelby storage cost, testnet DAA gas funding, and the 1% Vessel service fee.
 
 ### Aptos Testnet
 

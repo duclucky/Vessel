@@ -33,7 +33,7 @@
     <header class="mx-auto max-w-3xl text-center">
       <p class="vessel-kicker text-primary-container">Wallet-native + Derived identity</p>
       <h1 class="mt-5 font-display text-5xl font-bold tracking-[-0.04em] md:text-7xl">Ethereal Identity</h1>
-      <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Aptos wallets use their own address. Solana wallets control a derived Aptos storage account through DAA—without another seed phrase.</p>
+      <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Aptos wallets use their own address. Solana and Ethereum wallets control a derived Aptos storage account through DAA without another seed phrase.</p>
     </header>
 
     <section class="mt-14 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]" aria-label="Wallet-owned storage identity">
@@ -62,7 +62,7 @@
         <div class="relative">
           <p class="vessel-kicker text-tertiary-container">Wallet-owned storage</p>
           <h2 class="mt-5 font-display text-3xl font-semibold tracking-tight md:text-5xl">Prove control with your wallet</h2>
-          <p class="mt-5 max-w-xl leading-7 text-on-surface-variant">Aptos wallets pay APT gas and ShelbyUSD storage fees directly. Solana wallets use a sponsored derived Aptos account. Vessel never receives a seed phrase.</p>
+          <p class="mt-5 max-w-xl leading-7 text-on-surface-variant">Aptos wallets pay APT gas and ShelbyUSD storage fees directly. Solana and Ethereum wallets use official Shelby DAA storage accounts with testnet funding. Vessel never receives a seed phrase.</p>
           <div class="mt-8 rounded-control border border-white/5 bg-surface-lowest/55 p-5"><p class="vessel-kicker text-outline">Identity status</p><p id="auth-status" class="vessel-technical mt-3 text-sm text-primary" role="status">Choose an Aptos or Solana wallet</p></div>
           <button id="sign-btn" class="vessel-button vessel-button-primary mt-7 w-full px-6 py-5"><span class="material-symbols-outlined" aria-hidden="true">fingerprint</span><span id="sign-btn-label">CONNECT WALLET — OWN YOUR STORAGE</span></button>
           <div class="mt-5 flex flex-wrap gap-2"><span class="vessel-technical rounded-full border border-primary-container/15 bg-primary-container/5 px-4 py-2 text-[11px] text-primary">No bridge</span><span class="vessel-technical rounded-full border border-secondary/15 bg-secondary/5 px-4 py-2 text-[11px] text-secondary">No new seed phrase</span><span class="vessel-technical rounded-full border border-tertiary-container/15 bg-tertiary-container/5 px-4 py-2 text-[11px] text-tertiary">Testnet only</span></div>

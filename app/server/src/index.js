@@ -14,13 +14,14 @@ import { config } from './config.js';
 import { getStorageProvider } from './storage/index.js';
 import { contentKey, mimeForKey } from './lib/keys.js';
 import { makeChallenge, verifySignature, deriveStorageAccount } from './lib/identity.js';
-import { SponsorManager } from './lib/sponsor.js';
+import { DirectAptosSubmitter, SponsorManager } from './lib/sponsor.js';
 import { createShelbyPricingReader, calculateUploadQuote } from './lib/shelby-pricing.js';
 import { normalizeUploadQuoteContext, QuoteManager } from './lib/quotes.js';
 import { PaidAuthorizationManager } from './lib/paid-authorizations.js';
 import { validatePaidUploadAuthorization } from './lib/paid-upload-access.js';
-import { buildSponsoredRegisterTransaction } from './lib/shelby-register-builder.js';
+import { buildDirectRegisterTransaction } from './lib/shelby-register-builder.js';
 import { ShelbyUploadGateway } from './lib/shelby-upload-gateway.js';
+import { ensureShelbyDaaFunding } from './lib/shelby-daa-funding.js';
 import { targetExpirationMicros } from '../public/retention.js';
 import { extractShelbyTransactionEvidence } from '../client-src/wallets/transaction-evidence.js';
 import { createTelemetry } from './lib/telemetry.js';
@@ -57,6 +58,7 @@ const aptos = new Aptos(new AptosConfig({
   network: config.shelbyRuntime.aptosNetwork,
   clientConfig: config.shelbyAptosApiKey ? { API_KEY: config.shelbyAptosApiKey } : undefined,
 }));
+const directSubmitter = new DirectAptosSubmitter({ aptos });
 const pricingReader = createShelbyPricingReader({ aptos });
 let shelbyClient = null;
 let shelbyGateway = null;
@@ -410,19 +412,25 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
 app.post('/api/shelby/register', async (req, res) => {
   try {
     if (!requireShelbyWrites(res)) return;
-    if (!shelbyClient || !shelbyGateway || !sponsor || !config.gasStationAccount) {
-      return send(res, 503, { error: 'Sponsored Shelby registration is unavailable' });
+    if (!shelbyClient || !shelbyGateway) {
+      return send(res, 503, { error: 'Shelby registration is unavailable' });
     }
     const { signedQuote } = validatePaidUploadBody(req.body);
-    const transaction = await buildSponsoredRegisterTransaction({
+    await ensureShelbyDaaFunding({
+      address: signedQuote.context.storageAddress,
+      aptos,
       shelbyClient,
-      gasStationAccount: config.gasStationAccount,
+    });
+    const transaction = await buildDirectRegisterTransaction({
+      shelbyClient,
       signedQuote,
       blobMerkleRoot: req.body?.blobMerkleRoot,
       maxGasAmount: sponsoredMaxGasAmount(),
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
+      transactionKind: 'simple',
+      submitMode: 'direct',
     });
   } catch (e) { fail(res, e); }
 });
@@ -430,22 +438,28 @@ app.post('/api/shelby/register', async (req, res) => {
 app.post('/api/shelby/commit', async (req, res) => {
   try {
     if (!requireShelbyWrites(res)) return;
-    if (!shelbyClient || !sponsor || !config.gasStationAccount) {
-      return send(res, 503, { error: 'Sponsored Shelby commit is unavailable' });
+    if (!shelbyClient) {
+      return send(res, 503, { error: 'Shelby commit is unavailable' });
     }
     const { signedQuote } = validatePaidUploadBody(req.body);
     if (!req.body?.commitPayload || typeof req.body.commitPayload !== 'object') {
       return send(res, 400, { error: 'Shelby commit payload is required', code: 'commit_payload_required' });
     }
+    await ensureShelbyDaaFunding({
+      address: signedQuote.context.storageAddress,
+      aptos,
+      shelbyClient,
+      minShelbyUsdUnits: 0n,
+    });
     const transaction = await shelbyClient.aptos.transaction.build.simple({
       sender: signedQuote.context.storageAddress,
       data: req.body?.commitPayload,
-      withFeePayer: true,
       options: { maxGasAmount: sponsoredMaxGasAmount() },
     });
     send(res, 200, {
       transaction: Buffer.from(transaction.bcsToBytes()).toString('base64'),
       transactionKind: 'simple',
+      submitMode: 'direct',
     });
   } catch (e) { fail(res, e); }
 });
@@ -599,19 +613,18 @@ app.get('/api/config', (_req, res) => {
       solana: settlementDeployments.solana,
       ...(settlementDeployments.evm ? { evm: settlementDeployments.evm } : {}),
     } : { enabled: false },
-    sponsored: !!sponsor
-      && !!paidAuthorizations
+    sponsored: !!paidAuthorizations
       && !!shelbyGateway
       && settlementDeployments.enabled,
     walletFamilies: {
       aptos: config.walletAptosEnabled && !!paidAuthorizations && settlementDeployments.enabled,
       solana: config.walletSolanaEnabled
-        && !!sponsor
         && !!paidAuthorizations
+        && !!shelbyGateway
         && settlementDeployments.enabled,
       evm: config.walletEvmEnabled
-        && !!sponsor
         && !!paidAuthorizations
+        && !!shelbyGateway
         && !!settlementDeployments.evm,
     },
     maxUploadBytes: config.maxUploadBytes,
@@ -697,10 +710,9 @@ app.post('/api/quotes/validate', async (req, res) => {
   } catch (e) { fail(res, e); }
 });
 
-// ---- Sponsored on-chain submit (gas station key stays server-side; see NOTES 5j) ----
+// ---- On-chain submit (direct DAA by default; Gas Station compatibility remains available) ----
 app.post('/api/sponsor/submit', async (req, res) => {
   try {
-    if (!sponsor) return send(res, 501, { error: 'sponsor not configured' });
     if (!quoteManager || !paidAuthorizations) {
       return send(res, 503, { error: 'paid authorization not configured' });
     }
@@ -713,6 +725,7 @@ app.post('/api/sponsor/submit', async (req, res) => {
       contractQuote,
       contractSignature,
       transactionKind,
+      submitMode,
     } = req.body || {};
     if (!transaction || !senderAuthenticator) return send(res, 400, { error: 'transaction and senderAuthenticator required' });
     const { signedQuote: quote } = validatePaidUploadBody({
@@ -722,11 +735,19 @@ app.post('/api/sponsor/submit', async (req, res) => {
       contractQuote,
       contractSignature,
     });
-    const r = await sponsor.submit(String(transaction), String(senderAuthenticator), {
-      expectedSender: quote.context.storageAddress,
-      transactionKind: transactionKind === 'simple' ? 'simple' : 'multi_agent',
-    });
-    if (!r.hash) return send(res, 502, { error: 'gas station returned no hash' });
+    const useDirectSubmit = submitMode === 'direct';
+    if (!useDirectSubmit && !sponsor) return send(res, 501, { error: 'sponsor not configured' });
+    const r = useDirectSubmit
+      ? await directSubmitter.submit(String(transaction), String(senderAuthenticator), {
+        expectedSender: quote.context.storageAddress,
+      })
+      : await sponsor.submit(String(transaction), String(senderAuthenticator), {
+        expectedSender: quote.context.storageAddress,
+        transactionKind: transactionKind === 'simple' ? 'simple' : 'multi_agent',
+      });
+    if (!r.hash) {
+      return send(res, 502, { error: useDirectSubmit ? 'Aptos submit returned no hash' : 'gas station returned no hash' });
+    }
     const completed = await aptos.waitForTransaction({ transactionHash: r.hash });
     if (req.body?.expectRegistrationEvidence === false) {
       send(res, 200, {

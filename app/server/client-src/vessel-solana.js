@@ -111,6 +111,7 @@ async function signAndSponsorAptosTransaction(transaction, {
   contractQuote,
   contractSignature,
   transactionKind,
+  submitMode,
   expectRegistrationEvidence = true,
 }) {
   const signed = await signAptosTransactionWithSolana({
@@ -131,8 +132,16 @@ async function signAndSponsorAptosTransaction(transaction, {
     contractQuote,
     contractSignature,
     transactionKind,
+    submitMode,
     expectRegistrationEvidence,
   });
+}
+
+function deserializeServerTransaction(built) {
+  const bytes = new Deserializer(fromB64(built.transaction));
+  return built.transactionKind === 'simple'
+    ? SimpleTransaction.deserialize(bytes)
+    : MultiAgentTransaction.deserialize(bytes);
 }
 
 async function buildSponsoredCommitTransaction({
@@ -207,9 +216,6 @@ async function uploadSponsored(file, {
   ) {
     throw new Error('Paid upload context does not match the connected wallet and file');
   }
-  const cfg = await loadConfig();
-  if (!cfg.gasStationAccount) throw new Error('server sponsor not configured');
-
   onStep?.('encoding');
   const erasureProvider = await createDefaultErasureCodingProvider();
   const commitments = await generateCommitments(erasureProvider, data);
@@ -224,18 +230,18 @@ async function uploadSponsored(file, {
   if (!built.transaction) {
     throw new Error('Vessel did not return a Shelby registration transaction');
   }
-  const transaction = MultiAgentTransaction.deserialize(
-    new Deserializer(fromB64(built.transaction)),
-  );
+  const transaction = deserializeServerTransaction(built);
 
   onStep?.('signing');
-  onStep?.('sponsoring');
+  onStep?.('submitting');
   const registered = await signAndSponsorAptosTransaction(transaction, {
     quoteToken,
     paidAuthorization,
     uploadContext,
     contractQuote,
     contractSignature,
+    transactionKind: built.transactionKind,
+    submitMode: built.submitMode,
   });
   const registrationEvidence = {
     transactionHash: registered.transactionHash || registered.hash,
@@ -288,6 +294,7 @@ async function uploadSponsored(file, {
     contractQuote,
     contractSignature,
     transactionKind: 'simple',
+    submitMode: 'direct',
     expectRegistrationEvidence: false,
   });
   onCheckpoint?.('committed', {
@@ -388,6 +395,7 @@ async function resumeBlobWrite(file, {
     contractQuote,
     contractSignature,
     transactionKind: 'simple',
+    submitMode: 'direct',
     expectRegistrationEvidence: false,
   });
   return {

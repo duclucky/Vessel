@@ -206,7 +206,7 @@ test('Solana DAA routes through the Solana settlement client and wallet-owned up
   assert.equal(flow.walletUploadCalls, 1);
 });
 
-test('Ethereum DAA uses Sepolia settlement and sponsored ShelbyNet upload', async () => {
+test('Ethereum DAA uses Sepolia settlement and cross-chain ShelbyNet upload', async () => {
   const flow = fixture({ chain: 'evm' });
 
   const quoted = await flow.service.quote(file, { days: 30 });
