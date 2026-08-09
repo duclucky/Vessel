@@ -59,7 +59,28 @@ test('operator error details redact API keys and stay bounded', () => {
   assert.equal(rows[0].severity, 'error');
   assert.match(rows[0].errorDetail, /aptoslabs_\[redacted\]/);
   assert.equal(rows[0].errorDetail.includes('example_secret'), false);
-  assert.ok(rows[0].errorDetail.length <= 220);
+  assert.ok(rows[0].errorDetail.length <= 1200);
+});
+
+test('operator error details preserve Aptos VM abort payloads for diagnosis', () => {
+  const rows = [];
+  const telemetry = createTelemetry({ write: (row) => rows.push(row), walletSalt: 'salt' });
+  const aptosError = `Request to [Fullnode]: POST http://http-gw-shelbynet-node-api.api-gw-prod-shared.svc:8080/v1/transactions failed with: ${JSON.stringify({
+    message: 'Invalid transaction: Type: Execution Code: ABORTED',
+    error_code: 'vm_error',
+    vm_error_code: '0x60001',
+    filler: 'x'.repeat(420),
+  })}`;
+  telemetry.operation({
+    stage: 'failed',
+    operation: 'upload',
+    network: 'shelbynet',
+    errorCode: 'sponsor_failed',
+    errorDetail: aptosError,
+  });
+  assert.match(rows[0].errorDetail, /vm_error_code/);
+  assert.match(rows[0].errorDetail, /0x60001/);
+  assert.ok(rows[0].errorDetail.length <= 1200);
 });
 
 test('settlement telemetry hashes quote IDs and records only public finality metadata', () => {

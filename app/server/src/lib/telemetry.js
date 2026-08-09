@@ -20,7 +20,7 @@ const present = (value) => value !== undefined && value !== null && value !== ''
 const publicDetail = (value) => String(value || '')
   .replace(/aptoslabs_[A-Za-z0-9_~-]+/g, 'aptoslabs_[redacted]')
   .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-  .slice(0, 220);
+  .slice(0, 1200);
 
 export function createTelemetry({ write, walletSalt, now = Date.now } = {}) {
   const salt = String(walletSalt || '');
