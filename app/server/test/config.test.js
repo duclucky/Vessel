@@ -107,3 +107,11 @@ test('dynamic quote configuration is explicit and contains no development signin
   }
   assert.doesNotMatch(config, /vessel-dev-secret/);
 });
+
+test('sponsored Shelby register gas default covers DAA registration execution', () => {
+  assert.match(
+    config,
+    /REGISTER_GAS_UNITS_ESTIMATE \|\| '25000'/,
+    'default register gas units must stay above observed ShelbyNet DAA register usage',
+  );
+});

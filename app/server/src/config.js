@@ -78,7 +78,7 @@ export const config = {
   quoteSignerPublicKeyHex: process.env.QUOTE_SIGNER_PUBLIC_KEY_HEX || '',
   paySecret: process.env.PAY_SECRET || '', // SERVER-ONLY: HMAC secret for quote/payment tokens
   aptUsdReferenceMicros: BigInt(process.env.APT_USD_REFERENCE_MICROS || '5000000'),
-  registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '7000'),
+  registerGasUnitsEstimate: BigInt(process.env.REGISTER_GAS_UNITS_ESTIMATE || '25000'),
   gasSafetyBps: BigInt(process.env.GAS_SAFETY_BPS || '12000'),
   telemetryWalletSalt: process.env.TELEMETRY_WALLET_SALT || process.env.PAY_SECRET || '',
 };
