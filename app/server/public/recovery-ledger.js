@@ -59,6 +59,11 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
     if (!STAGES.has(checkpoint?.stage)) throw new RangeError('Invalid recovery stage');
     const id = String(checkpoint.id || checkpoint.quoteId || '');
     if (!id) throw new TypeError('Recovery record id is required');
+    const records = read();
+    const existing = records.find((entry) => entry.id === id);
+    if (checkpoint.stage === 'quoted' && existing && existing.stage !== 'quoted' && fresh(existing)) {
+      return existing;
+    }
     const timestamp = now();
     const record = Object.freeze({
       id,
@@ -70,7 +75,7 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
       createdAtMs: timestamp,
       updatedAtMs: timestamp,
     });
-    write([record, ...read().filter((entry) => entry.id !== id)]);
+    write([record, ...records.filter((entry) => entry.id !== id)]);
     return record;
   }
 

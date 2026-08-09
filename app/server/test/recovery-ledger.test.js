@@ -115,3 +115,37 @@ test('recovery ledger is capped, wallet scoped, and complete removes a record', 
   ledger.complete(id);
   assert.equal(ledger.loadForWallet(identity).some((item) => item.id === id), false);
 });
+
+test('a repeated quote cannot overwrite a durable recovery checkpoint with the same id', () => {
+  const storage = memoryStorage();
+  let current = 1_000;
+  const ledger = createRecoveryLedger(storage, () => current);
+  ledger.save({
+    id: 'quote-reused',
+    stage: 'quoted',
+    walletIdentity: identity,
+    quoteId: 'quote-reused',
+    quoteToken: 'vquote.original',
+    context: { operation: 'upload', chain: 'aptos', fileHash: 'ab'.repeat(32) },
+  });
+  current += 1_000;
+  ledger.advance('quote-reused', 'paid', {
+    paidAuthorization: 'vpaid.original',
+    settlementTransactionId: '0xpaid',
+  });
+
+  current += 1_000;
+  ledger.save({
+    id: 'quote-reused',
+    stage: 'quoted',
+    walletIdentity: identity,
+    quoteId: 'quote-reused',
+    quoteToken: 'vquote.repeated',
+    context: { operation: 'upload', chain: 'aptos', fileHash: 'ab'.repeat(32) },
+  });
+
+  const [record] = ledger.loadForWallet(identity);
+  assert.equal(record.stage, 'paid');
+  assert.equal(record.paidAuthorization, 'vpaid.original');
+  assert.equal(record.settlementTransactionId, '0xpaid');
+});
