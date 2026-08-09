@@ -9,6 +9,46 @@ function toBigIntAmount(value) {
   return 0n;
 }
 
+function transactionHashOf(result) {
+  const hash = typeof result === 'string'
+    ? result
+    : (result?.hash || result?.transactionHash || result?.transaction_hash);
+  return /^0x[0-9a-f]{64}$/i.test(String(hash || '')) || /^0x[a-z0-9]+$/i.test(String(hash || ''))
+    ? String(hash)
+    : '';
+}
+
+async function readAptBalance(aptos, accountAddress) {
+  try {
+    return toBigIntAmount(await aptos.getAccountAPTAmount({ accountAddress }));
+  } catch {
+    return 0n;
+  }
+}
+
+async function readShelbyUsdBalance(aptos, accountAddress) {
+  try {
+    const rows = await aptos.getCurrentFungibleAssetBalances({
+      options: {
+        where: {
+          owner_address: { _eq: accountAddress },
+          asset_type: { _eq: SHELBYUSD_FA_METADATA_ADDRESS },
+        },
+      },
+    });
+    return toBigIntAmount(rows?.[0]?.amount);
+  } catch {
+    return 0n;
+  }
+}
+
+async function waitForHash(aptos, result) {
+  const transactionHash = transactionHashOf(result);
+  if (transactionHash && typeof aptos.waitForTransaction === 'function') {
+    await aptos.waitForTransaction({ transactionHash });
+  }
+}
+
 export async function ensureShelbyDaaFunding({
   address,
   aptos,
@@ -26,46 +66,32 @@ export async function ensureShelbyDaaFunding({
     throw error;
   }
 
-  let aptOctas = 0n;
-  try {
-    aptOctas = toBigIntAmount(await aptos.getAccountAPTAmount({ accountAddress }));
-  } catch {
-    aptOctas = 0n;
-  }
-
-  let shelbyUsdUnits = 0n;
-  try {
-    const rows = await aptos.getCurrentFungibleAssetBalances({
-      options: {
-        where: {
-          owner_address: { _eq: accountAddress },
-          asset_type: { _eq: SHELBYUSD_FA_METADATA_ADDRESS },
-        },
-      },
-    });
-    shelbyUsdUnits = toBigIntAmount(rows?.[0]?.amount);
-  } catch {
-    shelbyUsdUnits = 0n;
-  }
+  let aptOctas = await readAptBalance(aptos, accountAddress);
+  let shelbyUsdUnits = await readShelbyUsdBalance(aptos, accountAddress);
 
   let aptFunded = false;
   let shelbyUsdFunded = false;
 
   if (aptOctas < minAptOctas) {
-    await aptos.fundAccount({
+    const result = await aptos.fundAccount({
       accountAddress,
       amount: Number(aptFaucetOctas),
     });
+    await waitForHash(aptos, result);
     aptFunded = true;
   }
 
   if (shelbyUsdUnits < minShelbyUsdUnits) {
-    await shelbyClient.fundAccountWithShelbyUSD({
+    const result = await shelbyClient.fundAccountWithShelbyUSD({
       address: accountAddress,
       amount: Number(shelbyUsdFaucetUnits),
     });
+    await waitForHash(aptos, result);
     shelbyUsdFunded = true;
   }
+
+  if (aptFunded) aptOctas = await readAptBalance(aptos, accountAddress);
+  if (shelbyUsdFunded) shelbyUsdUnits = await readShelbyUsdBalance(aptos, accountAddress);
 
   return {
     aptFunded,
