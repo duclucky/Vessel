@@ -290,6 +290,33 @@ test('DAA adapter can derive Solana storage through the official Shelby bridge',
   assert.equal(typeof handoff.provider.signMessage, 'function');
 });
 
+test('DAA adapter exposes one-approval message signing after official Shelby derivation', async () => {
+  const wallet = standardWallet();
+  const adapter = createSolanaDaaAdapter({
+    descriptor: { id: 'solana:standard:1', name: 'Standard Wallet', provider: wallet },
+    officialShelby: {
+      async connectWallet() {
+        return {
+          chain: 'solana',
+          mode: 'daa',
+          sourceNetwork: 'devnet',
+          sourceAddress: key.toBase58(),
+          storageNetwork: 'shelbynet',
+          storageAddress: `0x${'5a'.repeat(32)}`,
+        };
+      },
+    },
+  });
+  await adapter.connect({ silent: false });
+
+  const signed = await adapter.signMessage('VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+
+  assert.equal(signed.chain, 'solana');
+  assert.equal(signed.address, key.toBase58());
+  assert.equal(signed.signedMessage, 'VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+  assert.equal(Buffer.from(signed.signature, 'base64').length, 64);
+});
+
 test('DAA adapter normalizes official Shelby Aptos-style storage addresses', async () => {
   const wallet = standardWallet();
   let handoff;

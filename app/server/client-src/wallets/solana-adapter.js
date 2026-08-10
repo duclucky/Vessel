@@ -252,6 +252,7 @@ export function createSolanaDaaAdapter({
 
   return {
     daaProvider: standard.daaProvider,
+    signMessage: standard.signMessage,
     async connect(options = {}) {
       const session = await standard.connect(options);
       return deriveSession(session);
