@@ -398,6 +398,24 @@ test('Gallery supports media selection and folder-scoped sheet exports', () => {
   assert.match(gallery, /Export This Folder XLSX/);
 });
 
+test('Gallery keeps local Vault history private until a wallet session is ready', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const galleryStart = source.indexOf('async function initGallery()');
+  const galleryEnd = source.indexOf('function formatAccountingUsd', galleryStart);
+  const gallery = source.slice(galleryStart, galleryEnd);
+  const initialItems = gallery.indexOf('let items = []');
+  const accessGuard = gallery.indexOf('const hasPrivateVaultAccess');
+  const guardedLoad = gallery.indexOf('items = loadMine()', accessGuard);
+  const privateEmpty = gallery.indexOf('Connect wallet to unlock your private Vault history');
+  const subscribeRefresh = gallery.indexOf('walletController()?.subscribe?.', accessGuard);
+
+  assert.equal(initialItems >= 0, true, 'Gallery should not eagerly expose local ledger entries');
+  assert.equal(accessGuard > initialItems, true, 'Gallery should calculate wallet access before loading ledger data');
+  assert.equal(guardedLoad > accessGuard, true, 'Gallery should load ledger only after a ready wallet session');
+  assert.equal(privateEmpty > accessGuard, true, 'Gallery should explain the locked state without listing artifacts');
+  assert.equal(subscribeRefresh > accessGuard, true, 'Gallery should refresh privacy state when wallet status changes');
+});
+
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {
   const html = readPage('collection.html');
   const ids = getIds(html);

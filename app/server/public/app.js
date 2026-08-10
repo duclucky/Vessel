@@ -1261,10 +1261,45 @@ async function initGallery() {
   let selectedGalleryKeys = new Set();
   let gallerySelectMode = false;
   let galleryExportUrl = '';
-  // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
-  let items = loadMine();
-  const walletState = walletController().getState();
-  if (walletState.status === 'ready' && walletState.session) {
+  // Keep the local ledger private until the visitor reconnects the owning wallet.
+  let items = [];
+  const count = $('#artifact-count');
+  const hasPrivateVaultAccess = (state = walletController().getState()) => (
+    state?.status === 'ready' && Boolean(state.session?.storageAddress)
+  );
+  const setCount = () => {
+    if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
+  };
+  const setEmptyCopy = (target, title, message) => {
+    const heading = target?.querySelector('h3');
+    const body = target?.querySelector('p');
+    if (heading) heading.textContent = title;
+    if (body) body.textContent = message;
+  };
+  const setGalleryPrivacyControls = (locked) => {
+    if (search) {
+      search.disabled = locked;
+      if (locked) search.value = '';
+    }
+    if (selectMode) selectMode.disabled = locked || !items.some(isMediaArtifact);
+    if (addFolder) {
+      addFolder.classList.toggle('hidden', locked || !gallerySelectMode);
+      addFolder.disabled = locked || !selectedGalleryKeys.size;
+    }
+  };
+  const refreshGalleryItems = async () => {
+    const walletState = walletController().getState();
+    selectedGalleryKeys = new Set();
+    gallerySelectMode = false;
+    activeGalleryCollection = '';
+    if (!hasPrivateVaultAccess(walletState)) {
+      items = [];
+      setCount();
+      renderFeeDashboard(items);
+      renderGallerySections();
+      return;
+    }
+    items = loadMine();
     try {
       const remote = await walletController().listArtifacts();
       items = walletController().reconcileArtifacts(items, remote);
@@ -1272,10 +1307,10 @@ async function initGallery() {
     } catch (error) {
       toast(`Using cached Gallery: ${String(error?.message || error).slice(0, 100)}`, 'warn');
     }
-  }
-  const count = $('#artifact-count');
-  if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
-  renderFeeDashboard(items);
+    setCount();
+    renderFeeDashboard(items);
+    renderGallerySections();
+  };
   const clearGalleryExport = () => {
     if (galleryExportUrl) URL.revokeObjectURL(galleryExportUrl);
     galleryExportUrl = '';
@@ -1372,7 +1407,7 @@ async function initGallery() {
       if (!confirmed) return;
       forgetMine(b.dataset.key);
       toast('Removed from gallery', 'ok');
-      await initGallery();
+      await refreshGalleryItems();
       document.querySelector('#gallery-title')?.focus();
     }));
   };
@@ -1391,6 +1426,32 @@ async function initGallery() {
   }
 
   function renderGallerySections() {
+    if (!hasPrivateVaultAccess()) {
+      imageGrid.innerHTML = '';
+      metadataGrid.innerHTML = '';
+      imageEmpty?.classList.remove('hidden');
+      metadataEmpty?.classList.add('hidden');
+      setEmptyCopy(
+        imageEmpty,
+        'Connect wallet to unlock your private Vault history',
+        'Vessel keeps this browser history hidden after logout. Reconnect the same wallet to show media, TokenURI metadata, fees, and exports.',
+      );
+      back?.classList.add('hidden');
+      prepareGalleryExport(null);
+      if (status) status.textContent = 'Connect wallet to unlock your private Vault history on this device.';
+      setGalleryPrivacyControls(true);
+      return;
+    }
+    setEmptyCopy(
+      imageEmpty,
+      'No media artifacts yet',
+      'Upload images or a folder to create a media collection.',
+    );
+    setEmptyCopy(
+      metadataEmpty,
+      'No hosted TokenURI metadata yet',
+      'Create and host NFT metadata from an image artifact.',
+    );
     const query = search?.value || '';
     const split = splitGalleryArtifacts(items, query);
     const activeCollection = split.collections.find((entry) => entry.id === activeGalleryCollection);
@@ -1415,6 +1476,7 @@ async function initGallery() {
         ? `${activeCollection.name}: ${activeCollection.items.length} media file${activeCollection.items.length === 1 ? '' : 's'} shown by original folder filename.`
         : 'Images and hosted TokenURI metadata are separated for NFT workflows.';
     }
+    setGalleryPrivacyControls(false);
     updateSelectionControls();
     bindGalleryActions();
   }
@@ -1427,7 +1489,15 @@ async function initGallery() {
     activeGalleryCollection = '';
     renderGallerySections();
   });
-  renderGallerySections();
+  window.__vesselGalleryUnsubscribe?.();
+  window.__vesselGalleryUnsubscribe = walletController()?.subscribe?.(() => {
+    void refreshGalleryItems();
+  });
+  window.addEventListener('pagehide', () => {
+    window.__vesselGalleryUnsubscribe?.();
+    window.__vesselGalleryUnsubscribe = null;
+  }, { once: true });
+  await refreshGalleryItems();
 }
 function formatAccountingUsd(micro) {
   const value = accountingMicro(micro);
