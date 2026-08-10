@@ -22,3 +22,7 @@ export const getLinks = (html) => [
 export const hasInlineTailwindConfig = (html) => (
   /<script\s+id="tailwind-config"/.test(html)
 );
+
+export const hasCompiledTailwindCss = (html) => (
+  /<link rel="stylesheet" href="\/tailwind\.css">[\s\S]*<link rel="stylesheet" href="\/vessel\.css">/.test(html)
+);

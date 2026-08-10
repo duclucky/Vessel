@@ -7,11 +7,12 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "build:css": "tailwindcss -c tailwind.config.cjs -i ./styles/tailwind.css -o ./public/tailwind.css --minify",
     "build:client": "node build-client.mjs",
     "test": "node --test test/*.test.js",
     "test:settlement": "node --test test/quote-v1.test.js test/contract-quotes.test.js test/settlement-deployments.test.js test/settlement-adapters.test.js test/contract-settlement-client.test.js test/solana-contract-settlement.test.js test/solana-contract-receipt.test.js",
     "test:ui": "node --test test/*.test.js",
-    "check": "npm test && npm run build:client"
+    "check": "npm test && npm run build:css && npm run build:client"
   },
   "dependencies": {
     "@anchor-lang/core": "1.1.2",
@@ -47,7 +48,10 @@
   "devDependencies": {
     "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
     "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+    "@tailwindcss/container-queries": "^0.1.1",
+    "@tailwindcss/forms": "^0.5.11",
     "esbuild": "^0.28.1",
-    "solc": "0.8.30"
+    "solc": "0.8.30",
+    "tailwindcss": "^3.4.19"
   }
 }

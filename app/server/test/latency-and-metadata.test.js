@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { getIds, hasInlineTailwindConfig, readPage } from './html-test-utils.js';
+import { getIds, hasCompiledTailwindCss, hasInlineTailwindConfig, readPage } from './html-test-utils.js';
 
 test('Latency keeps proof hooks inside the Ethereal shell', () => {
   const html = readPage('latency.html');
@@ -13,7 +13,7 @@ test('Latency keeps proof hooks inside the Ethereal shell', () => {
   ]) assert.equal(ids.has(id), true, `missing #${id}`);
   assert.match(html, /Latency Proof/);
   assert.match(html, /Real reads/i);
-  assert.match(html, /src="\/theme\.js"/);
+  assert.equal(hasCompiledTailwindCss(html), true);
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 
@@ -45,7 +45,7 @@ test('Metadata exposes accessible single and batch composer hooks', () => {
   assert.equal(ids.has('metadata-folder-input'), false);
   assert.doesNotMatch(html, /Select collection folder|webkitdirectory/i);
   assert.match(html, /Select a Shelby collection/i);
-  assert.match(html, /src="\/theme\.js"/);
+  assert.equal(hasCompiledTailwindCss(html), true);
   assert.match(html, /id="metadata-mode-tabs"[^>]*role="tablist"/);
   assert.match(html, /id="metadata-single-tab"[^>]*role="tab"[^>]*aria-selected="true"[^>]*aria-controls="metadata-single-panel"/);
   assert.match(html, /id="metadata-batch-tab"[^>]*role="tab"[^>]*aria-selected="false"[^>]*aria-controls="metadata-batch-panel"/);

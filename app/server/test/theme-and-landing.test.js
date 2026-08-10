@@ -6,15 +6,19 @@ import {
   publicDir,
   readPage,
   getLinks,
+  hasCompiledTailwindCss,
   hasInlineTailwindConfig,
 } from './html-test-utils.js';
 
-test('shared theme scripts parse and Landing uses them', () => {
-  const theme = fs.readFileSync(path.join(publicDir, 'theme.js'), 'utf8');
-  new Function(theme);
+test('Landing uses compiled Tailwind CSS and Vessel overrides', () => {
   const html = readPage('index.html');
-  assert.match(html, /<script src="\/theme\.js"><\/script>/);
-  assert.match(html, /<link[^>]+href="\/vessel\.css"/);
+  const compiledCss = fs.readFileSync(path.join(publicDir, 'tailwind.css'), 'utf8');
+  assert.equal(hasCompiledTailwindCss(html), true);
+  assert.doesNotMatch(html, /cdn\.tailwindcss\.com/);
+  assert.doesNotMatch(html, /<script src="\/theme\.js"><\/script>/);
+  assert.match(compiledCss, /\.bg-background/);
+  assert.match(compiledCss, /\.font-body/);
+  assert.match(compiledCss, /\.text-primary/);
   assert.equal(hasInlineTailwindConfig(html), false);
 });
 

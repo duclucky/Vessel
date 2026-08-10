@@ -2,12 +2,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getIds, getLinks, hasInlineTailwindConfig, publicDir, readPage } from './html-test-utils.js';
+import {
+  getIds,
+  getLinks,
+  hasCompiledTailwindCss,
+  hasInlineTailwindConfig,
+  publicDir,
+  readPage,
+} from './html-test-utils.js';
 
 const pages = [
   'index.html', 'identity.html', 'upload.html', 'gallery.html',
   'latency.html', 'metadata.html',
 ];
+const publicPages = fs.readdirSync(publicDir).filter((file) => file.endsWith('.html'));
 
 test('all six journeys share the accessible Ethereal shell', () => {
   for (const page of pages) {
@@ -19,8 +27,7 @@ test('all six journeys share the accessible Ethereal shell', () => {
     assert.match(html, /<footer\b/, `${page}: footer`);
     assert.match(html, /Powered by Shelby · Live on ShelbyNet/, `${page}: Shelby attribution and live network status`);
     assert.doesNotMatch(html, /Shelby Testnet · [^<]+ · Data is Ephemeral/, `${page}: no stale beta status`);
-    assert.match(html, /src="\/theme\.js"/, `${page}: shared theme`);
-    assert.match(html, /href="\/vessel\.css"/, `${page}: shared CSS`);
+    assert.equal(hasCompiledTailwindCss(html), true, `${page}: compiled CSS shell`);
     assert.equal(hasInlineTailwindConfig(html), false, `${page}: no divergent Tailwind config`);
     assert.equal(getLinks(html).some((link) => link.href === '#'), false, `${page}: no placeholder links`);
     assert.doesNotMatch(html, /\bimmutable\b|\bencrypted\b/i, `${page}: no unsupported storage claim`);
@@ -29,6 +36,16 @@ test('all six journeys share the accessible Ethereal shell', () => {
       .filter((match) => !/\baria-label=/.test(match[1]));
     assert.equal(mobileIconOnlyLinks.length, 0, `${page}: mobile icon-only link needs an accessible name`);
   }
+});
+
+test('public pages use compiled Tailwind CSS instead of the browser CDN', () => {
+  for (const page of publicPages) {
+    const html = readPage(page);
+    assert.doesNotMatch(html, /cdn\.tailwindcss\.com/, `${page}: Tailwind browser CDN must not ship`);
+    assert.doesNotMatch(html, /src="\/theme\.js"/, `${page}: Tailwind runtime config must not ship`);
+    assert.equal(hasCompiledTailwindCss(html), true, `${page}: compiled Tailwind should load before Vessel overrides`);
+  }
+  assert.equal(fs.existsSync(path.join(publicDir, 'tailwind.css')), true, 'compiled public/tailwind.css exists');
 });
 
 test('shared CSS provides keyboard, touch, disabled, and reduced-motion states', () => {
@@ -49,7 +66,7 @@ test('shared CSS provides keyboard, touch, disabled, and reduced-motion states',
 
 test('browser modules parse after the shell consolidation', async () => {
   const { spawnSync } = await import('node:child_process');
-  for (const file of ['theme.js', 'ledger.js', 'app.js']) {
+  for (const file of ['ledger.js', 'app.js']) {
     const result = spawnSync(process.execPath, ['--check', path.join(publicDir, file)], { encoding: 'utf8' });
     assert.equal(result.status, 0, `${file}: ${result.stderr}`);
   }

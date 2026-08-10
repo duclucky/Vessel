@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readPage, getIds, hasInlineTailwindConfig } from './html-test-utils.js';
+import { readPage, getIds, hasCompiledTailwindCss, hasInlineTailwindConfig } from './html-test-utils.js';
 
 test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   const html = readPage('identity.html');
@@ -17,7 +17,7 @@ test('Identity keeps runtime hooks inside the Ethereal shell', () => {
   ]) {
     assert.equal(ids.has(id), true, id);
   }
-  assert.match(html, /<script src="\/theme\.js"><\/script>/);
+  assert.equal(hasCompiledTailwindCss(html), true);
   assert.equal(hasInlineTailwindConfig(html), false);
   assert.match(html, /Connected wallet/i);
   assert.match(html, /Shelby storage account/i);
