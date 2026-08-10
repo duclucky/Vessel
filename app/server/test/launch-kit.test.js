@@ -12,6 +12,7 @@ import {
   rowsToCsv,
   toErc1155Hex64,
 } from '../public/launch-kit.js';
+import { validateLaunchKit } from '../public/launch-kit-validator.js';
 
 function collectionFixture() {
   return {
@@ -119,4 +120,61 @@ test('chain output generators create expected handoff rows', () => {
 test('rowsToCsv quotes commas and line breaks', () => {
   const csv = rowsToCsv([{ name: 'Genesis, One', description: 'Line 1\nLine 2' }]);
   assert.equal(csv, 'name,description\r\n"Genesis, One","Line 1\nLine 2"\r\n');
+});
+
+test('validator blocks target outputs with missing TokenURI and contract image', () => {
+  const collection = collectionFixture();
+  const profile = {
+    ...defaultLaunchProfile(collection),
+    collectionName: 'Genesis',
+    description: 'Shelby launch handoff.',
+    avatarImageUrl: '',
+    featuredImageUrl: '',
+  };
+  const items = buildLaunchItems({
+    ...collection,
+    items: collection.items.map((item) => ({ ...item, tokenUri: '', metadataUrl: '' })),
+  }, [], { tokenIdStart: 1 });
+
+  const result = validateLaunchKit({ collection, profile, items, nowMs: Date.UTC(2026, 7, 11) });
+  assert.equal(result.errors.some((issue) => issue.code === 'token_uri_missing'), true);
+  assert.equal(result.errors.some((issue) => issue.code === 'contract_uri_image_missing'), true);
+  assert.equal(result.targetStatus.evmErc721.valid, false);
+  assert.equal(result.targetStatus.evmErc1155.valid, false);
+});
+
+test('validator warns for cache-only collections, short expiry, royalties, and missing traits', () => {
+  const collection = { ...collectionFixture(), verification: 'vault-cache' };
+  const profile = {
+    ...defaultLaunchProfile(collection),
+    collectionName: 'Genesis',
+    description: 'Short',
+    avatarImageUrl: collection.items[0].url,
+    royaltyPercent: 12,
+  };
+  const items = buildLaunchItems(collection, manifestFixture(), { tokenIdStart: 1 });
+  const result = validateLaunchKit({ collection, profile, items, nowMs: Date.UTC(2026, 7, 10) });
+
+  assert.equal(result.errors.length, 0);
+  assert.equal(result.warnings.some((issue) => issue.code === 'collection_cache_only'), true);
+  assert.equal(result.warnings.some((issue) => issue.code === 'royalty_high'), true);
+  assert.equal(result.warnings.some((issue) => issue.code === 'attributes_missing'), true);
+  assert.equal(result.notes.some((issue) => issue.code === 'vessel_does_not_mint'), true);
+});
+
+test('validator blocks Aptos duplicate token names and ERC-1155 duplicate token IDs', () => {
+  const collection = collectionFixture();
+  const profile = {
+    ...defaultLaunchProfile(collection),
+    collectionName: 'Genesis',
+    description: 'A Shelby-hosted beta NFT media collection.',
+    avatarImageUrl: collection.items[0].url,
+  };
+  const items = buildLaunchItems(collection, manifestFixture(), { tokenIdStart: 1 })
+    .map((item) => ({ ...item, displayName: 'Duplicate', tokenId: 1 }));
+  const result = validateLaunchKit({ collection, profile, items, nowMs: Date.UTC(2026, 7, 11) });
+
+  assert.equal(result.errors.some((issue) => issue.code === 'token_id_collision'), true);
+  assert.equal(result.errors.some((issue) => issue.code === 'aptos_token_name_collision'), true);
+  assert.equal(result.targetStatus.aptosDigitalAsset.valid, false);
 });
