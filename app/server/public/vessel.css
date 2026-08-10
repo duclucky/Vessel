@@ -45,6 +45,10 @@ textarea.vessel-input { overflow: auto; background: rgba(12, 14, 19, 0.7); color
 .vessel-input::placeholder { color: #7d8785; }
 .vessel-input:hover { border-color: rgba(181, 255, 240, 0.22); }
 .vessel-input:focus { border-color: rgba(94, 230, 255, 0.65); box-shadow: 0 0 0 3px rgba(94, 230, 255, 0.12); outline: none; }
+.vessel-field-label { display: inline-flex; align-items: center; gap: 0.45rem; color: #9eaba8; font: 700 0.72rem/1 JetBrains Mono, monospace; letter-spacing: 0.18em; text-transform: uppercase; }
+.vessel-help { position: relative; display: inline-grid; width: 1.2rem; height: 1.2rem; place-items: center; border: 1px solid rgba(94, 234, 212, 0.28); border-radius: 9999px; background: rgba(94, 234, 212, 0.08); color: #b5fff0; font: 700 0.72rem/1 JetBrains Mono, monospace; transition: border-color 0.2s, background-color 0.2s, transform 0.2s; }
+.vessel-help::after { position: absolute; bottom: calc(100% + 0.65rem); left: 50%; z-index: 30; width: min(18rem, calc(100vw - 2rem)); padding: 0.85rem 1rem; border: 1px solid rgba(181, 255, 240, 0.18); border-radius: 1rem; background: rgba(8, 11, 17, 0.96); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.38), inset 0 1px rgba(255, 255, 255, 0.06); color: #c6cfcc; content: attr(data-help); font: 500 0.78rem/1.55 Geist, sans-serif; letter-spacing: 0; opacity: 0; pointer-events: none; text-transform: none; transform: translate(-50%, 0.35rem); transition: opacity 0.16s ease, transform 0.16s ease; }
+.vessel-help:hover::after, .vessel-help:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 .metadata-label-row { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.5rem; }
 .metadata-help { position: relative; display: inline-flex; align-items: center; }
 .metadata-help-trigger { display: inline-grid; width: 1.25rem; height: 1.25rem; place-items: center; border: 1px solid rgba(94, 234, 212, 0.26); border-radius: 9999px; background: rgba(94, 234, 212, 0.08); color: #b5fff0; font: 700 0.72rem/1 JetBrains Mono, monospace; transition: border-color 0.2s, background-color 0.2s, color 0.2s, transform 0.2s; }

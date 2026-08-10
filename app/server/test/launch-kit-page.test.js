@@ -58,3 +58,19 @@ test('Launch Kit page controller avoids local file APIs', () => {
   assert.match(source, /buildLaunchOutputs/);
   assert.doesNotMatch(source, /showOpenFilePicker|webkitdirectory|input\.type\s*=\s*['"]file['"]/);
 });
+
+test('Launch Kit labels include accessible help tooltip styles', () => {
+  const html = readPage('launch.html');
+  const css = readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
+  assert.match(html, /class="vessel-help"/);
+  assert.match(html, /data-help="This name appears in exported marketplace and chain handoff files\."/);
+  assert.match(html, /aria-label="Explain token ID start"/);
+  assert.match(css, /\.vessel-help::after/);
+  assert.match(css, /\.vessel-help:hover::after/);
+  assert.match(css, /\.vessel-help:focus-visible::after/);
+});
+
+test('Gallery and Metadata provide Launch Kit entry points', () => {
+  assert.match(readPage('gallery.html'), /Open Launch Kit/i);
+  assert.match(readPage('metadata.html'), /Open Launch Kit/i);
+});
