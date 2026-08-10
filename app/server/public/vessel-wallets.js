@@ -12426,6 +12426,22 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   // client-src/wallets/aptos-adapter.js
   init_process();
   init_buffer();
+
+  // client-src/wallets/aptos-address.js
+  init_process();
+  init_buffer();
+  var APTOS_HEX = /^[0-9a-f]{1,64}$/;
+  function normalizeAptosAddress(value, field = "Aptos address") {
+    const text = String(value?.toString?.() ?? value ?? "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
+    if (!APTOS_HEX.test(text)) {
+      const error = new Error(`${field} is invalid`);
+      error.code = "provider_unavailable";
+      throw error;
+    }
+    return `0x${text}`;
+  }
+
+  // client-src/wallets/aptos-adapter.js
   var DEFAULT_TARGET_NETWORK = Object.freeze({
     name: "testnet",
     chainId: 2,
@@ -12459,7 +12475,10 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     }
     return response.args;
   };
-  var addressOf = (account) => account?.address?.toString?.() || String(account?.address || "");
+  var addressOf = (account) => normalizeAptosAddress(
+    account?.address?.toString?.() || String(account?.address || ""),
+    "Aptos wallet address"
+  );
   var isTargetNetwork = (network, target) => {
     const name = String(network?.name || "").toLowerCase();
     const chainId = Number(network?.chainId);
@@ -12597,14 +12616,14 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     { code, retriable: false }
   );
   function aptosAddressHex(value) {
-    const text = String(value || "").replace(/^0x/, "").toLowerCase();
+    const text = String(value || "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
     if (!/^[0-9a-f]{1,64}$/.test(text)) {
       throw settlementError("Invalid Aptos payer address", "settlement_context_mismatch");
     }
     return text.padStart(64, "0");
   }
   function hexBytes(value, expectedPattern = HEX_32) {
-    const text = String(value || "").replace(/^0x/, "").toLowerCase();
+    const text = String(value || "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
     if (!expectedPattern.test(text)) throw settlementError("Invalid signed settlement bytes");
     return Uint8Array.from(text.match(/../g).map((byte) => Number.parseInt(byte, 16)));
   }
@@ -52368,7 +52387,10 @@ ${suffix}`;
           if (error?.code !== "wallet_timeout") throw error;
         }
       }
-      const storageAddress = officialSession?.storageAddress || deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+      const storageAddress = normalizeAptosAddress(
+        officialSession?.storageAddress || deriveStorageAddress({ ethereumAddress: sourceAddress, domain }),
+        "Shelby storage address"
+      );
       if (officialSession && officialSession.sourceAddress !== sourceAddress) {
         throw evmError("Official Shelby storage identity does not match the selected wallet", "identity_mismatch");
       }
@@ -52446,7 +52468,7 @@ ${suffix}`;
     new Error(message),
     { code, retriable: false }
   );
-  var bytes32 = (value) => `0x${String(value || "").replace(/^0x/, "").toLowerCase()}`;
+  var bytes32 = (value) => `0x${String(value || "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "")}`;
   var quoteTuple = (quote) => ({
     version: Number(quote.version),
     chain: Number(quote.chain),
@@ -58089,7 +58111,7 @@ Message: ${transactionMessage}.
         };
       },
       setStorageAddress(value) {
-        storageAddress = String(value || "");
+        storageAddress = normalizeAptosAddress(value, "Shelby storage address");
       },
       async connect({ silent = false } = {}) {
         return sessionFor(await connectStandard({ silent }));
@@ -58136,15 +58158,17 @@ Message: ${transactionMessage}.
       if (result.sourceAddress !== session.sourceAddress || !result.storageAddress) {
         throw adapterError("Official Shelby storage identity does not match the selected wallet", "identity_mismatch");
       }
+      const normalizedStorageAddress = normalizeAptosAddress(result.storageAddress, "Shelby storage address");
       uploadClient?.acceptOfficialSession?.({
         provider: standard.daaProvider(),
         solana: session.sourceAddress,
-        storageAccount: result.storageAddress
+        storageAccount: normalizedStorageAddress
       });
-      standard.setStorageAddress(result.storageAddress);
+      standard.setStorageAddress(normalizedStorageAddress);
       return {
         ...session,
         ...result,
+        storageAddress: normalizedStorageAddress,
         walletId: descriptor.id,
         walletName: descriptor.name,
         sourceNetwork: "devnet",
@@ -58158,11 +58182,12 @@ Message: ${transactionMessage}.
       if (result.solana !== session.sourceAddress || !result.storageAccount) {
         throw adapterError("Derived storage identity does not match the selected wallet", "identity_mismatch");
       }
-      standard.setStorageAddress(result.storageAccount);
+      const normalizedStorageAddress = normalizeAptosAddress(result.storageAccount, "Shelby storage address");
+      standard.setStorageAddress(normalizedStorageAddress);
       return {
         ...session,
         sourceNetwork: "devnet",
-        storageAddress: result.storageAccount
+        storageAddress: normalizedStorageAddress
       };
     };
     return {
@@ -58205,9 +58230,10 @@ Message: ${transactionMessage}.
   init_process();
   init_buffer();
   var canonicalAddress = (value) => {
-    const text = String(value?.toString?.() ?? value ?? "").toLowerCase();
-    if (!/^0x[0-9a-f]+$/.test(text)) return text;
-    return `0x${text.slice(2).replace(/^0+/, "") || "0"}`;
+    const text = String(value?.toString?.() ?? value ?? "").trim().toLowerCase();
+    const hex = text.replace(/^@/, "").replace(/^0x/, "");
+    if (!/^[0-9a-f]+$/.test(hex)) return text;
+    return `0x${hex.replace(/^0+/, "") || "0"}`;
   };
   var remoteKey = (item) => String(item.blobNameSuffix || item.name || "");
   var CONTENT_TYPE_BY_EXTENSION = Object.freeze({

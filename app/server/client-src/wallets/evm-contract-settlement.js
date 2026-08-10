@@ -10,7 +10,7 @@ const settlementError = (message, code = 'invalid_contract_settlement') => Objec
   { code, retriable: false },
 );
 
-const bytes32 = (value) => `0x${String(value || '').replace(/^0x/, '').toLowerCase()}`;
+const bytes32 = (value) => `0x${String(value || '').trim().toLowerCase().replace(/^@/, '').replace(/^0x/, '')}`;
 const quoteTuple = (quote) => ({
   version: Number(quote.version),
   chain: Number(quote.chain),

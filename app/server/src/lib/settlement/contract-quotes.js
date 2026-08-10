@@ -46,7 +46,7 @@ function addressBytes32(value, chain) {
     return text.padStart(64, '0');
   }
 
-  const text = String(value || '').replace(/^0x/, '').toLowerCase();
+  const text = String(value || '').trim().toLowerCase().replace(/^@/, '').replace(/^0x/, '');
   if (!/^[0-9a-f]{1,64}$/.test(text)) throw new TypeError('Aptos address is invalid');
   return text.padStart(64, '0');
 }

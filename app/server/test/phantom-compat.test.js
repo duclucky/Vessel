@@ -24,7 +24,7 @@ test('Phantom compatibility adapter normalizes the existing DAA connection', asy
     walletName: 'Phantom',
     sourceAddress: 'SOLANA_ADDRESS',
     sourceNetwork: 'testnet',
-    storageAddress: '0xDAA',
+    storageAddress: '0xdaa',
     mode: 'daa',
   });
   assert.equal(connectCalls, 1);

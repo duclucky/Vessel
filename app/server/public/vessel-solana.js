@@ -65213,7 +65213,7 @@ ${fields.join("\n")}`;
     { code, retriable: false }
   );
   function hexBytes(value, pattern = HEX_32) {
-    const text = String(value || "").replace(/^0x/, "").toLowerCase();
+    const text = String(value || "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
     if (!pattern.test(text)) throw settlementError("Invalid signed Solana settlement bytes");
     return Uint8Array.from(text.match(/../g).map((byte) => Number.parseInt(byte, 16)));
   }

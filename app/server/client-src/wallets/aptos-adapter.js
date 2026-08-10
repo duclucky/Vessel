@@ -1,3 +1,5 @@
+import { normalizeAptosAddress } from './aptos-address.js';
+
 const DEFAULT_TARGET_NETWORK = Object.freeze({
   name: 'testnet',
   chainId: 2,
@@ -37,7 +39,10 @@ const approvedArgs = (response, code = 'user_rejected') => {
   return response.args;
 };
 
-const addressOf = (account) => account?.address?.toString?.() || String(account?.address || '');
+const addressOf = (account) => normalizeAptosAddress(
+  account?.address?.toString?.() || String(account?.address || ''),
+  'Aptos wallet address',
+);
 
 const isTargetNetwork = (network, target) => {
   const name = String(network?.name || '').toLowerCase();

@@ -7,7 +7,7 @@ const settlementError = (message, code = 'invalid_contract_settlement') => Objec
 );
 
 function aptosAddressHex(value) {
-  const text = String(value || '').replace(/^0x/, '').toLowerCase();
+  const text = String(value || '').trim().toLowerCase().replace(/^@/, '').replace(/^0x/, '');
   if (!/^[0-9a-f]{1,64}$/.test(text)) {
     throw settlementError('Invalid Aptos payer address', 'settlement_context_mismatch');
   }
@@ -15,7 +15,7 @@ function aptosAddressHex(value) {
 }
 
 function hexBytes(value, expectedPattern = HEX_32) {
-  const text = String(value || '').replace(/^0x/, '').toLowerCase();
+  const text = String(value || '').trim().toLowerCase().replace(/^@/, '').replace(/^0x/, '');
   if (!expectedPattern.test(text)) throw settlementError('Invalid signed settlement bytes');
   return Uint8Array.from(text.match(/../g).map((byte) => Number.parseInt(byte, 16)));
 }

@@ -67,6 +67,25 @@ test('contract quote is signed by the configured Ed25519 key', async () => {
   }), false);
 });
 
+test('Aptos-style @ storage addresses are accepted in contract quotes', async () => {
+  const { privateKey, publicKey } = keys();
+  const storageHex = '4d'.repeat(32);
+  const manager = ContractQuoteManager.forTest({
+    privateKey,
+    publicKey,
+    now: () => 1_785_749_694_000n,
+    pricing: async () => breakdown,
+    randomBytes: () => Buffer.alloc(32, 0x11),
+  });
+
+  const result = await manager.issueUpload({
+    ...aptosContext,
+    storageAddress: `@${storageHex}`,
+  });
+
+  assert.equal(result.contractQuote.storageAddress, storageHex);
+});
+
 test('Solana quote collects the total accounting amount and expires after five minutes', async () => {
   const { privateKey, publicKey } = keys();
   const manager = ContractQuoteManager.forTest({

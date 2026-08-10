@@ -8,9 +8,13 @@ import {
   useStorageAccount as useEthereumStorageAccount,
 } from '@shelby-protocol/ethereum-kit/react';
 import { ShelbyClient } from '@shelby-protocol/sdk/browser';
+import { normalizeAptosAddress } from '../wallets/aptos-address.js';
 
 function normalizeStorageSession({ chain, wallet, storage }) {
-  const storageAddress = storage.storageAccountAddress?.toString() || '';
+  const rawStorageAddress = storage.storageAccountAddress?.toString() || '';
+  const storageAddress = rawStorageAddress
+    ? normalizeAptosAddress(rawStorageAddress, 'Shelby storage address')
+    : '';
   if (!wallet || !storageAddress) return null;
   return Object.freeze({
     chain,

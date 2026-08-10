@@ -70130,9 +70130,24 @@ ${String(result)}`);
     }
   };
 
+  // client-src/wallets/aptos-address.js
+  init_process();
+  init_buffer();
+  var APTOS_HEX = /^[0-9a-f]{1,64}$/;
+  function normalizeAptosAddress(value, field = "Aptos address") {
+    const text = String(value?.toString?.() ?? value ?? "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
+    if (!APTOS_HEX.test(text)) {
+      const error = new Error(`${field} is invalid`);
+      error.code = "provider_unavailable";
+      throw error;
+    }
+    return `0x${text}`;
+  }
+
   // client-src/official-shelby/shelby-hooks.jsx
   function normalizeStorageSession({ chain: chain2, wallet, storage }) {
-    const storageAddress = storage.storageAccountAddress?.toString() || "";
+    const rawStorageAddress = storage.storageAccountAddress?.toString() || "";
+    const storageAddress = rawStorageAddress ? normalizeAptosAddress(rawStorageAddress, "Shelby storage address") : "";
     if (!wallet || !storageAddress) return null;
     return Object.freeze({
       chain: chain2,

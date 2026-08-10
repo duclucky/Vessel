@@ -1,7 +1,8 @@
 const canonicalAddress = (value) => {
-  const text = String(value?.toString?.() ?? value ?? '').toLowerCase();
-  if (!/^0x[0-9a-f]+$/.test(text)) return text;
-  return `0x${text.slice(2).replace(/^0+/, '') || '0'}`;
+  const text = String(value?.toString?.() ?? value ?? '').trim().toLowerCase();
+  const hex = text.replace(/^@/, '').replace(/^0x/, '');
+  if (!/^[0-9a-f]+$/.test(hex)) return text;
+  return `0x${hex.replace(/^0+/, '') || '0'}`;
 };
 
 const remoteKey = (item) => String(item.blobNameSuffix || item.name || '');

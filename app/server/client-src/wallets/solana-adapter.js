@@ -1,5 +1,6 @@
 import bs58 from 'bs58';
 import { PublicKey } from '@solana/web3.js';
+import { normalizeAptosAddress } from './aptos-address.js';
 
 const DEVNET = 'solana:devnet';
 const adapterError = (message, code) => Object.assign(new Error(message), { code });
@@ -165,7 +166,7 @@ export function createSolanaAdapter(descriptor, { legacyProvider } = {}) {
       };
     },
     setStorageAddress(value) {
-      storageAddress = String(value || '');
+      storageAddress = normalizeAptosAddress(value, 'Shelby storage address');
     },
     async connect({ silent = false } = {}) {
       return sessionFor(await connectStandard({ silent }));
@@ -214,15 +215,17 @@ export function createSolanaDaaAdapter({
     if (result.sourceAddress !== session.sourceAddress || !result.storageAddress) {
       throw adapterError('Official Shelby storage identity does not match the selected wallet', 'identity_mismatch');
     }
+    const normalizedStorageAddress = normalizeAptosAddress(result.storageAddress, 'Shelby storage address');
     uploadClient?.acceptOfficialSession?.({
       provider: standard.daaProvider(),
       solana: session.sourceAddress,
-      storageAccount: result.storageAddress,
+      storageAccount: normalizedStorageAddress,
     });
-    standard.setStorageAddress(result.storageAddress);
+    standard.setStorageAddress(normalizedStorageAddress);
     return {
       ...session,
       ...result,
+      storageAddress: normalizedStorageAddress,
       walletId: descriptor.id,
       walletName: descriptor.name,
       sourceNetwork: 'devnet',
@@ -237,11 +240,12 @@ export function createSolanaDaaAdapter({
     if (result.solana !== session.sourceAddress || !result.storageAccount) {
       throw adapterError('Derived storage identity does not match the selected wallet', 'identity_mismatch');
     }
-    standard.setStorageAddress(result.storageAccount);
+    const normalizedStorageAddress = normalizeAptosAddress(result.storageAccount, 'Shelby storage address');
+    standard.setStorageAddress(normalizedStorageAddress);
     return {
       ...session,
       sourceNetwork: 'devnet',
-      storageAddress: result.storageAccount,
+      storageAddress: normalizedStorageAddress,
     };
   };
 

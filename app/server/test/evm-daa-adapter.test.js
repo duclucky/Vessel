@@ -78,6 +78,31 @@ test('EVM DAA adapter can derive storage through the official Shelby bridge', as
   assert.equal(session.storageAddress, STORAGE);
 });
 
+test('EVM DAA adapter normalizes official Shelby Aptos-style storage addresses', async () => {
+  const source = provider();
+  const storageHex = '4d'.repeat(32);
+  const adapter = createEvmDaaAdapter({
+    descriptor: { name: 'MetaMask', provider: source },
+    officialShelby: {
+      async connectWallet() {
+        return {
+          chain: 'evm',
+          mode: 'daa',
+          sourceNetwork: 'sepolia',
+          sourceAddress: '0x1234567890abcdef1234567890abcdef12345678',
+          storageNetwork: 'shelbynet',
+          storageAddress: `@${storageHex}`,
+        };
+      },
+    },
+    signAptosTransactionWithEthereum: async () => ({ status: 'Approved', args: {} }),
+  });
+
+  const session = await adapter.connect();
+
+  assert.equal(session.storageAddress, `0x${storageHex}`);
+});
+
 test('EVM DAA adapter times out a wallet provider that never opens approval', async () => {
   const adapter = createEvmDaaAdapter({
     descriptor: {

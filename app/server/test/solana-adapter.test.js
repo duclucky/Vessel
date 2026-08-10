@@ -229,6 +229,7 @@ test('DAA adapter publishes ready only after the derived storage address exists'
 
 test('DAA adapter can derive Solana storage through the official Shelby bridge', async () => {
   const wallet = standardWallet();
+  const officialStorage = `0x${'5a'.repeat(32)}`;
   let request;
   let handoff;
   const officialShelby = {
@@ -245,7 +246,7 @@ test('DAA adapter can derive Solana storage through the official Shelby bridge',
         sourceNetwork: 'devnet',
         sourceAddress: key.toBase58(),
         storageNetwork: 'shelbynet',
-        storageAddress: '0xofficialdaa',
+        storageAddress: officialStorage,
       };
     },
     disconnect: async () => {},
@@ -266,9 +267,41 @@ test('DAA adapter can derive Solana storage through the official Shelby bridge',
 
   assert.ok(request);
   assert.equal(session.sourceAddress, key.toBase58());
-  assert.equal(session.storageAddress, '0xofficialdaa');
+  assert.equal(session.storageAddress, officialStorage);
   assert.equal(session.storageNetwork, 'shelbynet');
   assert.equal(handoff.solana, key.toBase58());
-  assert.equal(handoff.storageAccount, '0xofficialdaa');
+  assert.equal(handoff.storageAccount, officialStorage);
   assert.equal(typeof handoff.provider.signMessage, 'function');
+});
+
+test('DAA adapter normalizes official Shelby Aptos-style storage addresses', async () => {
+  const wallet = standardWallet();
+  let handoff;
+  const storageHex = '4d'.repeat(32);
+  const officialShelby = {
+    async connectWallet() {
+      return {
+        chain: 'solana',
+        mode: 'daa',
+        sourceNetwork: 'devnet',
+        sourceAddress: key.toBase58(),
+        storageNetwork: 'shelbynet',
+        storageAddress: `@${storageHex}`,
+      };
+    },
+  };
+  const adapter = createSolanaDaaAdapter({
+    descriptor: { id: 'solana:standard:1', name: 'Standard Wallet', provider: wallet },
+    officialShelby,
+    uploadClient: {
+      acceptOfficialSession(input) {
+        handoff = input;
+      },
+    },
+  });
+
+  const session = await adapter.connect({ silent: false });
+
+  assert.equal(session.storageAddress, `0x${storageHex}`);
+  assert.equal(handoff.storageAccount, `0x${storageHex}`);
 });

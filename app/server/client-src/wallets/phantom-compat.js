@@ -1,3 +1,5 @@
+import { normalizeAptosAddress } from './aptos-address.js';
+
 export function createPhantomCompatibilityAdapter({ descriptor, vesselSolana }) {
   return {
     async connect({ silent = false } = {}) {
@@ -9,7 +11,7 @@ export function createPhantomCompatibilityAdapter({ descriptor, vesselSolana }) 
         walletName: descriptor.name,
         sourceAddress: result.solana,
         sourceNetwork: result.network || vesselSolana.network,
-        storageAddress: result.storageAccount,
+        storageAddress: normalizeAptosAddress(result.storageAccount, 'Shelby storage address'),
         mode: 'daa',
       };
     },

@@ -4,6 +4,7 @@ import {
   signAptosTransactionWithEthereum as officialSignAptosTransactionWithEthereum,
 } from '@aptos-labs/derived-wallet-ethereum';
 import { getAddress } from 'ethers';
+import { normalizeAptosAddress } from './aptos-address.js';
 
 const SEPOLIA_HEX_CHAIN_ID = '0xaa36a7';
 const SEPOLIA_DECIMAL_CHAIN_ID = 11155111;
@@ -131,8 +132,10 @@ export function createEvmDaaAdapter({
         if (error?.code !== 'wallet_timeout') throw error;
       }
     }
-    const storageAddress = officialSession?.storageAddress
-      || deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
+    const storageAddress = normalizeAptosAddress(
+      officialSession?.storageAddress || deriveStorageAddress({ ethereumAddress: sourceAddress, domain }),
+      'Shelby storage address',
+    );
     if (officialSession && officialSession.sourceAddress !== sourceAddress) {
       throw evmError('Official Shelby storage identity does not match the selected wallet', 'identity_mismatch');
     }
