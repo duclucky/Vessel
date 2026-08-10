@@ -43,6 +43,25 @@ test('Shelby API routes normalize Aptos-style @ account parameters', () => {
   assert.match(server, /normalizeShelbyAccountParam\(req\.params\.account\)/);
 });
 
+test('one-approval routes await strict wallet verification before the first blob write', () => {
+  assert.match(server, /createOneApprovalAuthorizationVerifier/);
+  const singleRoute = server.slice(
+    server.indexOf("app.post('/api/one-approval/uploads'"),
+    server.indexOf('// ---- One-approval batch upload ----'),
+  );
+  const batchRoute = server.slice(
+    server.indexOf("app.post('/api/one-approval/batch-uploads'"),
+    server.indexOf('// ---- Quotes'),
+  );
+  for (const route of [singleRoute, batchRoute]) {
+    assert.match(route, /await verifyOneApprovalAuthorization/);
+    assert.ok(
+      route.indexOf('await verifyOneApprovalAuthorization') < route.indexOf('await store.put'),
+      'wallet verification must happen before storage mutation',
+    );
+  }
+});
+
 test('Shelby read proxy forwards a bounded byte range and preserves partial response metadata', () => {
   assert.match(server, /\^bytes=\\d\+-\\d\*\$/);
   assert.match(server, /upstreamHeaders\.Range = requestedRange/);

@@ -36,6 +36,7 @@ import { AptosSettlementAdapter } from './lib/settlement/aptos-adapter.js';
 import { SolanaSettlementAdapter } from './lib/settlement/solana-adapter.js';
 import { EvmSettlementAdapter } from './lib/settlement/evm-adapter.js';
 import { publicNetworkDescriptor } from './lib/shelby-network.js';
+import { createOneApprovalAuthorizationVerifier } from './lib/one-approval-authorization.js';
 import {
   assertContractQuoteMatchesContext,
   ContractQuoteManager,
@@ -62,6 +63,11 @@ const aptos = new Aptos(new AptosConfig({
   network: config.shelbyRuntime.aptosNetwork,
   clientConfig: config.shelbyAptosApiKey ? { API_KEY: config.shelbyAptosApiKey } : undefined,
 }));
+const verifyOneApprovalAuthorization = createOneApprovalAuthorizationVerifier({
+  getAptosAuthenticationKey: async (accountAddress) => (
+    await aptos.getAccountInfo({ accountAddress })
+  ).authentication_key,
+});
 const directSubmitter = new DirectAptosSubmitter({ aptos });
 const pricingReader = createShelbyPricingReader({ aptos });
 let shelbyClient = null;
@@ -211,23 +217,6 @@ function batchManifestHash(manifest) {
     .digest('hex');
 }
 
-function validateOneApprovalAuthorization({ authorization, context, quote, manifest = null }) {
-  const signedMessage = String(authorization?.message || '');
-  const signature = String(authorization?.signature || authorization?.transactionId || authorization?.id || '').trim();
-  const expectedMarker = manifest ? 'VESSEL_BATCH_UPLOAD_SESSION' : 'VESSEL_UPLOAD_SESSION';
-  const expectedHashLine = manifest
-    ? `ManifestHash: ${manifest.manifestHash}`
-    : `FileHash: ${context.fileHash}`;
-  return (
-    String(authorization?.chain || '').toLowerCase() === context.chain
-    && String(authorization?.address || '').toLowerCase() === String(context.sourceAddress).toLowerCase()
-    && signedMessage.includes(expectedMarker)
-    && signedMessage.includes(expectedHashLine)
-    && signedMessage.includes(`QuoteId: ${quote.quoteId}`)
-    && Boolean(signature)
-  );
-}
-
 function recordQuoteOperation(stage, quote, extra = {}) {
   const context = quote?.context || quote || {};
   const breakdown = quote?.breakdown || quote || {};
@@ -359,7 +348,7 @@ app.post('/api/one-approval/uploads', upload.single('file'), async (req, res) =>
     const context = normalizeUploadQuoteContext(JSON.parse(String(req.body?.uploadContext || '{}')));
     const quote = quoteManager.validate(String(req.body?.quoteToken || ''), context);
     const authorization = JSON.parse(String(req.body?.authorization || '{}'));
-    if (!validateOneApprovalAuthorization({ authorization, context, quote })) {
+    if (!await verifyOneApprovalAuthorization({ authorization, context, quote })) {
       return send(res, 401, { error: 'Invalid upload session authorization', code: 'invalid_upload_authorization' });
     }
     const actualHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
@@ -424,7 +413,7 @@ app.post('/api/one-approval/batch-uploads', upload.array('files', 3000), async (
       return send(res, 409, { error: 'Batch manifest does not match the signed quote', code: 'batch_manifest_mismatch' });
     }
     const authorization = JSON.parse(String(req.body?.authorization || '{}'));
-    if (!validateOneApprovalAuthorization({ authorization, context, quote, manifest })) {
+    if (!await verifyOneApprovalAuthorization({ authorization, context, quote, manifest })) {
       return send(res, 401, { error: 'Invalid batch upload session authorization', code: 'invalid_upload_authorization' });
     }
     const expiresInSec = Math.max(60, Math.ceil((context.expirationMicros / 1_000 - Date.now()) / 1000));
