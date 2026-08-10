@@ -185,6 +185,49 @@ try {
 } catch (e) { console.warn('[paid-auth] disabled:', String(e?.message || e)); }
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxUploadBytes } });
 
+function canonicalBatchManifest(manifest) {
+  const items = [...(Array.isArray(manifest?.items) ? manifest.items : [])]
+    .map((item) => ({
+      relativePath: String(item.relativePath || ''),
+      fileHash: String(item.fileHash || '').toLowerCase(),
+      blobName: String(item.blobName || ''),
+      sizeBytes: Number(item.sizeBytes),
+      contentType: String(item.contentType || 'application/octet-stream'),
+    }))
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath, undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }));
+  return Object.freeze({
+    version: 1,
+    kind: 'vessel.batch.upload',
+    items,
+  });
+}
+
+function batchManifestHash(manifest) {
+  return crypto.createHash('sha256')
+    .update(JSON.stringify(canonicalBatchManifest(manifest)))
+    .digest('hex');
+}
+
+function validateOneApprovalAuthorization({ authorization, context, quote, manifest = null }) {
+  const signedMessage = String(authorization?.message || '');
+  const signature = String(authorization?.signature || authorization?.transactionId || authorization?.id || '').trim();
+  const expectedMarker = manifest ? 'VESSEL_BATCH_UPLOAD_SESSION' : 'VESSEL_UPLOAD_SESSION';
+  const expectedHashLine = manifest
+    ? `ManifestHash: ${manifest.manifestHash}`
+    : `FileHash: ${context.fileHash}`;
+  return (
+    String(authorization?.chain || '').toLowerCase() === context.chain
+    && String(authorization?.address || '').toLowerCase() === String(context.sourceAddress).toLowerCase()
+    && signedMessage.includes(expectedMarker)
+    && signedMessage.includes(expectedHashLine)
+    && signedMessage.includes(`QuoteId: ${quote.quoteId}`)
+    && Boolean(signature)
+  );
+}
+
 function recordQuoteOperation(stage, quote, extra = {}) {
   const context = quote?.context || quote || {};
   const breakdown = quote?.breakdown || quote || {};
@@ -310,15 +353,7 @@ app.post('/api/one-approval/uploads', upload.single('file'), async (req, res) =>
     const context = normalizeUploadQuoteContext(JSON.parse(String(req.body?.uploadContext || '{}')));
     const quote = quoteManager.validate(String(req.body?.quoteToken || ''), context);
     const authorization = JSON.parse(String(req.body?.authorization || '{}'));
-    const signedMessage = String(authorization.message || '');
-    if (
-      String(authorization.chain || '').toLowerCase() !== context.chain
-      || String(authorization.address || '').toLowerCase() !== String(context.sourceAddress).toLowerCase()
-      || !signedMessage.includes('VESSEL_UPLOAD_SESSION')
-      || !signedMessage.includes(`FileHash: ${context.fileHash}`)
-      || !signedMessage.includes(`QuoteId: ${quote.quoteId}`)
-      || !String(authorization.signature || authorization.transactionId || authorization.id || '').trim()
-    ) {
+    if (!validateOneApprovalAuthorization({ authorization, context, quote })) {
       return send(res, 401, { error: 'Invalid upload session authorization', code: 'invalid_upload_authorization' });
     }
     const actualHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
@@ -341,6 +376,88 @@ app.post('/api/one-approval/uploads', upload.single('file'), async (req, res) =>
         .digest('hex')
         .slice(0, 24),
       paymentMode: 'one-approval-beta',
+    });
+  } catch (e) { fail(res, e); }
+});
+
+// ---- One-approval batch upload ----
+app.post('/api/one-approval/batch-uploads', upload.array('files', 3000), async (req, res) => {
+  try {
+    if (!requireShelbyWrites(res)) return;
+    if (!config.oneApprovalBetaEnabled) {
+      return send(res, 503, {
+        error: 'One-approval beta uploads are disabled',
+        code: 'one_approval_disabled',
+      });
+    }
+    if (!quoteManager) {
+      return send(res, 503, {
+        error: 'Live Shelby pricing is unavailable',
+        code: 'pricing_unavailable',
+        retriable: true,
+      });
+    }
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (!files.length) return send(res, 400, { error: 'files field required', code: 'file_required' });
+    const context = normalizeUploadQuoteContext(JSON.parse(String(req.body?.uploadContext || '{}')));
+    const quote = quoteManager.validate(String(req.body?.quoteToken || ''), context);
+    const manifestInput = JSON.parse(String(req.body?.manifest || '{}'));
+    const manifest = Object.freeze({
+      ...canonicalBatchManifest(manifestInput),
+      manifestHash: String(manifestInput.manifestHash || '').toLowerCase(),
+      totalBytes: Number(manifestInput.totalBytes),
+    });
+    const manifestTotal = manifest.items.reduce((sum, item) => sum + item.sizeBytes, 0);
+    if (
+      manifest.items.length !== files.length
+      || manifest.manifestHash !== context.fileHash
+      || batchManifestHash(manifest) !== manifest.manifestHash
+      || manifestTotal !== context.sizeBytes
+      || manifest.totalBytes !== context.sizeBytes
+    ) {
+      return send(res, 409, { error: 'Batch manifest does not match the signed quote', code: 'batch_manifest_mismatch' });
+    }
+    const authorization = JSON.parse(String(req.body?.authorization || '{}'));
+    if (!validateOneApprovalAuthorization({ authorization, context, quote, manifest })) {
+      return send(res, 401, { error: 'Invalid batch upload session authorization', code: 'invalid_upload_authorization' });
+    }
+    const expiresInSec = Math.max(60, Math.ceil((context.expirationMicros / 1_000 - Date.now()) / 1000));
+    const results = [];
+    for (let index = 0; index < manifest.items.length; index += 1) {
+      const item = manifest.items[index];
+      const file = files[index];
+      const actualHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+      if (actualHash !== item.fileHash || file.size !== item.sizeBytes) {
+        return send(res, 409, {
+          error: `Batch file changed: ${item.relativePath}`,
+          code: 'batch_file_changed',
+          relativePath: item.relativePath,
+        });
+      }
+      const stored = await store.put(item.blobName, new Uint8Array(file.buffer), {
+        contentType: item.contentType,
+        owner: context.sourceAddress,
+        expiresInSec,
+      });
+      results.push({
+        ...stored,
+        sourcePath: item.relativePath,
+        contentType: item.contentType,
+        authorizedByYou: true,
+        ownedByYou: false,
+        paymentMode: 'one-approval-beta-batch',
+      });
+    }
+    send(res, 200, {
+      items: results,
+      account: store.address?.toString?.() || '',
+      sourceAddress: context.sourceAddress,
+      storageAddress: context.storageAddress,
+      authorizationId: crypto.createHash('sha256')
+        .update(`${quote.quoteId}:${manifest.manifestHash}:${authorization.signature || authorization.transactionId || authorization.id}`)
+        .digest('hex')
+        .slice(0, 24),
+      paymentMode: 'one-approval-beta-batch',
     });
   } catch (e) { fail(res, e); }
 });

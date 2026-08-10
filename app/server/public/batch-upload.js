@@ -21,6 +21,15 @@ export class BatchValidationError extends Error {
   }
 }
 
+const textEncoder = new TextEncoder();
+
+async function sha256Utf8Hex(text) {
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', textEncoder.encode(text));
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 export function batchRelativePath(file) {
   const raw = String(
     file?.vesselRelativePath || file?.webkitRelativePath || file?.name || '',
@@ -29,6 +38,74 @@ export function batchRelativePath(file) {
     .split('/')
     .filter((segment) => segment && segment !== '.' && segment !== '..')
     .join('/');
+}
+
+function canonicalBatchPayload(items) {
+  return Object.freeze({
+    version: 1,
+    kind: 'vessel.batch.upload',
+    items: items.map((item) => Object.freeze({
+      relativePath: item.relativePath,
+      fileHash: item.fileHash,
+      blobName: item.blobName,
+      sizeBytes: item.sizeBytes,
+      contentType: item.contentType,
+    })),
+  });
+}
+
+export async function createBatchUploadManifest(items, {
+  sha256FileHex,
+  contentAddressedBlobName,
+} = {}) {
+  if (!Array.isArray(items) || !items.length) {
+    throw new BatchValidationError('Batch manifest requires at least one file', 'batch_empty');
+  }
+  if (typeof sha256FileHex !== 'function') throw new TypeError('sha256FileHex is required');
+  if (typeof contentAddressedBlobName !== 'function') throw new TypeError('contentAddressedBlobName is required');
+
+  const prepared = [];
+  for (const item of items) {
+    const file = item.file || item;
+    const relativePath = String(item.relativePath || batchRelativePath(file));
+    const fileHash = String(item.fileHash || await sha256FileHex(file)).toLowerCase();
+    const blobName = String(item.blobName || contentAddressedBlobName(file, fileHash));
+    const sizeBytes = Number(item.sizeBytes || item.size || file.size);
+    if (!relativePath || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
+      throw new BatchValidationError('Invalid batch manifest item', 'batch_manifest_invalid', { relativePath });
+    }
+    prepared.push(Object.freeze({
+      id: item.id || relativePath,
+      file,
+      relativePath,
+      fileHash,
+      blobName,
+      sizeBytes,
+      contentType: file.type || item.contentType || 'application/octet-stream',
+    }));
+  }
+
+  prepared.sort((a, b) => a.relativePath.localeCompare(b.relativePath, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  }));
+  const payload = canonicalBatchPayload(prepared);
+  const canonicalJson = JSON.stringify(payload);
+  const manifestHash = await sha256Utf8Hex(canonicalJson);
+  const totalBytes = prepared.reduce((sum, item) => sum + item.sizeBytes, 0);
+  const manifest = Object.freeze({
+    ...payload,
+    manifestHash,
+    manifestJson: canonicalJson,
+    totalBytes,
+    virtualFile: Object.freeze({
+      name: `${manifestHash}.vessel-batch.json`,
+      type: 'application/vnd.vessel.batch-manifest+json',
+      size: totalBytes,
+    }),
+    items: prepared,
+  });
+  return manifest;
 }
 
 function isSupported(file) {

@@ -121,10 +121,10 @@ function fixture({
       }
       return { paidAuthorization: 'paid-auth', receipt: { transactionId: id } };
     },
-    authorizeUploadSession: async ({ message, intent }) => {
+    authorizeUploadSession: async ({ message, intent, manifest }) => {
       authorizationCalls += 1;
-      assert.match(message, /VESSEL_UPLOAD_SESSION/);
-      assert.equal(intent.fileHash, HASH);
+      assert.match(message, /VESSEL_(BATCH_)?UPLOAD_SESSION/);
+      assert.equal(intent.fileHash, manifest ? manifest.manifestHash : HASH);
       return {
         message,
         signature: 'wallet-session-signature',
@@ -132,10 +132,23 @@ function fixture({
         chain: session.chain,
       };
     },
-    submitOneApprovalUpload: async ({ authorization, intent }) => {
+    submitOneApprovalUpload: async ({ authorization, intent, manifest }) => {
       oneApprovalUploadCalls += 1;
       assert.equal(authorization.signature, 'wallet-session-signature');
-      assert.equal(intent.fileHash, HASH);
+      assert.equal(intent.fileHash, manifest ? manifest.manifestHash : HASH);
+      if (manifest) {
+        return {
+          items: manifest.items.map((item) => ({
+            key: item.blobName,
+            url: `https://example.test/api/media/${item.blobName}`,
+            size: item.sizeBytes,
+            contentType: item.contentType,
+            sourcePath: item.relativePath,
+          })),
+          account: `0x${'55'.repeat(32)}`,
+          authorizationId: 'one-approval-batch-auth-1',
+        };
+      }
       return {
         key: `media/${HASH}.json`,
         url: `https://example.test/api/media/media/${HASH}.json`,
@@ -224,6 +237,34 @@ test('one-approval beta uploads through a bounded session authorization instead 
   assert.equal(flow.oneApprovalUploadCalls, 1);
   assert.equal(flow.settlementCalls, 0);
   assert.equal(flow.walletUploadCalls, 0);
+});
+
+test('one-approval beta batch signs one manifest session for multiple files', async () => {
+  const flow = fixture({
+    oneApprovalBeta: { enabled: true, chains: ['aptos', 'solana', 'evm'] },
+  });
+  const secondFile = Object.freeze({
+    name: '002.json',
+    type: 'application/json',
+    size: 58,
+    arrayBuffer: async () => new Uint8Array(58).buffer,
+  });
+  const batch = await flow.service.quoteBatch([
+    { file, relativePath: 'collection/001.json', fileHash: HASH, blobName: `media/${HASH}.json`, size: file.size },
+    { file: secondFile, relativePath: 'collection/002.json', fileHash: 'cd'.repeat(32), blobName: `media/${'cd'.repeat(32)}.json`, size: secondFile.size },
+  ], { days: 30 });
+  const result = await flow.service.uploadBatch(await flow.service.validate(batch));
+
+  assert.equal(result.authorizedByYou, true);
+  assert.equal(result.paymentMode, 'one-approval-beta-batch');
+  assert.equal(result.items.length, 2);
+  assert.equal(flow.authorizationCalls, 1);
+  assert.equal(flow.oneApprovalUploadCalls, 1);
+  assert.equal(flow.settlementCalls, 0);
+  assert.equal(flow.walletUploadCalls, 0);
+  const quoteBody = flow.requests.find((entry) => entry.path === '/api/quotes/upload').options.body;
+  assert.equal(quoteBody.sizeBytes, 100);
+  assert.equal(quoteBody.contentType, 'application/vnd.vessel.batch-manifest+json');
 });
 
 test('Aptos contract upload checks ShelbyUSD before opening Petra', async () => {

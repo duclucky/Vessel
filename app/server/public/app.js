@@ -275,6 +275,43 @@ function initUpload() {
     }
   }
 
+  async function requestBatchQuote(queue) {
+    if (!queue || !quoteUi) return null;
+    const walletState = walletController().getState();
+    if (!walletState.session || walletState.status !== 'ready') {
+      activeUploadContext = null;
+      quoteUi.render({ kind: 'unavailable', message: 'Connect a supported testnet wallet to request a batch quote.' });
+      const opener = document.querySelector('[data-wallet-summary]');
+      if (walletState.status === 'network_required') {
+        void walletController().ensureNetwork().catch((error) => toast(error.message, 'error'));
+      } else {
+        void walletUi.open(opener);
+      }
+      return null;
+    }
+
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    const signal = pendingWalletWork.signal;
+    activeUploadContext = null;
+    quoteRoot?.classList.remove('hidden');
+    quoteUi.render({ kind: 'loading' });
+    try {
+      activeUploadContext = await walletOwnedUpload.quoteBatch(queue.items, { days: quoteUi.days(), signal });
+      if (signal.aborted) return null;
+      quoteUi.render({
+        kind: 'ready',
+        quote: activeUploadContext.quote,
+        message: `${queue.items.length} files will use one wallet signature for this batch session.`,
+      });
+      return activeUploadContext;
+    } catch (error) {
+      if (error?.name === 'AbortError') return null;
+      quoteUi.render({ kind: 'unavailable', message: String(error?.message || error).slice(0, 180) });
+      return null;
+    }
+  }
+
   async function selectFile(file) {
     if (!file) return;
     batchQueue = null;
@@ -372,7 +409,8 @@ function initUpload() {
     root: quoteRoot,
     onRetentionChange: () => {
       activeUploadContext = null;
-      if (selectedFile) void requestQuote(selectedFile);
+      if (batchQueue) void requestBatchQuote(batchQueue);
+      else if (selectedFile) void requestQuote(selectedFile);
     },
   });
   quoteConfirm?.addEventListener('click', () => void (batchQueue ? startBatchUpload() : confirmQuotedUpload()));
@@ -539,7 +577,7 @@ function initUpload() {
     }
     if (batchStatus) {
       batchStatus.textContent = phase === 'uploading'
-        ? 'Keep this tab open. Complete each wallet approval as it appears.'
+        ? 'Keep this tab open. Approve one bounded batch session in your wallet.'
         : phase === 'receiptPending'
           ? 'Contract receipt is finalizing. Vessel is checking automatically. No second payment is required.'
         : phase === 'complete'
@@ -604,7 +642,7 @@ function initUpload() {
       show(vInit);
       renderBatchState();
       quoteRoot?.classList.remove('hidden');
-      await requestQuote(first.file);
+      await requestBatchQuote(batchQueue);
     } catch (error) {
       batchQueue = null;
       batchSummary?.classList.add('hidden');
@@ -655,8 +693,107 @@ function initUpload() {
     return result;
   }
 
+  async function startOneApprovalBatchUpload() {
+    let current = activeUploadContext?.batch ? activeUploadContext : null;
+    if (!current) current = await requestBatchQuote(batchQueue);
+    if (!current) return;
+    if (Date.now() >= current.quote.expiresAtMs) {
+      current = await requestBatchQuote(batchQueue);
+      if (!current) return;
+    }
+    batchRunning = true;
+    dz?.classList.add('hidden');
+    quoteRoot?.classList.add('hidden');
+    for (const item of batchQueue.items) {
+      if (item.status === 'queued') batchQueue.markUploading(item.id);
+    }
+    renderBatchState({ phase: 'uploading', item: batchQueue.items.find((entry) => entry.status === 'uploading') });
+    pendingWalletWork.abort();
+    pendingWalletWork = new AbortController();
+    try {
+      const validated = await walletOwnedUpload.validate(current, { signal: pendingWalletWork.signal });
+      if (validated.requiresConfirmation) {
+        batchRunning = false;
+        for (const item of batchQueue.items) {
+          if (item.status === 'uploading') {
+            item.status = 'queued';
+            item.error = null;
+          }
+        }
+        show(vInit);
+        dz?.classList.add('hidden');
+        quoteRoot?.classList.remove('hidden');
+        renderChangedQuote(validated);
+        return;
+      }
+      const result = await walletOwnedUpload.uploadBatch(validated, {
+        signal: pendingWalletWork.signal,
+        onStep: setStep,
+      });
+      const byPath = new Map(result.items.map((item) => [item.sourcePath, item]));
+      for (const item of batchQueue.items) {
+        const uploaded = byPath.get(item.relativePath);
+        if (!uploaded) {
+          batchQueue.markFailed(item.id, Object.assign(new Error('Batch response did not include this file'), { code: 'batch_result_missing' }));
+          continue;
+        }
+        const stored = Object.freeze({
+          ...uploaded,
+          sourcePath: item.relativePath,
+          account: result.account,
+          sourceAddress: result.sourceAddress,
+          storageAddress: result.storageAddress,
+          authorizedByYou: true,
+          ownedByYou: false,
+          paymentMode: result.paymentMode,
+          quotedAccountingMicro: result.quotedAccountingMicro,
+          storageCostAccountingMicro: result.storageCostAccountingMicro,
+          gasAccountingMicro: result.gasAccountingMicro,
+          serviceFeeAccountingMicro: result.serviceFeeAccountingMicro,
+          totalAccountingMicro: result.totalAccountingMicro,
+          lastReconciledAt: result.lastReconciledAt,
+        });
+        batchQueue.markSucceeded(item.id, stored);
+        ledger.commitUpload(stored);
+      }
+      batchRunning = false;
+      activeUploadContext = null;
+      show(vInit);
+      renderBatchState({ phase: batchQueue.summary().failed ? 'failed' : 'complete' });
+      toast(`${batchQueue.summary().succeeded} files stored on Shelby with one signature`, 'ok');
+    } catch (error) {
+      batchRunning = false;
+      let markedFailure = false;
+      for (const item of batchQueue.items) {
+        if (item.status === 'uploading') {
+          if (!markedFailure) {
+            batchQueue.markFailed(item.id, error);
+            markedFailure = true;
+          } else {
+            item.status = 'queued';
+            item.error = null;
+          }
+        }
+      }
+      activeUploadContext = current;
+      show(vInit);
+      renderBatchState({ phase: 'failed', item: batchQueue.items.find((entry) => entry.status === 'failed'), error });
+      quoteUi.render({
+        kind: 'ready',
+        quote: current.quote,
+        message: String(error?.message || error).slice(0, 180),
+      });
+      quoteRoot?.classList.remove('hidden');
+      toast(String(error?.message || error).slice(0, 160), 'error');
+    }
+  }
+
   async function startBatchUpload() {
     if (!batchQueue || batchRunning) return;
+    if (activeUploadContext?.batch) {
+      await startOneApprovalBatchUpload();
+      return;
+    }
     if (batchQueue.summary().failed) batchQueue.retryFailed();
     batchRunning = true;
     dz?.classList.add('hidden');

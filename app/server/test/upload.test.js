@@ -84,6 +84,8 @@ test('Upload defaults to one-approval beta while keeping strict wallet settlemen
   const service = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
   assert.match(service, /controllerInstance\.upload\(validated\.file/);
   assert.match(service, /\/api\/one-approval\/uploads/);
+  assert.match(service, /\/api\/one-approval\/batch-uploads/);
+  assert.match(service, /VESSEL_BATCH_UPLOAD_SESSION/);
   assert.match(service, /oneApprovalBeta/);
   assert.match(source, /APPROVE UPLOAD SESSION/);
   assert.match(source, /insufficient_apt/);
@@ -181,7 +183,7 @@ test('paid EVM recovery retains Sepolia settlement labels', () => {
   assert.match(paidRecovery, /record\.context\.chain === 'evm'\s*\? 'Sepolia ETH'/);
 });
 
-test('folder uploads run through the existing quote and settlement path sequentially', () => {
+test('folder uploads use one batch quote and one wallet signature when beta mode is enabled', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);
   assert.match(source, /import \{[^}]*collectDirectoryFiles[^}]*supportsDirectoryPicker[^}]*\} from '\.\/directory-picker\.js'/s);
@@ -191,8 +193,11 @@ test('folder uploads run through the existing quote and settlement path sequenti
   assert.match(source, /folderPicker\.addEventListener\('click'/);
   assert.match(source, /folderInput\.addEventListener\('change'/);
   assert.match(source, /createBatchQueue\(files, \{ maxFileBytes/);
+  assert.match(source, /walletOwnedUpload\.quoteBatch\(queue\.items/);
+  assert.match(source, /walletOwnedUpload\.uploadBatch\(validated/);
+  assert.match(source, /startOneApprovalBatchUpload/);
   assert.match(source, /await runBatchQueue\(batchQueue, uploadBatchItem/);
-  assert.match(source, /await requestQuote\(item\.file/);
+  assert.match(source, /await requestBatchQuote\(batchQueue\)/);
   assert.match(source, /await validateUploadQuote\(current/);
   assert.match(source, /sourcePath: item\.relativePath/);
   assert.match(source, /batchQueue\.retryFailed\(\)/);

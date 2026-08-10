@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   BATCH_MAX_BYTES,
   batchRelativePath,
+  createBatchUploadManifest,
   createBatchQueue,
   runBatchQueue,
 } from '../public/batch-upload.js';
@@ -155,4 +156,32 @@ test('batch queue never retries a file whose contract receipt is already pending
   assert.equal(queue.items[0].error.retryable, false);
   assert.equal(queue.retryFailed(), 0);
   assert.equal(queue.items[0].status, 'failed');
+});
+
+test('batch upload manifest binds every folder item before one approval', async () => {
+  const queue = createBatchQueue([
+    asset('2.png', 75, 'image/png', 'collection/2.png'),
+    asset('1.png', 25, 'image/png', 'collection/1.png'),
+  ]);
+  const hashes = {
+    'collection/1.png': '11'.repeat(32),
+    'collection/2.png': '22'.repeat(32),
+  };
+
+  const manifest = await createBatchUploadManifest(queue.items, {
+    sha256FileHex: async (file) => hashes[batchRelativePath(file)],
+    contentAddressedBlobName: (_file, hash) => `media/${hash}.png`,
+  });
+
+  assert.equal(manifest.items.length, 2);
+  assert.equal(manifest.totalBytes, 100);
+  assert.deepEqual(manifest.items.map((item) => item.relativePath), [
+    'collection/1.png',
+    'collection/2.png',
+  ]);
+  assert.equal(manifest.items[0].fileHash, '11'.repeat(32));
+  assert.equal(manifest.items[1].blobName, `media/${'22'.repeat(32)}.png`);
+  assert.match(manifest.manifestHash, /^[a-f0-9]{64}$/);
+  assert.equal(manifest.virtualFile.size, 100);
+  assert.equal(manifest.virtualFile.type, 'application/vnd.vessel.batch-manifest+json');
 });

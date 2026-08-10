@@ -1,3 +1,5 @@
+import { createBatchUploadManifest } from './batch-upload.js';
+
 const noopRecovery = Object.freeze({
   save() {},
   advance() {},
@@ -98,6 +100,23 @@ function oneApprovalMessage({ intent, quote }) {
   ].join('\n');
 }
 
+function oneApprovalBatchMessage({ intent, quote, manifest }) {
+  return [
+    'VESSEL_BATCH_UPLOAD_SESSION',
+    `Chain: ${intent.chain}`,
+    `Source: ${intent.sourceAddress}`,
+    `Storage: ${intent.storageAddress}`,
+    `ManifestHash: ${manifest.manifestHash}`,
+    `ItemCount: ${manifest.items.length}`,
+    `TotalSizeBytes: ${manifest.totalBytes}`,
+    `RetentionDays: ${intent.days}`,
+    `ExpirationMicros: ${intent.expirationMicros}`,
+    `MaxAccountingMicro: ${quote.totalAccountingMicro}`,
+    `QuoteId: ${quote.quoteId}`,
+    `QuoteExpiresAtMs: ${quote.expiresAtMs}`,
+  ].join('\n');
+}
+
 async function assertAptosSettlementBalance({ request, session, quote, signal }) {
   const required = positiveUnits(
     quote?.nativeServiceFeeShelbyUsdUnits
@@ -161,6 +180,36 @@ export function createWalletOwnedUploadService({
     form.append('uploadContext', JSON.stringify(intent));
     form.append('authorization', JSON.stringify(authorization));
     return request('/api/one-approval/uploads', {
+      method: 'POST',
+      signal,
+      form,
+    });
+  };
+  const defaultSubmitOneApprovalBatchUpload = ({ manifest, intent, quote, authorization, signal }) => {
+    if (typeof submitOneApprovalUpload === 'function') {
+      return submitOneApprovalUpload({ manifest, intent, quote, authorization, signal });
+    }
+    const form = new FormData();
+    for (const item of manifest.items) {
+      form.append('files', item.file, item.relativePath);
+    }
+    form.append('quoteToken', quote.quoteToken);
+    form.append('uploadContext', JSON.stringify(intent));
+    form.append('manifest', JSON.stringify({
+      version: manifest.version,
+      kind: manifest.kind,
+      manifestHash: manifest.manifestHash,
+      totalBytes: manifest.totalBytes,
+      items: manifest.items.map((item) => ({
+        relativePath: item.relativePath,
+        fileHash: item.fileHash,
+        blobName: item.blobName,
+        sizeBytes: item.sizeBytes,
+        contentType: item.contentType,
+      })),
+    }));
+    form.append('authorization', JSON.stringify(authorization));
+    return request('/api/one-approval/batch-uploads', {
       method: 'POST',
       signal,
       form,
@@ -268,6 +317,85 @@ export function createWalletOwnedUploadService({
     return result;
   }
 
+  async function quoteBatch(items, { days, signal } = {}) {
+    const walletState = requireSession();
+    const config = await loadConfig(signal);
+    const session = walletState.session;
+    if (!oneApprovalEnabled(config, session.chain)) {
+      throw uploadError('One-approval batch upload is unavailable for this wallet', 'one_approval_batch_unavailable');
+    }
+    const maxBytes = config.maxUploadBytes || 25 * 1024 * 1024;
+    const manifest = await createBatchUploadManifest(items, {
+      sha256FileHex,
+      contentAddressedBlobName,
+    });
+    const oversized = manifest.items.find((item) => item.sizeBytes > maxBytes);
+    if (oversized) {
+      throw uploadError(`File exceeds ${(maxBytes / 1048576) | 0}MB demo limit`, 'file_too_large', {
+        relativePath: oversized.relativePath,
+      });
+    }
+    const sourceNetwork = sourceNetworkFor(session, config);
+    const storageNetwork = storageNetworkFor(config);
+    const signedQuote = await request('/api/quotes/upload', {
+      method: 'POST',
+      signal,
+      body: {
+        operation: 'upload',
+        chain: session.chain,
+        sourceNetwork,
+        storageNetwork,
+        sourceAddress: session.sourceAddress,
+        storageAddress: session.storageAddress,
+        fileHash: manifest.manifestHash,
+        blobName: `batch/${manifest.manifestHash}.manifest.json`,
+        sizeBytes: manifest.totalBytes,
+        contentType: manifest.virtualFile.type,
+        encoding: 0,
+        days,
+      },
+    });
+    assertWallet(walletKey(walletState));
+    const uploadIntent = createUploadIntent({
+      file: manifest.virtualFile,
+      fileHash: manifest.manifestHash,
+      blobName: `batch/${manifest.manifestHash}.manifest.json`,
+      session,
+      days: signedQuote.days,
+      serverTimeMs: signedQuote.serverTimeMs,
+      encoding: signedQuote.encoding,
+    });
+    const intent = Object.freeze({ ...uploadIntent, sourceNetwork, storageNetwork });
+    const result = Object.freeze({
+      file: manifest.virtualFile,
+      manifest,
+      intent,
+      quote: Object.freeze({ ...signedQuote }),
+      config: Object.freeze({ ...config }),
+      walletKey: walletKey(walletState),
+      batch: true,
+    });
+    recovery.save({
+      id: signedQuote.quoteId,
+      stage: 'quoted',
+      walletIdentity: session,
+      quoteId: signedQuote.quoteId,
+      quoteToken: signedQuote.quoteToken,
+      context: intent,
+      paymentTier: signedQuote.tierId,
+      quotedAccountingMicro: signedQuote.totalAccountingMicro,
+      storageCostAccountingMicro: signedQuote.storageAccountingMicro,
+      gasAccountingMicro: signedQuote.gasAccountingMicro,
+      serviceFeeAccountingMicro: signedQuote.serviceFeeAccountingMicro,
+      totalAccountingMicro: signedQuote.totalAccountingMicro,
+      contractQuote: signedQuote.contractQuote,
+      contractSignature: signedQuote.contractSignature,
+      quotePublicKey: signedQuote.quotePublicKey,
+      settlementDeployment: signedQuote.settlementDeployment,
+    });
+    return result;
+  }
+
   async function validate(quoted, { signal } = {}) {
     if (!quoted?.intent || !quoted?.quote || !quoted?.file) {
       throw uploadError('A valid upload quote is required', 'quote_required');
@@ -276,9 +404,17 @@ export function createWalletOwnedUploadService({
     if (now() >= Number(quoted.quote.expiresAtMs)) {
       throw uploadError('Quote expired. Request a new quote.', 'quote_expired');
     }
-    const currentHash = await sha256FileHex(quoted.file);
+    const currentHash = quoted.manifest
+      ? (await createBatchUploadManifest(quoted.manifest.items, {
+        sha256FileHex,
+        contentAddressedBlobName,
+      })).manifestHash
+      : await sha256FileHex(quoted.file);
     if (currentHash !== quoted.intent.fileHash) {
-      throw uploadError('The selected file changed after quoting', 'file_hash_changed');
+      throw uploadError(
+        quoted.manifest ? 'The selected folder changed after quoting' : 'The selected file changed after quoting',
+        quoted.manifest ? 'batch_manifest_changed' : 'file_hash_changed',
+      );
     }
     const validation = await request('/api/quotes/validate', {
       method: 'POST',
@@ -484,6 +620,73 @@ export function createWalletOwnedUploadService({
     }
   }
 
+  async function uploadBatch(validated, callbacks = {}) {
+    if (!validated?.intent || !validated?.quote || !validated?.manifest) {
+      throw uploadError('Validate the batch quote before uploading', 'quote_validation_required');
+    }
+    if (validated.requiresConfirmation) {
+      throw uploadError('Review the updated price before continuing', 'price_confirmation_required');
+    }
+    const walletState = assertWallet(validated.walletKey);
+    const session = walletState.session;
+    const config = validated.config || await loadConfig(callbacks.signal);
+    if (!oneApprovalEnabled(config, session.chain)) {
+      throw uploadError('One-approval batch upload is unavailable for this wallet', 'one_approval_batch_unavailable');
+    }
+    const refreshed = await createBatchUploadManifest(validated.manifest.items, {
+      sha256FileHex,
+      contentAddressedBlobName,
+    });
+    if (refreshed.manifestHash !== validated.manifest.manifestHash) {
+      throw uploadError('The selected folder changed after quoting', 'batch_manifest_changed');
+    }
+    callbacks.onStep?.('sessionApproval');
+    const message = oneApprovalBatchMessage({
+      intent: validated.intent,
+      quote: validated.quote,
+      manifest: validated.manifest,
+    });
+    const authorization = await defaultAuthorizeUploadSession({
+      message,
+      intent: validated.intent,
+      quote: validated.quote,
+      session,
+      manifest: validated.manifest,
+    });
+    recovery.advance(validated.quote.quoteId, 'paid', {
+      paymentSignature: authorization?.signature || authorization?.transactionId || authorization?.id,
+    });
+    callbacks.onStep?.('uploading');
+    const result = await defaultSubmitOneApprovalBatchUpload({
+      manifest: validated.manifest,
+      intent: validated.intent,
+      quote: validated.quote,
+      authorization: Object.freeze({
+        ...authorization,
+        message,
+        chain: authorization?.chain || session.chain,
+        address: authorization?.address || session.sourceAddress,
+        storageAddress: session.storageAddress,
+      }),
+      signal: callbacks.signal,
+    });
+    recovery.complete(validated.quote.quoteId);
+    return Object.freeze({
+      ...result,
+      ownedByYou: false,
+      authorizedByYou: true,
+      paymentMode: 'one-approval-beta-batch',
+      sourceAddress: session.sourceAddress,
+      storageAddress: session.storageAddress,
+      quotedAccountingMicro: validated.quote.totalAccountingMicro,
+      storageCostAccountingMicro: validated.quote.storageAccountingMicro,
+      gasAccountingMicro: validated.quote.gasAccountingMicro,
+      serviceFeeAccountingMicro: validated.quote.serviceFeeAccountingMicro,
+      totalAccountingMicro: validated.quote.totalAccountingMicro,
+      lastReconciledAt: now(),
+    });
+  }
+
   async function resume(file, record, callbacks = {}) {
     if (!record?.context || !record?.stage) throw uploadError('Recovery record is required', 'recovery_required');
     const current = requireSession();
@@ -545,5 +748,5 @@ export function createWalletOwnedUploadService({
     }), callbacks);
   }
 
-  return Object.freeze({ quote, validate, upload, resume });
+  return Object.freeze({ quote, quoteBatch, validate, upload, uploadBatch, resume });
 }
