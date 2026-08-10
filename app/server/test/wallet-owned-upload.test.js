@@ -267,6 +267,50 @@ test('one-approval beta batch signs one manifest session for multiple files', as
   assert.equal(quoteBody.contentType, 'application/vnd.vessel.batch-manifest+json');
 });
 
+test('failed one-approval server upload retries through one approval instead of direct wallet transactions', async () => {
+  const flow = fixture({
+    oneApprovalBeta: { enabled: true, chains: ['aptos', 'solana', 'evm'] },
+  });
+  const session = sessionFor('aptos');
+  const record = Object.freeze({
+    id: flow.quote.quoteId,
+    quoteId: flow.quote.quoteId,
+    quoteToken: flow.quote.quoteToken,
+    stage: 'paid',
+    paymentSignature: 'previous-wallet-session-signature',
+    paymentTier: flow.quote.tierId,
+    quotedAccountingMicro: flow.quote.totalAccountingMicro,
+    storageCostAccountingMicro: flow.quote.storageAccountingMicro,
+    gasAccountingMicro: flow.quote.gasAccountingMicro,
+    serviceFeeAccountingMicro: flow.quote.serviceFeeAccountingMicro,
+    contractQuote: flow.quote.contractQuote,
+    contractSignature: flow.quote.contractSignature,
+    quotePublicKey: flow.quote.quotePublicKey,
+    settlementDeployment: flow.quote.settlementDeployment,
+    context: Object.freeze({
+      operation: 'upload',
+      chain: session.chain,
+      sourceAddress: session.sourceAddress,
+      storageAddress: session.storageAddress,
+      fileHash: HASH,
+      blobName: `media/${HASH}.json`,
+      sizeBytes: file.size,
+      contentType: file.type,
+      encoding: 0,
+      days: flow.quote.days,
+      expirationMicros: flow.quote.expirationMicros,
+    }),
+  });
+
+  const result = await flow.service.resume(file, record);
+
+  assert.equal(result.paymentMode, 'one-approval-beta');
+  assert.equal(flow.authorizationCalls, 1);
+  assert.equal(flow.oneApprovalUploadCalls, 1);
+  assert.equal(flow.settlementCalls, 0);
+  assert.equal(flow.walletUploadCalls, 0);
+});
+
 test('Aptos contract upload checks ShelbyUSD before opening Petra', async () => {
   const flow = fixture({ balances: { aptOctas: 1_000_000, shelbyUsdUnits: 0 } });
   const validated = await flow.service.validate(await flow.service.quote(file, { days: 30 }));

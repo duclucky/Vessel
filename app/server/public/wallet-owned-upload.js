@@ -745,11 +745,17 @@ export function createWalletOwnedUploadService({
         settlementHash,
         paymentSignature: settlementHash,
       });
-    } else if (record.stage === 'paid') {
+    } else if (record.stage === 'paid' && record.paidAuthorization) {
       settlement = Object.freeze({
         paidAuthorization: record.paidAuthorization,
         settlementHash: record.settlementHash,
       });
+    } else if (record.stage === 'paid' && oneApprovalEnabled(config, current.session.chain)) {
+      // A one-approval request can fail after the wallet signature but before
+      // the server returns its upload result. Retry through the same server
+      // path; an empty settlement object would incorrectly route into the
+      // wallet-owned three-transaction uploader.
+      settlement = undefined;
     } else {
       throw uploadError('This recovery record cannot be resumed', 'recovery_stage_invalid');
     }
