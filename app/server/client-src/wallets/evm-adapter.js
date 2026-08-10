@@ -3,6 +3,7 @@ import {
   defaultEthereumAuthenticationFunction,
   signAptosTransactionWithEthereum as officialSignAptosTransactionWithEthereum,
 } from '@aptos-labs/derived-wallet-ethereum';
+import { getAddress } from 'ethers';
 
 const SEPOLIA_HEX_CHAIN_ID = '0xaa36a7';
 const SEPOLIA_DECIMAL_CHAIN_ID = 11155111;
@@ -119,9 +120,17 @@ export function createEvmDaaAdapter({
 
   async function signAptosTransaction(rawTransaction) {
     if (!session?.sourceAddress) throw evmError('Connect an EVM wallet before signing', 'provider_unavailable');
+    const accounts = await provider.request({ method: 'eth_accounts' });
+    const matchingAddress = Array.isArray(accounts)
+      ? accounts.find((account) => String(account).toLowerCase() === session.sourceAddress)
+      : null;
+    if (!matchingAddress) {
+      throw evmError('Reconnect the Ethereum account that owns this DAA', 'provider_unavailable');
+    }
+    const ethereumAddress = getAddress(matchingAddress);
     const signed = await signAptosTransactionWithEthereum({
       eip1193Provider: provider,
-      ethereumAddress: session.sourceAddress,
+      ethereumAddress,
       authenticationFunction: defaultEthereumAuthenticationFunction,
       rawTransaction,
     });

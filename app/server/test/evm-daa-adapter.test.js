@@ -123,6 +123,29 @@ test('EVM DAA adapter signs Aptos transactions through the official Ethereum sig
 
   assert.equal(signed.eip1193Provider, source);
   assert.equal(signed.rawTransaction, rawTransaction);
-  assert.equal(signed.ethereumAddress, '0x1234567890abcdef1234567890abcdef12345678');
+  assert.equal(signed.ethereumAddress, '0x1234567890AbcdEF1234567890aBcdef12345678');
   assert.deepEqual([...result.bcsToBytes()], [1, 2, 3]);
+});
+
+test('EVM DAA signing preserves the provider account casing required by the official helper', async () => {
+  const checksumAddress = '0x1234567890AbcdEF1234567890aBcdef12345678';
+  const source = provider();
+  const originalRequest = source.request.bind(source);
+  source.request = async (args) => (
+    args.method === 'eth_accounts' ? [checksumAddress] : originalRequest(args)
+  );
+  let signedAddress = null;
+  const adapter = createEvmDaaAdapter({
+    descriptor: { name: 'OKX Wallet', provider: source },
+    deriveStorageAddress: () => STORAGE,
+    signAptosTransactionWithEthereum: async (input) => {
+      signedAddress = input.ethereumAddress;
+      return { status: 'Approved', args: {} };
+    },
+  });
+  await adapter.connect();
+
+  await adapter.signAptosTransaction({});
+
+  assert.equal(signedAddress, checksumAddress);
 });

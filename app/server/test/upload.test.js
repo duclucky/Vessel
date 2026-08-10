@@ -168,6 +168,17 @@ test('paid recovery rebuilds the upload context without losing wallet identity',
   assert.match(paidRecovery, /targetExpirationUtc:\s*new Date\(recoveredExpirationMs\)\.toISOString\(\)/);
 });
 
+test('paid EVM recovery retains Sepolia settlement labels', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const paidRecovery = source.slice(
+    source.indexOf("if (record.stage === 'paid')"),
+    source.indexOf('const outcome = await doUpload(file, recoveredContext);'),
+  );
+
+  assert.match(paidRecovery, /record\.context\.chain === 'evm'\s*\? 'Ethereum Sepolia'/);
+  assert.match(paidRecovery, /record\.context\.chain === 'evm'\s*\? 'Sepolia ETH'/);
+});
+
 test('folder uploads run through the existing quote and settlement path sequentially', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   assert.match(source, /import \{[^}]*createBatchQueue[^}]*runBatchQueue[^}]*\} from '\.\/batch-upload\.js'/s);

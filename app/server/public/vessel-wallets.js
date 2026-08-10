@@ -52341,9 +52341,15 @@ ${suffix}`;
     }
     async function signAptosTransaction(rawTransaction) {
       if (!session?.sourceAddress) throw evmError("Connect an EVM wallet before signing", "provider_unavailable");
+      const accounts = await provider.request({ method: "eth_accounts" });
+      const matchingAddress = Array.isArray(accounts) ? accounts.find((account) => String(account).toLowerCase() === session.sourceAddress) : null;
+      if (!matchingAddress) {
+        throw evmError("Reconnect the Ethereum account that owns this DAA", "provider_unavailable");
+      }
+      const ethereumAddress = getAddress2(matchingAddress);
       const signed2 = await signAptosTransactionWithEthereum2({
         eip1193Provider: provider,
-        ethereumAddress: session.sourceAddress,
+        ethereumAddress,
         authenticationFunction: defaultEthereumAuthenticationFunction,
         rawTransaction
       });

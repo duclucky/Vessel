@@ -660,10 +660,14 @@ function initUpload() {
       if (record.stage === 'paid') {
         const recoveredSettlementNetwork = record.context.chain === 'solana'
           ? 'Solana Devnet'
-          : record.context.sourceNetwork === 'shelbynet' ? 'ShelbyNet' : 'Aptos Testnet';
+          : record.context.chain === 'evm'
+            ? 'Ethereum Sepolia'
+            : record.context.sourceNetwork === 'shelbynet' ? 'ShelbyNet' : 'Aptos Testnet';
         const recoveredSettlementToken = record.context.chain === 'solana'
           ? 'Devnet USDC'
-          : record.context.sourceNetwork === 'shelbynet' ? 'APT + ShelbyUSD' : 'APT + ShelbyUSD';
+          : record.context.chain === 'evm'
+            ? 'Sepolia ETH'
+            : 'APT + ShelbyUSD';
         const recoveredExpirationMs = Math.floor(Number(record.context.expirationMicros || 0) / 1000);
         const config = await api('/api/config').catch(() => ({}));
         const quote = Object.freeze({
