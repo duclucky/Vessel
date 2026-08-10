@@ -78,6 +78,44 @@ test('EVM DAA adapter can derive storage through the official Shelby bridge', as
   assert.equal(session.storageAddress, STORAGE);
 });
 
+test('EVM DAA adapter times out a wallet provider that never opens approval', async () => {
+  const adapter = createEvmDaaAdapter({
+    descriptor: {
+      name: 'Phantom',
+      provider: { request: async () => new Promise(() => {}) },
+    },
+    walletRequestTimeoutMs: 5,
+    deriveStorageAddress: () => STORAGE,
+    signAptosTransactionWithEthereum: async () => ({ status: 'Approved', args: {} }),
+  });
+
+  await assert.rejects(
+    () => adapter.connect(),
+    /Wallet did not respond/,
+  );
+});
+
+test('EVM DAA adapter falls back to deterministic storage when official bridge never resolves', async () => {
+  const source = provider();
+  const adapter = createEvmDaaAdapter({
+    descriptor: { name: 'OKX Wallet', provider: source },
+    walletRequestTimeoutMs: 5,
+    officialShelby: {
+      connectWallet: async () => new Promise(() => {}),
+    },
+    deriveStorageAddress: ({ ethereumAddress }) => {
+      assert.equal(ethereumAddress, '0x1234567890abcdef1234567890abcdef12345678');
+      return STORAGE;
+    },
+    signAptosTransactionWithEthereum: async () => ({ status: 'Approved', args: {} }),
+  });
+
+  const session = await adapter.connect();
+
+  assert.equal(session.storageAddress, STORAGE);
+  assert.equal(session.storageNetwork, 'shelbynet');
+});
+
 test('wallet bootstrap routes EVM DAA through the official Shelby bridge', () => {
   const source = readFileSync(new URL('../client-src/vessel-wallets.js', import.meta.url), 'utf8');
   const evmBlockStart = source.indexOf("wallet.chain === 'evm' && wallet.enabled");

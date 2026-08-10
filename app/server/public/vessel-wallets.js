@@ -52247,6 +52247,7 @@ ${suffix}`;
   // client-src/wallets/evm-adapter.js
   var SEPOLIA_HEX_CHAIN_ID = "0xaa36a7";
   var SHELBYNET_STORAGE_NETWORK = "shelbynet";
+  var DEFAULT_WALLET_REQUEST_TIMEOUT_MS = 15e3;
   var evmError = (message, code, details = {}) => Object.assign(
     new Error(message),
     { code, ...details }
@@ -52272,21 +52273,36 @@ ${suffix}`;
   function approved(response) {
     return response?.status === "Approved" || response?.status === "APPROVED" || response?.status === 1;
   }
+  async function withWalletTimeout(promise, ms2, message) {
+    let timeoutId = null;
+    const timeout = new Promise((_9, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(evmError(message, "wallet_timeout"));
+      }, ms2);
+    });
+    try {
+      return await Promise.race([promise, timeout]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
   function createEvmDaaAdapter({
     descriptor,
     domain = defaultDomain(),
     deriveStorageAddress = deriveWithOfficialShelbyEthereumDaa,
     signAptosTransactionWithEthereum: signAptosTransactionWithEthereum2 = signAptosTransactionWithEthereum,
     targetChainId = SEPOLIA_HEX_CHAIN_ID,
-    officialShelby
+    officialShelby,
+    walletRequestTimeoutMs = DEFAULT_WALLET_REQUEST_TIMEOUT_MS
   } = {}) {
     const provider = descriptor?.provider;
     if (!provider?.request) throw evmError("Select an EVM wallet before connecting", "provider_unavailable");
     let session = null;
     const listeners2 = /* @__PURE__ */ new Set();
     const publish = (event) => listeners2.forEach((listener) => listener(event));
+    const walletRequest = (args, message = "Wallet did not respond. Unlock the extension and try again, or choose another Ethereum wallet.") => withWalletTimeout(provider.request(args), walletRequestTimeoutMs, message);
     async function requestAccounts({ silent = false } = {}) {
-      const accounts = await provider.request({ method: silent ? "eth_accounts" : "eth_requestAccounts" });
+      const accounts = await walletRequest({ method: silent ? "eth_accounts" : "eth_requestAccounts" });
       const [account] = Array.isArray(accounts) ? accounts : [];
       if (!account) {
         if (silent) return null;
@@ -52295,13 +52311,16 @@ ${suffix}`;
       return normalizeAddress(account);
     }
     async function ensureNetwork() {
-      const chainId = String(await provider.request({ method: "eth_chainId" })).toLowerCase();
+      const chainId = String(await walletRequest({ method: "eth_chainId" })).toLowerCase();
       if (chainId === targetChainId) return true;
       try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: targetChainId }]
-        });
+        await walletRequest(
+          {
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: targetChainId }]
+          },
+          "Wallet did not respond to the Sepolia switch request. Unlock the extension and try again."
+        );
         return true;
       } catch (error) {
         throw evmError("Switch your EVM wallet to Sepolia", "switch_unsupported", {
@@ -52314,14 +52333,25 @@ ${suffix}`;
       const sourceAddress = await requestAccounts({ silent });
       if (!sourceAddress) return null;
       await ensureNetwork();
-      const officialSession = officialShelby?.connectWallet ? await officialShelby.connectWallet({
-        chain: "evm",
-        descriptor,
-        wallet: {
-          account: { address: sourceAddress },
-          request: provider.request.bind(provider)
+      let officialSession = null;
+      if (officialShelby?.connectWallet) {
+        try {
+          officialSession = await withWalletTimeout(
+            officialShelby.connectWallet({
+              chain: "evm",
+              descriptor,
+              wallet: {
+                account: { address: sourceAddress },
+                request: provider.request.bind(provider)
+              }
+            }),
+            walletRequestTimeoutMs,
+            "Official Shelby DAA derivation did not respond"
+          );
+        } catch (error) {
+          if (error?.code !== "wallet_timeout") throw error;
         }
-      }) : null;
+      }
       const storageAddress = officialSession?.storageAddress || deriveStorageAddress({ ethereumAddress: sourceAddress, domain });
       if (officialSession && officialSession.sourceAddress !== sourceAddress) {
         throw evmError("Official Shelby storage identity does not match the selected wallet", "identity_mismatch");
@@ -52341,7 +52371,7 @@ ${suffix}`;
     }
     async function signAptosTransaction(rawTransaction) {
       if (!session?.sourceAddress) throw evmError("Connect an EVM wallet before signing", "provider_unavailable");
-      const accounts = await provider.request({ method: "eth_accounts" });
+      const accounts = await walletRequest({ method: "eth_accounts" });
       const matchingAddress = Array.isArray(accounts) ? accounts.find((account) => String(account).toLowerCase() === session.sourceAddress) : null;
       if (!matchingAddress) {
         throw evmError("Reconnect the Ethereum account that owns this DAA", "provider_unavailable");
