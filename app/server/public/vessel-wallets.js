@@ -58282,11 +58282,11 @@ Message: ${transactionMessage}.
     const extension = String(key).split(".").pop()?.toLowerCase();
     return CONTENT_TYPE_BY_EXTENSION[extension] || "application/octet-stream";
   };
-  function reconcileArtifacts(local = [], remote = [], walletIdentity = {}) {
+  function reconcileArtifacts(local = [], remote = [], walletIdentity = {}, now = Date.now) {
     const storageAddress = canonicalAddress(walletIdentity.storageAddress);
     const scopedLocal = local.filter((item) => canonicalAddress(item.storageAddress || item.account) === storageAddress);
     const localByKey = new Map(scopedLocal.map((item) => [item.key, item]));
-    return remote.filter((item) => canonicalAddress(item.owner) === storageAddress).map((item) => {
+    const remoteItems = remote.filter((item) => canonicalAddress(item.owner) === storageAddress).map((item) => {
       const key = remoteKey(item);
       const cached = localByKey.get(key) || {};
       return Object.freeze({
@@ -58308,6 +58308,9 @@ Message: ${transactionMessage}.
         lastReconciledAt: Date.now()
       });
     });
+    const remoteKeys = new Set(remoteItems.map((item) => item.key));
+    const authorizedServiceItems = scopedLocal.filter((item) => item.authorizedByYou === true && item.ownedByYou !== true && item.state !== "deleted" && item.isDeleted !== true && Number(item.expiresAt) > now() && !remoteKeys.has(item.key));
+    return [...remoteItems, ...authorizedServiceItems];
   }
 
   // client-src/vessel-wallets.js

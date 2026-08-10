@@ -34,3 +34,26 @@ test('remote unwritten and deleted blobs are mapped without trusting stale local
   assert.equal(merged[0].state, 'finalizing');
   assert.equal(merged[0].createdAt, 2_000);
 });
+
+test('wallet-authorized service uploads remain visible when the wallet-owned remote list cannot contain them', () => {
+  const identity = { chain: 'aptos', sourceAddress: '0xabc', storageAddress: '0xabc' };
+  const local = [{
+    key: 'media/authorized.png',
+    url: '/api/media/media/authorized.png',
+    contentType: 'image/png',
+    sourcePath: 'VesselBatchTest/01-nebula.png',
+    storageAddress: '0xabc',
+    state: 'active',
+    ownedByYou: false,
+    authorizedByYou: true,
+    expiresAt: 2_000_000,
+  }];
+
+  const merged = reconcileArtifacts(local, [], identity, () => 1_000_000);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].key, 'media/authorized.png');
+  assert.equal(merged[0].sourcePath, 'VesselBatchTest/01-nebula.png');
+  assert.equal(merged[0].authorizedByYou, true);
+  assert.equal(merged[0].ownedByYou, false);
+});

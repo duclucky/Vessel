@@ -23,13 +23,13 @@ const inferContentType = (key) => {
   return CONTENT_TYPE_BY_EXTENSION[extension] || 'application/octet-stream';
 };
 
-export function reconcileArtifacts(local = [], remote = [], walletIdentity = {}) {
+export function reconcileArtifacts(local = [], remote = [], walletIdentity = {}, now = Date.now) {
   const storageAddress = canonicalAddress(walletIdentity.storageAddress);
   const scopedLocal = local.filter((item) => (
     canonicalAddress(item.storageAddress || item.account) === storageAddress
   ));
   const localByKey = new Map(scopedLocal.map((item) => [item.key, item]));
-  return remote
+  const remoteItems = remote
     .filter((item) => canonicalAddress(item.owner) === storageAddress)
     .map((item) => {
       const key = remoteKey(item);
@@ -53,4 +53,14 @@ export function reconcileArtifacts(local = [], remote = [], walletIdentity = {})
         lastReconciledAt: Date.now(),
       });
     });
+  const remoteKeys = new Set(remoteItems.map((item) => item.key));
+  const authorizedServiceItems = scopedLocal.filter((item) => (
+    item.authorizedByYou === true
+    && item.ownedByYou !== true
+    && item.state !== 'deleted'
+    && item.isDeleted !== true
+    && Number(item.expiresAt) > now()
+    && !remoteKeys.has(item.key)
+  ));
+  return [...remoteItems, ...authorizedServiceItems];
 }
