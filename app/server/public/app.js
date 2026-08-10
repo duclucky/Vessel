@@ -386,11 +386,14 @@ function initUpload() {
     if (!session || !file) return null;
     const fileHash = await sha256FileHex(file);
     const blobName = contentAddressedBlobName(file, fileHash);
-    return recovery.loadForWallet(session).find((record) => (
+    const isRecoverableFile = (record) => (
       record.context?.fileHash === fileHash
       && record.context?.blobName === blobName
       && !['quoted', 'active'].includes(record.stage)
-    )) || null;
+    );
+    return recovery.loadForWallet(session).find(isRecoverableFile)
+      || recovery.loadForSource?.(session)?.find(isRecoverableFile)
+      || null;
   }
 
   async function resumePendingBatchUpload(file, recoveryRecord, item) {

@@ -54,6 +54,12 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
       record.paidAuthorization || record.settlementTransactionId ? 86_400_000 : 300_000
     );
   };
+  const retainedRecords = () => {
+    const records = read();
+    const retained = records.filter(fresh);
+    if (retained.length !== records.length) write(retained);
+    return retained;
+  };
 
   function save(checkpoint) {
     if (!STAGES.has(checkpoint?.stage)) throw new RangeError('Invalid recovery stage');
@@ -81,10 +87,17 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
 
   function loadForWallet(identity) {
     const walletKey = normalizeWalletIdentity(identity);
-    const records = read();
-    const retained = records.filter(fresh);
-    if (retained.length !== records.length) write(retained);
-    return retained.filter((record) => record.walletKey === walletKey);
+    return retainedRecords().filter((record) => record.walletKey === walletKey);
+  }
+
+  function loadForSource(identity) {
+    const chain = String(identity?.chain || '').toLowerCase();
+    const sourceAddress = String(identity?.sourceAddress || '').toLowerCase();
+    if (!chain || !sourceAddress) return [];
+    return retainedRecords().filter((record) => (
+      String(record.context?.chain || '').toLowerCase() === chain
+      && String(record.context?.sourceAddress || '').toLowerCase() === sourceAddress
+    ));
   }
 
   function advance(id, stage, evidence = {}) {
@@ -109,5 +122,5 @@ export function createRecoveryLedger(storage = globalThis.localStorage, now = Da
     write(read().filter((record) => record.id !== id));
   }
 
-  return Object.freeze({ save, loadForWallet, advance, complete });
+  return Object.freeze({ save, loadForWallet, loadForSource, advance, complete });
 }

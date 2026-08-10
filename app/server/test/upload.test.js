@@ -226,6 +226,17 @@ test('single-file confirmation resumes a paid recovery before validating a new q
   assert.match(confirmFlow, /renderSuccess\(result\)/);
 });
 
+test('upload recovery lookup falls back to source-wallet receipts for the same file', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const start = source.indexOf('async function findUploadRecoveryRecordForFile(file)');
+  const end = source.indexOf('async function resumePendingBatchUpload', start);
+  const lookup = source.slice(start, end);
+
+  assert.match(lookup, /const isRecoverableFile = \(record\) =>/);
+  assert.match(lookup, /recovery\.loadForWallet\(session\)\.find\(isRecoverableFile\)/);
+  assert.match(lookup, /recovery\.loadForSource\?\.\(session\)\?\.find\(isRecoverableFile\)/);
+});
+
 test('batch progress uses the Vessel palette in Chromium and Firefox', () => {
   const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
   assert.match(css, /#batch-progress\s*\{/);

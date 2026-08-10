@@ -116,6 +116,44 @@ test('recovery ledger is capped, wallet scoped, and complete removes a record', 
   assert.equal(ledger.loadForWallet(identity).some((item) => item.id === id), false);
 });
 
+test('recovery ledger can find durable receipts by source wallet even if storage identity changed', () => {
+  const storage = memoryStorage();
+  const ledger = createRecoveryLedger(storage, () => 1_000);
+  ledger.save({
+    id: 'quote-source-match',
+    stage: 'paid',
+    walletIdentity: { ...identity, storageAddress: '0xOLD' },
+    context: {
+      operation: 'upload',
+      chain: 'aptos',
+      sourceAddress: '0xABC',
+      storageAddress: '0xOLD',
+      fileHash: 'ab'.repeat(32),
+      blobName: 'media/source.png',
+    },
+    paidAuthorization: 'vpaid.source',
+  });
+  ledger.save({
+    id: 'quote-other-source',
+    stage: 'paid',
+    walletIdentity: { ...identity, sourceAddress: '0xDEF', storageAddress: '0xOTHER' },
+    context: {
+      operation: 'upload',
+      chain: 'aptos',
+      sourceAddress: '0xDEF',
+      storageAddress: '0xOTHER',
+      fileHash: 'cd'.repeat(32),
+      blobName: 'media/other.png',
+    },
+    paidAuthorization: 'vpaid.other',
+  });
+
+  assert.equal(ledger.loadForWallet(identity).length, 0);
+  const sourceRecords = ledger.loadForSource(identity);
+  assert.equal(sourceRecords.length, 1);
+  assert.equal(sourceRecords[0].id, 'quote-source-match');
+});
+
 test('a repeated quote cannot overwrite a durable recovery checkpoint with the same id', () => {
   const storage = memoryStorage();
   let current = 1_000;
