@@ -1923,7 +1923,7 @@ async function initMetadata() {
         opener: $('#single-host-shelby') || $('#batch-host-shelby'),
         kicker: files.length > 1 ? `METADATA ${index + 1} OF ${files.length}` : 'TOKENURI QUOTE',
         title: `Host ${displayName} for ${quoted.quote.days} days?`,
-        message: `${total} total, including Shelby storage cost, testnet DAA gas funding, and the Vessel service fee. Your connected wallet will approve the Vessel fee receipt.`,
+        message: `${total} total, including Shelby storage cost, testnet DAA gas funding, and the Vessel service fee. Your wallet signs only when a fresh authorization is required; recoverable uploads continue automatically.`,
         cancelLabel: 'NOT NOW',
         confirmLabel: 'APPROVE & HOST',
       });

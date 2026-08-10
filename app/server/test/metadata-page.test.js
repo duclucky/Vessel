@@ -201,3 +201,13 @@ test('app passes collection manifest persistence into metadata page', () => {
   assert.match(metadata, /normalizeAptosLikeAddress\(session\.storageAddress\)/);
   assert.match(metadata, /storageAddress,/);
 });
+
+test('metadata hosting explains conditional wallet signatures and recovery', () => {
+  const page = fs.readFileSync(path.join(publicDir, 'metadata-page.js'), 'utf8');
+  const app = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+
+  assert.doesNotMatch(page, /Each JSON receives its own Vessel fee receipt/);
+  assert.doesNotMatch(app, /Your connected wallet will approve the Vessel fee receipt/);
+  assert.match(page, /A fresh authorization may open your wallet/);
+  assert.match(app, /Your wallet signs only when a fresh authorization is required/);
+});

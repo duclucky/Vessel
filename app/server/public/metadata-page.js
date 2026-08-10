@@ -583,14 +583,14 @@ export function initMetadataPage({
     if (element.batchHostStatus && phase !== 'controls') {
       const activePhase = !['ready', 'complete', 'failed'].includes(phase);
       element.batchHostStatus.textContent = phase === 'uploading' || activePhase
-        ? `Approve item ${summary.completed + 1} of ${summary.total}. Each JSON receives its own Vessel fee receipt.`
+        ? `Confirm item ${summary.completed + 1} of ${summary.total}. A fresh authorization may open your wallet; recoverable items continue automatically.`
         : phase === 'complete'
           ? `${summary.succeeded} TokenURI file${summary.succeeded === 1 ? '' : 's'} hosted successfully.`
           : phase === 'failed' && error?.code === 'receipt_pending'
             ? 'Paused while the current fee receipt reaches finality. No second payment will be requested.'
             : phase === 'failed'
               ? `Paused after ${summary.succeeded} success${summary.succeeded === 1 ? '' : 'es'}: ${String(error?.message || error).slice(0, 140)}`
-              : `${summary.total} wallet approvals expected. Pricing is estimated until each live quote is validated; the minimum service charge is $0.01.`;
+              : `${summary.total} TokenURI quotes will be confirmed in Vessel. A fresh authorization may open your wallet; recoverable items continue without another payment.`;
     }
     const retryable = batchHostQueue.items.some(
       (entry) => entry.status === 'failed' && entry.error?.retryable !== false,
