@@ -207,7 +207,6 @@ test('downloadBlob clicks a temporary link and revokes the object URL', async ()
     assert.deepEqual(events, [
       'append',
       'click',
-      'remove',
     ]);
     await new Promise((resolve) => setTimeout(resolve, 1_050));
     assert.deepEqual(events, [
