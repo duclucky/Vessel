@@ -136,15 +136,22 @@ function safeWarnings(input) {
   });
 }
 
+function entryData(content) {
+  if (content instanceof Uint8Array) return content;
+  if (content instanceof ArrayBuffer) return new Uint8Array(content);
+  if (ArrayBuffer.isView(content)) return new Uint8Array(content.buffer, content.byteOffset, content.byteLength);
+  return encoder.encode(String(content));
+}
+
 function makeEntry(path, content) {
   const name = normalizeZipPath(path);
-  const data = encoder.encode(String(content));
+  const data = entryData(content);
   if (data.length > 0xffffffff) throw zipError('ZIP entry is too large', 'zip_entry_too_large', { path: name });
   const nameBytes = encoder.encode(name);
   return { name, nameBytes, data, crc: crc32(data), localOffset: 0 };
 }
 
-function zipEntries(entries, type = 'application/zip') {
+function zipBytes(entries) {
   if (entries.length > 0xffff) throw zipError('ZIP contains too many entries', 'zip_entry_limit');
   const seen = new Set();
   for (const entry of entries) {
@@ -168,6 +175,10 @@ function zipEntries(entries, type = 'application/zip') {
     ...centralParts,
     endOfCentralDirectory(entries.length, centralSize, localOffset),
   ]);
+}
+
+function zipEntries(entries, type = 'application/zip') {
+  const bytes = zipBytes(entries);
   return new Blob([bytes], { type });
 }
 
@@ -257,9 +268,9 @@ function stylesXml() {
 </styleSheet>`;
 }
 
-export function buildStyledWorkbook(rows, { name = 'Vessel Manifest' } = {}) {
+function styledWorkbookEntries(rows, { name = 'Vessel Manifest' } = {}) {
   const safeName = sheetName(name);
-  return zipEntries([
+  return [
     makeEntry('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -283,7 +294,20 @@ export function buildStyledWorkbook(rows, { name = 'Vessel Manifest' } = {}) {
 </Relationships>`),
     makeEntry('xl/styles.xml', stylesXml()),
     makeEntry('xl/worksheets/sheet1.xml', worksheetXml(rows)),
-  ], XLSX_MIME);
+  ];
+}
+
+export function buildStyledWorkbookBytes(rows, { name = 'Vessel Manifest' } = {}) {
+  return zipBytes(styledWorkbookEntries(rows, { name }));
+}
+
+export function buildStyledWorkbook(rows, { name = 'Vessel Manifest' } = {}) {
+  return new Blob([buildStyledWorkbookBytes(rows, { name })], { type: XLSX_MIME });
+}
+
+export function buildStoredZip(entries, { type = 'application/zip' } = {}) {
+  const safeEntries = (Array.isArray(entries) ? entries : []).map((entry) => makeEntry(entry.path, entry.content));
+  return zipEntries(safeEntries, type);
 }
 
 export function metadataJsonFile(metadata, fileName = 'metadata.json') {

@@ -12,6 +12,7 @@ import {
   rowsToCsv,
   toErc1155Hex64,
 } from '../public/launch-kit.js';
+import { buildLaunchOutputs, launchPackageFileName } from '../public/launch-kit-export.js';
 import { validateLaunchKit } from '../public/launch-kit-validator.js';
 
 function collectionFixture() {
@@ -177,4 +178,43 @@ test('validator blocks Aptos duplicate token names and ERC-1155 duplicate token 
   assert.equal(result.errors.some((issue) => issue.code === 'token_id_collision'), true);
   assert.equal(result.errors.some((issue) => issue.code === 'aptos_token_name_collision'), true);
   assert.equal(result.targetStatus.aptosDigitalAsset.valid, false);
+});
+
+test('launch export package includes manifest, checklist, validation report, and chain files', async () => {
+  const collection = collectionFixture();
+  const profile = {
+    ...defaultLaunchProfile(collection, { storageAddress: '0xabc', origin: 'https://vessel-sage.vercel.app' }),
+    collectionName: 'Genesis',
+    symbol: 'GEN',
+    description: 'A Shelby-hosted beta NFT media collection.',
+    avatarImageUrl: collection.items[0].url,
+    featuredImageUrl: collection.items[0].url,
+    royaltyPercent: 1,
+  };
+  const items = buildLaunchItems(collection, manifestFixture(), { tokenIdStart: 1 });
+  const validation = validateLaunchKit({ collection, profile, items, nowMs: Date.UTC(2026, 7, 11) });
+  const outputs = buildLaunchOutputs(profile, items, validation, {
+    collection,
+    vesselOrigin: 'https://vessel-sage.vercel.app',
+    storageRuntime: 'shelbynet',
+    storageAddress: '0xabc',
+    generatedAt: '2026-08-11T00:00:00.000Z',
+  });
+
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/manifest.json'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/launch-checklist.md'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/validation-report.xlsx'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/opensea/contractURI.json'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/evm/erc721-tokenuris.csv'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/evm/erc1155-tokenuris.csv'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/solana/metaplex-core-assets.csv'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/solana/token-metadata-assets.csv'), true);
+  assert.equal(outputs.entries.some((entry) => entry.path === 'vessel-launch-kit/aptos/digital-asset-tokens.csv'), true);
+  assert.equal(outputs.entries.some((entry) => /private|secret|signature/i.test(entry.content)), false);
+  assert.equal(outputs.zip.type, 'application/zip');
+  assert.equal(outputs.validationWorkbook.type, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+});
+
+test('launch package file name is safe and readable', () => {
+  assert.equal(launchPackageFileName({ collectionName: 'Genesis: Alpha/Beta' }), 'genesis-alpha-beta-launch-kit.zip');
 });
