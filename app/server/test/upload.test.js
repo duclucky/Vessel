@@ -210,6 +210,22 @@ test('folder uploads auto-resume pending Vessel fee receipts without failing the
   assert.match(upload, /No second payment/);
 });
 
+test('single-file confirmation resumes a paid recovery before validating a new quote', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const start = source.indexOf('async function confirmQuotedUpload()');
+  const end = source.indexOf('async function findUploadRecoveryRecordForFile', start);
+  const confirmFlow = source.slice(start, end);
+
+  const recoveryCheck = confirmFlow.indexOf('findUploadRecoveryRecordForFile(current.file)');
+  const quoteValidation = confirmFlow.indexOf('validateUploadQuote(current)');
+
+  assert.equal(recoveryCheck >= 0, true);
+  assert.equal(quoteValidation >= 0, true);
+  assert.equal(recoveryCheck < quoteValidation, true);
+  assert.match(confirmFlow, /walletOwnedUpload\.resume\(current\.file, recoveryRecord/);
+  assert.match(confirmFlow, /renderSuccess\(result\)/);
+});
+
 test('batch progress uses the Vessel palette in Chromium and Firefox', () => {
   const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
   assert.match(css, /#batch-progress\s*\{/);

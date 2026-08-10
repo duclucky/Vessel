@@ -310,6 +310,36 @@ function initUpload() {
       quoteUi.render({ kind: 'unavailable', message: 'The connected wallet changed. Request a new quote.' });
       return;
     }
+    const recoveryRecord = await findUploadRecoveryRecordForFile(current.file);
+    if (recoveryRecord) {
+      pendingWalletWork.abort();
+      pendingWalletWork = new AbortController();
+      quoteUi.render({ kind: 'loading' });
+      try {
+        const resumed = await walletOwnedUpload.resume(current.file, recoveryRecord, {
+          signal: pendingWalletWork.signal,
+          onStep: setStep,
+        });
+        const result = Object.freeze({
+          ...resumed,
+          sourcePath: current.file.webkitRelativePath || current.file.name,
+        });
+        activeUploadContext = null;
+        ledger.commitUpload(result);
+        $('#upload-recovery')?.remove();
+        renderSuccess(result);
+      } catch (error) {
+        if (error?.name === 'AbortError') return;
+        activeUploadContext = current;
+        quoteUi.render({
+          kind: 'ready',
+          quote: current.quote,
+          message: String(error?.message || error).slice(0, 180),
+        });
+        await renderRecoveryPanel();
+      }
+      return;
+    }
     if (Date.now() >= current.quote.expiresAtMs) {
       quoteUi.render({ kind: 'expired', message: 'Quote expired — refresh to continue' });
       return;
