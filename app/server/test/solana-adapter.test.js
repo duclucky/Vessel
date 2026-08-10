@@ -88,6 +88,22 @@ test('standard signMessage is normalized to the proven DAA provider contract', a
   assert.deepEqual([...signed.signedMessage], [1, 2, 3]);
 });
 
+test('Solana one-approval evidence preserves the exact UTF-8 signed message', async () => {
+  const adapter = createSolanaAdapter({
+    id: 'solana:standard:1',
+    name: 'Standard Wallet',
+    provider: standardWallet(),
+  });
+  await adapter.connect();
+
+  const signed = await adapter.signMessage('VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+
+  assert.equal(signed.message, 'VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+  assert.equal(signed.signedMessage, signed.message);
+  assert.equal(signed.publicKey, key.toBase58());
+  assert.equal(Buffer.from(signed.signature, 'base64').length, 64);
+});
+
 test('Phantom DAA signing uses the matching injected provider when Wallet Standard stalls', async () => {
   const wallet = standardWallet();
   wallet.features['solana:signMessage'].signMessage = async () => {

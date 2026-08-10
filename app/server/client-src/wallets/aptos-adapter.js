@@ -8,6 +8,16 @@ const DEFAULT_TARGET_NETWORK = Object.freeze({
 
 const walletError = (message, code) => Object.assign(new Error(message), { code });
 
+const hexEvidence = (value) => {
+  const bytes = value instanceof Uint8Array
+    ? value
+    : value?.toUint8Array?.() || value?.bcsToBytes?.();
+  if (bytes instanceof Uint8Array) {
+    return `0x${[...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+  }
+  return value?.toString?.() || String(value || '');
+};
+
 function normalizeTargetNetwork(input = DEFAULT_TARGET_NETWORK) {
   const name = String(input?.name || DEFAULT_TARGET_NETWORK.name).toLowerCase();
   const chainId = Number(input?.chainId || DEFAULT_TARGET_NETWORK.chainId);
@@ -58,6 +68,7 @@ export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInp
   const targetNetwork = normalizeTargetNetwork(targetNetworkInput);
   const listeners = new Set();
   let session = null;
+  let activeAccount = null;
   let eventsBound = false;
 
   const feature = (name, method, { optional = false } = {}) => {
@@ -70,6 +81,7 @@ export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInp
   const emit = (event) => listeners.forEach((listener) => listener(event));
 
   const buildSession = (account) => {
+    activeAccount = account;
     const address = addressOf(account);
     if (!address) throw walletError('Aptos wallet did not return an account', 'provider_unavailable');
     return {
@@ -163,9 +175,10 @@ export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInp
       return {
         chain: 'aptos',
         address: session?.sourceAddress,
-        message: args?.fullMessage || message,
-        signature: args?.signature?.toString?.() || String(args?.signature || ''),
-        publicKey: args?.publicKey?.toString?.() || String(args?.publicKey || ''),
+        message,
+        signedMessage: args?.fullMessage || message,
+        signature: hexEvidence(args?.signature),
+        publicKey: hexEvidence(args?.publicKey || activeAccount?.publicKey),
       };
     },
     subscribe(listener) {
@@ -176,6 +189,7 @@ export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInp
     async disconnect() {
       await feature('aptos:disconnect', 'disconnect').disconnect();
       session = null;
+      activeAccount = null;
     },
   };
 }

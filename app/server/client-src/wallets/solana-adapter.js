@@ -161,6 +161,7 @@ export function createSolanaAdapter(descriptor, { legacyProvider } = {}) {
         chain: 'solana',
         address: selected.address,
         message,
+        signedMessage: message,
         signature: btoa(String.fromCharCode(...new Uint8Array(signature))),
         publicKey: selected.address,
       };

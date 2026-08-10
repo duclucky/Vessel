@@ -14,6 +14,7 @@ const provider = (chainId = '0xaa36a7') => {
       if (args.method === 'eth_accounts') return ['0x1234567890abcdef1234567890abcdef12345678'];
       if (args.method === 'eth_chainId') return chainId;
       if (args.method === 'wallet_switchEthereumChain') return null;
+      if (args.method === 'personal_sign') return `0x${'ab'.repeat(65)}`;
       throw new Error(`unexpected ${args.method}`);
     },
   };
@@ -40,6 +41,23 @@ test('EVM DAA adapter derives Shelby storage with official injected derivation',
   assert.equal(session.sourceAddress, '0x1234567890abcdef1234567890abcdef12345678');
   assert.equal(session.storageAddress, STORAGE);
   assert.equal(session.walletName, 'MetaMask');
+});
+
+test('EVM one-approval evidence preserves the exact personal_sign message', async () => {
+  const source = provider();
+  const adapter = createEvmDaaAdapter({
+    descriptor: { name: 'MetaMask', provider: source },
+    domain: 'vessel-sage.vercel.app',
+    deriveStorageAddress: () => STORAGE,
+    signAptosTransactionWithEthereum: async () => ({ status: 'Approved', args: {} }),
+  });
+  await adapter.connect();
+
+  const signed = await adapter.signMessage('VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+
+  assert.equal(signed.message, 'VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+  assert.equal(signed.signedMessage, signed.message);
+  assert.equal(signed.signature, `0x${'ab'.repeat(65)}`);
 });
 
 test('EVM DAA adapter can derive storage through the official Shelby bridge', async () => {

@@ -185,6 +185,7 @@ export function createEvmDaaAdapter({
       chain: 'evm',
       address: session.sourceAddress,
       message,
+      signedMessage: message,
       signature: String(signature || ''),
     };
   }

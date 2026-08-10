@@ -12466,6 +12466,13 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     displayName: "Aptos Testnet"
   });
   var walletError = (message, code) => Object.assign(new Error(message), { code });
+  var hexEvidence = (value) => {
+    const bytes2 = value instanceof Uint8Array ? value : value?.toUint8Array?.() || value?.bcsToBytes?.();
+    if (bytes2 instanceof Uint8Array) {
+      return `0x${[...bytes2].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    }
+    return value?.toString?.() || String(value || "");
+  };
   function normalizeTargetNetwork(input = DEFAULT_TARGET_NETWORK) {
     const name = String(input?.name || DEFAULT_TARGET_NETWORK.name).toLowerCase();
     const chainId = Number(input?.chainId || DEFAULT_TARGET_NETWORK.chainId);
@@ -12510,6 +12517,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     const targetNetwork = normalizeTargetNetwork(targetNetworkInput);
     const listeners2 = /* @__PURE__ */ new Set();
     let session = null;
+    let activeAccount = null;
     let eventsBound = false;
     const feature = (name, method, { optional: optional2 = false } = {}) => {
       const implementation = wallet?.features?.[name];
@@ -12519,6 +12527,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     };
     const emit3 = (event) => listeners2.forEach((listener) => listener(event));
     const buildSession = (account) => {
+      activeAccount = account;
       const address = addressOf(account);
       if (!address) throw walletError("Aptos wallet did not return an account", "provider_unavailable");
       return {
@@ -12607,9 +12616,10 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         return {
           chain: "aptos",
           address: session?.sourceAddress,
-          message: args?.fullMessage || message,
-          signature: args?.signature?.toString?.() || String(args?.signature || ""),
-          publicKey: args?.publicKey?.toString?.() || String(args?.publicKey || "")
+          message,
+          signedMessage: args?.fullMessage || message,
+          signature: hexEvidence(args?.signature),
+          publicKey: hexEvidence(args?.publicKey || activeAccount?.publicKey)
         };
       },
       subscribe(listener) {
@@ -12620,6 +12630,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
       async disconnect() {
         await feature("aptos:disconnect", "disconnect").disconnect();
         session = null;
+        activeAccount = null;
       }
     };
   }
@@ -52454,6 +52465,7 @@ ${suffix}`;
         chain: "evm",
         address: session.sourceAddress,
         message,
+        signedMessage: message,
         signature: String(signature || "")
       };
     }
@@ -58124,6 +58136,7 @@ Message: ${transactionMessage}.
           chain: "solana",
           address: selected.address,
           message,
+          signedMessage: message,
           signature: btoa(String.fromCharCode(...new Uint8Array(signature))),
           publicKey: selected.address
         };

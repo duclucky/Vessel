@@ -9,8 +9,12 @@ function wallet({
   changeNetwork,
   calls,
   connectError,
+  signMessage,
 } = {}) {
-  const account = { address: { toString: () => '0xabc' } };
+  const account = {
+    address: { toString: () => '0xabc' },
+    publicKey: Uint8Array.from({ length: 32 }, (_, index) => index + 1),
+  };
   let accountListener;
   let networkListener;
   const provider = {
@@ -41,12 +45,38 @@ function wallet({
       'aptos:signAndSubmitTransaction': {
         signAndSubmitTransaction: async ({ payload }) => approved({ hash: payload.function }),
       },
+      'aptos:signMessage': {
+        signMessage: signMessage || (async ({ message, nonce }) => approved({
+          fullMessage: `APTOS\nmessage: ${message}\nnonce: ${nonce}`,
+          signature: Uint8Array.from({ length: 64 }, (_, index) => index),
+          publicKey: account.publicKey,
+        })),
+      },
     },
     emitAccount: async (next) => accountListener?.(next),
     emitNetwork: async (next) => networkListener?.(next),
   };
   return provider;
 }
+
+test('Aptos one-approval evidence preserves canonical and wallet-standard signed messages', async () => {
+  const adapter = createAptosAdapter({
+    id: 'aptos:petra:1',
+    name: 'Petra',
+    provider: wallet(),
+  });
+  await adapter.connect();
+
+  const signed = await adapter.signMessage('VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+
+  assert.equal(signed.message, 'VESSEL_UPLOAD_SESSION\nQuoteId: quote-1');
+  assert.equal(
+    signed.signedMessage,
+    'APTOS\nmessage: VESSEL_UPLOAD_SESSION\nQuoteId: quote-1\nnonce: vessel-upload-session',
+  );
+  assert.match(signed.signature, /^0x[0-9a-f]{128}$/i);
+  assert.match(signed.publicKey, /^0x[0-9a-f]{64}$/i);
+});
 
 test('native Aptos session uses the wallet address as storage address', async () => {
   const provider = wallet();

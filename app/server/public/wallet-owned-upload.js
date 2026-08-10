@@ -1,5 +1,6 @@
 import { createBatchUploadManifest } from './batch-upload.js';
 import { normalizeAptosLikeAddress } from './address-utils.js';
+import { oneApprovalBatchMessage, oneApprovalMessage } from './one-approval-session.js';
 
 const noopRecovery = Object.freeze({
   save() {},
@@ -89,40 +90,6 @@ function oneApprovalEnabled(config, chain) {
   if (!beta?.enabled) return false;
   const chains = Array.isArray(beta.chains) ? beta.chains.map((item) => String(item).toLowerCase()) : [];
   return chains.length === 0 || chains.includes(String(chain || '').toLowerCase());
-}
-
-function oneApprovalMessage({ intent, quote }) {
-  return [
-    'VESSEL_UPLOAD_SESSION',
-    `Chain: ${intent.chain}`,
-    `Source: ${intent.sourceAddress}`,
-    `Storage: ${intent.storageAddress}`,
-    `FileHash: ${intent.fileHash}`,
-    `BlobName: ${intent.blobName}`,
-    `SizeBytes: ${intent.sizeBytes}`,
-    `RetentionDays: ${intent.days}`,
-    `ExpirationMicros: ${intent.expirationMicros}`,
-    `MaxAccountingMicro: ${quote.totalAccountingMicro}`,
-    `QuoteId: ${quote.quoteId}`,
-    `QuoteExpiresAtMs: ${quote.expiresAtMs}`,
-  ].join('\n');
-}
-
-function oneApprovalBatchMessage({ intent, quote, manifest }) {
-  return [
-    'VESSEL_BATCH_UPLOAD_SESSION',
-    `Chain: ${intent.chain}`,
-    `Source: ${intent.sourceAddress}`,
-    `Storage: ${intent.storageAddress}`,
-    `ManifestHash: ${manifest.manifestHash}`,
-    `ItemCount: ${manifest.items.length}`,
-    `TotalSizeBytes: ${manifest.totalBytes}`,
-    `RetentionDays: ${intent.days}`,
-    `ExpirationMicros: ${intent.expirationMicros}`,
-    `MaxAccountingMicro: ${quote.totalAccountingMicro}`,
-    `QuoteId: ${quote.quoteId}`,
-    `QuoteExpiresAtMs: ${quote.expiresAtMs}`,
-  ].join('\n');
 }
 
 async function assertAptosSettlementBalance({ request, session, quote, signal }) {
