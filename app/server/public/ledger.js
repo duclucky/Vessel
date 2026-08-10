@@ -11,6 +11,74 @@ export const LS = {
 
 export const UPLOAD_HISTORY_LIMIT = 3000;
 
+function resourceUrl(value) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  try {
+    return new URL(text).href;
+  } catch {
+    return text;
+  }
+}
+
+function artifactOwner(item) {
+  return canonicalWalletAddress(normalizeAptosLikeAddress(item?.storageAddress || item?.account));
+}
+
+function indexArtifact(map, owner, url, index) {
+  if (!owner || !url) return;
+  const key = `${owner}\u0000${url}`;
+  const indexes = map.get(key) || new Set();
+  indexes.add(index);
+  map.set(key, indexes);
+}
+
+export function linkArtifactsToCollectionManifests(artifacts = [], manifests = []) {
+  const linked = (Array.isArray(artifacts) ? artifacts : []).map((item) => ({ ...item }));
+  const artifactsByUrl = new Map();
+  const metadataByUrl = new Map();
+  linked.forEach((item, index) => {
+    const owner = artifactOwner(item);
+    indexArtifact(artifactsByUrl, owner, resourceUrl(item?.url), index);
+    for (const value of [item?.url, item?.tokenUri, item?.metadataUrl]) {
+      indexArtifact(metadataByUrl, owner, resourceUrl(value), index);
+    }
+  });
+  for (const manifest of Array.isArray(manifests) ? manifests : []) {
+    const collectionId = String(manifest?.id || manifest?.name || '').trim();
+    const collectionName = String(manifest?.name || collectionId);
+    const owner = canonicalWalletAddress(normalizeAptosLikeAddress(manifest?.storageAddress));
+    if (!collectionId || !owner) continue;
+    for (const row of Array.isArray(manifest?.rows) ? manifest.rows : []) {
+      const imageUrl = resourceUrl(row?.imageUrl);
+      const metadataUrl = resourceUrl(row?.metadataUrl);
+      if (!imageUrl || !metadataUrl) continue;
+      const mediaMatches = [...(artifactsByUrl.get(`${owner}\u0000${imageUrl}`) || [])];
+      const metadataMatches = [...(metadataByUrl.get(`${owner}\u0000${metadataUrl}`) || [])];
+      if (mediaMatches.length !== 1 || metadataMatches.length !== 1) continue;
+      const [mediaIndex] = mediaMatches;
+      const [metadataIndex] = metadataMatches;
+      linked[mediaIndex] = {
+        ...linked[mediaIndex],
+        collectionId,
+        collectionName,
+        tokenUri: metadataUrl,
+        metadataUrl,
+      };
+      linked[metadataIndex] = {
+        ...linked[metadataIndex],
+        collectionId,
+        collectionName,
+        tokenUri: metadataUrl,
+        metadataUrl,
+        sourceArtifactKey: linked[mediaIndex].key,
+        sourceArtifactUrl: imageUrl,
+      };
+    }
+  }
+  return linked;
+}
+
 export function createLedger(storage = globalThis.localStorage, now = Date.now) {
   function normalizeAddress(value) {
     return canonicalWalletAddress(value);
@@ -19,7 +87,9 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   function loadMine() {
     try {
       const value = JSON.parse(storage.getItem(LS.mine) || '[]');
-      return Array.isArray(value) ? value : [];
+      return Array.isArray(value)
+        ? linkArtifactsToCollectionManifests(value, loadAllCollectionManifests())
+        : [];
     } catch {
       return [];
     }

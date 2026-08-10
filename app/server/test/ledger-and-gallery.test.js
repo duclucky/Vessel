@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createLedger } from '../public/ledger.js';
+import { createLedger, linkArtifactsToCollectionManifests, LS } from '../public/ledger.js';
 import { reconcileArtifacts } from '../client-src/wallets/artifact-reconciler.js';
 import { readPage, getIds, publicDir } from './html-test-utils.js';
 
@@ -142,6 +142,84 @@ test('single metadata hosting links the TokenURI back to the source artifact', (
   assert.equal(source.tokenUriUpdatedAt, 9_999);
   assert.equal(metadata.sourceArtifactKey, 'media/source.png');
   assert.equal(metadata.sourceArtifactUrl, 'https://shelby.example/media/source.png');
+});
+
+test('collection manifests hydrate historical media and TokenURI relationships', () => {
+  const artifacts = [
+    { key: 'media/1.svg', url: 'https://vessel.example/media/1.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/2.svg', url: 'https://vessel.example/media/2.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/1.json', url: 'https://vessel.example/media/1.json', contentType: 'application/json', account: '0xabc' },
+    { key: 'media/2.json', url: 'https://vessel.example/media/2.json', contentType: 'application/json', account: '0xabc' },
+  ];
+  const manifests = [{
+    id: 'VesselBatchTest',
+    name: 'VesselBatchTest',
+    storageAddress: '0xabc',
+    rows: [
+      { imageUrl: artifacts[0].url, metadataUrl: artifacts[2].url },
+      { imageUrl: artifacts[1].url, metadataUrl: artifacts[3].url },
+    ],
+  }];
+
+  const linked = linkArtifactsToCollectionManifests(artifacts, manifests);
+  assert.equal(linked[0].tokenUri, artifacts[2].url);
+  assert.equal(linked[0].collectionId, 'VesselBatchTest');
+  assert.equal(linked[2].sourceArtifactKey, artifacts[0].key);
+  assert.equal(linked[2].sourceArtifactUrl, artifacts[0].url);
+  assert.equal(linked[2].collectionId, 'VesselBatchTest');
+});
+
+test('Gallery ledger loads historical artifacts through saved collection manifests', () => {
+  const storage = memoryStorage();
+  storage.setItem(LS.mine, JSON.stringify([
+    { key: 'media/1.svg', url: 'https://vessel.example/media/1.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/1.json', url: 'https://vessel.example/media/1.json', contentType: 'application/json', account: '0xabc' },
+  ]));
+  storage.setItem(LS.collectionManifests, JSON.stringify([{
+    id: 'VesselBatchTest',
+    name: 'VesselBatchTest',
+    storageAddress: '0xabc',
+    rows: [{
+      imageUrl: 'https://vessel.example/media/1.svg',
+      metadataUrl: 'https://vessel.example/media/1.json',
+    }],
+  }]));
+
+  const loaded = createLedger(storage).loadMine();
+  assert.equal(loaded.find((item) => item.key === 'media/1.svg').tokenUri, 'https://vessel.example/media/1.json');
+  assert.equal(loaded.find((item) => item.key === 'media/1.json').sourceArtifactKey, 'media/1.svg');
+});
+
+test('collection manifests never link artifacts owned by another storage address', () => {
+  const artifacts = [
+    { key: 'media/1.svg', url: 'https://vessel.example/media/1.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/1.json', url: 'https://vessel.example/media/1.json', contentType: 'application/json', account: '0xabc' },
+  ];
+  const linked = linkArtifactsToCollectionManifests(artifacts, [{
+    id: 'Foreign',
+    storageAddress: '0xdef',
+    rows: [{ imageUrl: artifacts[0].url, metadataUrl: artifacts[1].url }],
+  }]);
+
+  assert.equal(linked[0].collectionId, undefined);
+  assert.equal(linked[1].sourceArtifactKey, undefined);
+});
+
+test('collection manifests skip ambiguous artifact URL matches', () => {
+  const artifacts = [
+    { key: 'media/a.svg', url: 'https://vessel.example/media/shared.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/b.svg', url: 'https://vessel.example/media/shared.svg', contentType: 'image/svg+xml', account: '0xabc' },
+    { key: 'media/1.json', url: 'https://vessel.example/media/1.json', contentType: 'application/json', account: '0xabc' },
+  ];
+  const linked = linkArtifactsToCollectionManifests(artifacts, [{
+    id: 'Ambiguous',
+    storageAddress: '0xabc',
+    rows: [{ imageUrl: artifacts[0].url, metadataUrl: artifacts[2].url }],
+  }]);
+
+  assert.equal(linked[0].collectionId, undefined);
+  assert.equal(linked[1].collectionId, undefined);
+  assert.equal(linked[2].sourceArtifactKey, undefined);
 });
 
 test('ledger custom folders persist local grouping labels without changing source paths', () => {
