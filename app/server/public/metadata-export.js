@@ -364,5 +364,5 @@ export function downloadBlob(blob, fileName, document = globalThis.document) {
   document.body.appendChild(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }
