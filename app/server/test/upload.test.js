@@ -237,6 +237,18 @@ test('upload recovery lookup falls back to source-wallet receipts for the same f
   assert.match(lookup, /recovery\.loadForSource\?\.\(session\)\?\.find\(isRecoverableFile\)/);
 });
 
+test('verified recovery resumes the already selected file without asking for reselect', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(source, /async function resumeRecoveryFile\(file, record, panel = null\)/);
+  const recoveryPanel = source.slice(
+    source.indexOf('async function renderRecoveryPanel()'),
+    source.indexOf('async function doUpload', source.indexOf('async function renderRecoveryPanel()')),
+  );
+
+  assert.match(recoveryPanel, /record\.stage === 'paid'[\s\S]*selectedFile[\s\S]*resumeRecoveryFile\(selectedFile, record, panel\)/);
+  assert.match(recoveryPanel, /label\.textContent = 'RESELECT FILE TO RESUME'/);
+});
+
 test('batch progress uses the Vessel palette in Chromium and Firefox', () => {
   const css = fs.readFileSync(path.join(publicDir, 'vessel.css'), 'utf8');
   assert.match(css, /#batch-progress\s*\{/);

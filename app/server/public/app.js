@@ -216,6 +216,7 @@ function initUpload() {
   let quoteUi = null;
   let batchQueue = null;
   let batchRunning = false;
+  const autoRecoveryAttempts = new Set();
 
   const stepPct = {
     encoding: 20,
@@ -419,6 +420,101 @@ function initUpload() {
       new Error('Vessel fee receipt is still finalizing. No second payment is required. Use Check Payment Status or retry this batch later.'),
       { code: 'receipt_pending', retriable: true, cause: lastError },
     );
+  }
+
+  async function resumeRecoveryFile(file, record, panel = null) {
+    if (!file) return;
+    const hash = await sha256FileHex(file);
+    if (hash !== record.context.fileHash) {
+      toast('Selected file does not match the recovery SHA-256', 'error');
+      return;
+    }
+    panel?.remove();
+    if (record.stage === 'paid') {
+      const recoveredSettlementNetwork = record.context.chain === 'solana'
+        ? 'Solana Devnet'
+        : record.context.chain === 'evm'
+          ? 'Ethereum Sepolia'
+          : record.context.sourceNetwork === 'shelbynet' ? 'ShelbyNet' : 'Aptos Testnet';
+      const recoveredSettlementToken = record.context.chain === 'solana'
+        ? 'Devnet USDC'
+        : record.context.chain === 'evm'
+          ? 'Sepolia ETH'
+          : 'APT + ShelbyUSD';
+      const recoveredExpirationMs = Math.floor(Number(record.context.expirationMicros || 0) / 1000);
+      const config = await api('/api/config').catch(() => ({}));
+      const quote = Object.freeze({
+        ...record.context,
+        quoteId: record.quoteId,
+        quoteToken: record.quoteToken,
+        tierId: record.paymentTier,
+        totalAccountingMicro: record.quotedAccountingMicro,
+        storageAccountingMicro: record.storageCostAccountingMicro,
+        gasAccountingMicro: record.gasAccountingMicro,
+        serviceFeeAccountingMicro: record.serviceFeeAccountingMicro,
+        settlementToken: recoveredSettlementToken,
+        settlementNetwork: recoveredSettlementNetwork,
+        targetExpirationUtc: new Date(recoveredExpirationMs).toISOString(),
+        expiresAtMs: Date.now() + 300_000,
+        solanaAmountMicro: record.quotedAccountingMicro,
+        contractQuote: record.contractQuote,
+        contractSignature: record.contractSignature,
+        quotePublicKey: record.quotePublicKey,
+        settlementDeployment: record.settlementDeployment,
+      });
+      const recoveredContext = Object.freeze({
+        file,
+        intent: Object.freeze({ ...record.context }),
+        quote,
+        config: Object.freeze({ ...config }),
+        walletKey: [
+          record.context.chain,
+          record.context.sourceAddress,
+          record.context.storageAddress,
+        ].join(':').toLowerCase(),
+        settlement: Object.freeze({
+          paidAuthorization: record.paidAuthorization,
+          settlementHash: record.settlementHash,
+        }),
+      });
+      selectedFile = file;
+      activeUploadContext = recoveredContext;
+      const outcome = await doUpload(file, recoveredContext);
+      if (outcome?.ok) renderSuccess(outcome.result);
+      return;
+    }
+    try {
+      recovery.advance(record.id, 'uploading');
+      await walletController().resumeBlobWrite(file, record);
+      recovery.advance(record.id, 'finalizing');
+      const remote = await walletController().listArtifacts();
+      const matched = remote.find((item) => item.blobNameSuffix === record.context.blobName);
+      if (matched?.isWritten) {
+        renderSuccess({
+          key: matched.blobNameSuffix || record.context.blobName,
+          url: matched.url,
+          size: Number(matched.size || record.context.sizeBytes || 0),
+          contentType: matched.contentType || record.context.contentType,
+          ownedByYou: true,
+          account: record.context.storageAddress,
+          expirationMicros: Number(matched.expirationMicros || record.context.expirationMicros),
+          registerTransactionHash: record.registerTransactionHash,
+          acknowledgementHash: record.acknowledgementHash,
+          settlementHash: record.settlementHash,
+          quotedAccountingMicro: record.quotedAccountingMicro,
+        });
+        recovery.complete(record.id);
+        toast('Recovered upload is active on Shelby', 'ok');
+      } else {
+        recovery.advance(record.id, 'recovery_required', { errorCode: 'acknowledgement_timeout' });
+        toast('Bytes were resent; Shelby acknowledgement is still pending', 'warn');
+        await renderRecoveryPanel();
+      }
+    } catch (error) {
+      recovery.advance(record.id, 'recovery_required', { errorCode: error.code || 'resume_failed' });
+      toast(String(error?.message || error).slice(0, 160), 'error');
+      await renderRecoveryPanel();
+    }
   }
 
   function renderBatchState({ phase = 'ready', item = null, error = null } = {}) {
@@ -654,7 +750,9 @@ function initUpload() {
             settlementHash,
             paymentSignature: settlementHash,
           });
-          status.textContent = 'Vessel receipt verified. Reselect the file to finish writing it.';
+          status.textContent = selectedFile
+            ? 'Vessel receipt verified. Finishing the selected upload.'
+            : 'Vessel receipt verified. Select the same file to finish writing it.';
           toast('Vessel fee receipt verified', 'ok');
           await renderRecoveryPanel();
         } catch (error) {
@@ -681,101 +779,14 @@ function initUpload() {
     panel.append(label);
     quoteRoot?.parentElement?.appendChild(panel);
 
-    recoveryInput.addEventListener('change', async () => {
-      const file = recoveryInput.files?.[0];
-      if (!file) return;
-      const hash = await sha256FileHex(file);
-      if (hash !== record.context.fileHash) {
-        toast('Selected file does not match the recovery SHA-256', 'error');
-        return;
-      }
-      panel.remove();
-      if (record.stage === 'paid') {
-        const recoveredSettlementNetwork = record.context.chain === 'solana'
-          ? 'Solana Devnet'
-          : record.context.chain === 'evm'
-            ? 'Ethereum Sepolia'
-            : record.context.sourceNetwork === 'shelbynet' ? 'ShelbyNet' : 'Aptos Testnet';
-        const recoveredSettlementToken = record.context.chain === 'solana'
-          ? 'Devnet USDC'
-          : record.context.chain === 'evm'
-            ? 'Sepolia ETH'
-            : 'APT + ShelbyUSD';
-        const recoveredExpirationMs = Math.floor(Number(record.context.expirationMicros || 0) / 1000);
-        const config = await api('/api/config').catch(() => ({}));
-        const quote = Object.freeze({
-          ...record.context,
-          quoteId: record.quoteId,
-          quoteToken: record.quoteToken,
-          tierId: record.paymentTier,
-          totalAccountingMicro: record.quotedAccountingMicro,
-          storageAccountingMicro: record.storageCostAccountingMicro,
-          gasAccountingMicro: record.gasAccountingMicro,
-          serviceFeeAccountingMicro: record.serviceFeeAccountingMicro,
-          settlementToken: recoveredSettlementToken,
-          settlementNetwork: recoveredSettlementNetwork,
-          targetExpirationUtc: new Date(recoveredExpirationMs).toISOString(),
-          expiresAtMs: Date.now() + 300_000,
-          solanaAmountMicro: record.quotedAccountingMicro,
-          contractQuote: record.contractQuote,
-          contractSignature: record.contractSignature,
-          quotePublicKey: record.quotePublicKey,
-          settlementDeployment: record.settlementDeployment,
-        });
-        const recoveredContext = Object.freeze({
-          file,
-          intent: Object.freeze({ ...record.context }),
-          quote,
-          config: Object.freeze({ ...config }),
-          walletKey: [
-            record.context.chain,
-            record.context.sourceAddress,
-            record.context.storageAddress,
-          ].join(':').toLowerCase(),
-          settlement: Object.freeze({
-            paidAuthorization: record.paidAuthorization,
-            settlementHash: record.settlementHash,
-          }),
-        });
-        selectedFile = file;
-        activeUploadContext = recoveredContext;
-        const outcome = await doUpload(file, recoveredContext);
-        if (outcome?.ok) renderSuccess(outcome.result);
-        return;
-      }
-      try {
-        recovery.advance(record.id, 'uploading');
-        await walletController().resumeBlobWrite(file, record);
-        recovery.advance(record.id, 'finalizing');
-        const remote = await walletController().listArtifacts();
-        const matched = remote.find((item) => item.blobNameSuffix === record.context.blobName);
-        if (matched?.isWritten) {
-          renderSuccess({
-            key: matched.blobNameSuffix || record.context.blobName,
-            url: matched.url,
-            size: Number(matched.size || record.context.sizeBytes || 0),
-            contentType: matched.contentType || record.context.contentType,
-            ownedByYou: true,
-            account: record.context.storageAddress,
-            expirationMicros: Number(matched.expirationMicros || record.context.expirationMicros),
-            registerTransactionHash: record.registerTransactionHash,
-            acknowledgementHash: record.acknowledgementHash,
-            settlementHash: record.settlementHash,
-            quotedAccountingMicro: record.quotedAccountingMicro,
-          });
-          recovery.complete(record.id);
-          toast('Recovered upload is active on Shelby', 'ok');
-        } else {
-          recovery.advance(record.id, 'recovery_required', { errorCode: 'acknowledgement_timeout' });
-          toast('Bytes were resent; Shelby acknowledgement is still pending', 'warn');
-          await renderRecoveryPanel();
-        }
-      } catch (error) {
-        recovery.advance(record.id, 'recovery_required', { errorCode: error.code || 'resume_failed' });
-        toast(String(error?.message || error).slice(0, 160), 'error');
-        await renderRecoveryPanel();
-      }
+    recoveryInput.addEventListener('change', () => {
+      void resumeRecoveryFile(recoveryInput.files?.[0], record, panel);
     });
+    const autoKey = `${record.id}:${record.stage}:${record.updatedAtMs || ''}`;
+    if (record.stage === 'paid' && selectedFile && !autoRecoveryAttempts.has(autoKey)) {
+      autoRecoveryAttempts.add(autoKey);
+      void resumeRecoveryFile(selectedFile, record, panel);
+    }
   }
 
   void renderRecoveryPanel();
