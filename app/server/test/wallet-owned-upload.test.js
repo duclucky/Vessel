@@ -21,7 +21,13 @@ const sessionFor = (chain = 'aptos') => Object.freeze({
   walletName: chain === 'aptos' ? 'Petra' : chain === 'evm' ? 'MetaMask' : 'Phantom',
 });
 
-function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNetwork } = {}) {
+function fixture({
+  chain = 'aptos',
+  writes = true,
+  pendingOnce = false,
+  shelbyNetwork,
+  balances = { aptOctas: 1_000_000, shelbyUsdUnits: 1_000_000 },
+} = {}) {
   let session = sessionFor(chain);
   const requests = [];
   const recoveryCalls = [];
@@ -37,6 +43,7 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
     expirationMicros: 1_802_592_000_000_000,
     encoding: 0,
     tierId: 1,
+    nativeServiceFeeShelbyUsdUnits: '150100',
     totalAccountingMicro: '10000',
     storageAccountingMicro: '6000',
     gasAccountingMicro: '3000',
@@ -92,6 +99,7 @@ function fixture({ chain = 'aptos', writes = true, pendingOnce = false, shelbyNe
     };
     if (path === '/api/quotes/upload') return quote;
     if (path === '/api/quotes/validate') return { quote, requiresConfirmation: false };
+    if (path.startsWith('/api/shelby/accounts/')) return balances;
     throw new Error(`Unexpected request: ${path}`);
   };
   const service = createWalletOwnedUploadService({
@@ -164,6 +172,20 @@ test('service settles, registers, and writes one immutable Aptos file context', 
   assert.equal(flow.settlementCalls, 1);
   assert.equal(flow.walletUploadCalls, 1);
   assert.deepEqual(flow.recoveryCalls.at(-1), ['complete']);
+});
+
+test('Aptos contract upload checks ShelbyUSD before opening Petra', async () => {
+  const flow = fixture({ balances: { aptOctas: 1_000_000, shelbyUsdUnits: 0 } });
+  const validated = await flow.service.validate(await flow.service.quote(file, { days: 30 }));
+  await assert.rejects(
+    () => flow.service.upload(validated),
+    (error) => error.code === 'insufficient_shelby_usd'
+      && /ShelbyUSD/.test(error.message)
+      && Number(error.required) === 150100
+      && Number(error.balance) === 0,
+  );
+  assert.equal(flow.settlementCalls, 0);
+  assert.equal(flow.requests.some((entry) => entry.path.startsWith('/api/shelby/accounts/')), true);
 });
 
 test('quote context follows the active ShelbyNet runtime instead of Aptos Testnet labels', async () => {

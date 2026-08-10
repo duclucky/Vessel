@@ -68,6 +68,29 @@ function storageNetworkFor(config) {
     || 'shelby-testnet';
 }
 
+function positiveUnits(value) {
+  const text = String(value ?? '0').trim();
+  if (!/^\d+$/.test(text)) return 0n;
+  return BigInt(text);
+}
+
+async function assertAptosSettlementBalance({ request, session, quote, signal }) {
+  const required = positiveUnits(
+    quote?.nativeServiceFeeShelbyUsdUnits
+      || quote?.contractQuote?.amount
+      || 0,
+  );
+  if (required <= 0n) return;
+  const balances = await request(`/api/shelby/accounts/${encodeURIComponent(session.sourceAddress)}/balances`, { signal });
+  const balance = positiveUnits(balances?.shelbyUsdUnits);
+  if (balance < required) {
+    throw uploadError('Add testnet ShelbyUSD to continue', 'insufficient_shelby_usd', {
+      required: required.toString(),
+      balance: balance.toString(),
+    });
+  }
+}
+
 export function createWalletOwnedUploadService({
   request,
   controller,
@@ -267,6 +290,14 @@ export function createWalletOwnedUploadService({
         if (balance < required) {
           throw uploadError('Add testnet USDC to continue', 'insufficient_usdc', { required, balance });
         }
+      }
+      if (session.chain === 'aptos') {
+        await assertAptosSettlementBalance({
+          request,
+          session,
+          quote: validated.quote,
+          signal: callbacks.signal,
+        });
       }
       callbacks.onStep?.(validated.settlementTransactionId ? 'settlementPending' : 'settlementApproval');
       const deployment = deploymentFor(session.chain, validated.quote, config);
