@@ -1163,8 +1163,9 @@ function folderCollectionId(it) {
 }
 
 function galleryCollectionId(it) {
+  const explicitCollection = String(it?.collectionId || '').trim();
   const customFolder = String(it?.customFolder || '').trim();
-  return customFolder || folderCollectionId(it);
+  return explicitCollection || customFolder || folderCollectionId(it);
 }
 
 function isMetadataArtifact(it) {
@@ -1538,7 +1539,10 @@ function exportItemsForGallery(items, activeCollection = '') {
   if (!activeCollection) return items || [];
   const media = (items || []).filter((item) => isMediaArtifact(item) && galleryCollectionId(item) === activeCollection);
   const mediaKeys = new Set(media.map((item) => item.key));
-  const metadata = (items || []).filter((item) => isMetadataArtifact(item) && mediaKeys.has(item.sourceArtifactKey));
+  const metadata = (items || []).filter((item) => (
+    isMetadataArtifact(item)
+    && (galleryCollectionId(item) === activeCollection || mediaKeys.has(item.sourceArtifactKey))
+  ));
   return [...media, ...metadata];
 }
 

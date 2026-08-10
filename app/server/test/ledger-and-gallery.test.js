@@ -388,8 +388,10 @@ test('Gallery supports media selection and folder-scoped sheet exports', () => {
   assert.match(gallery, /promptCustomFolderName/);
   assert.match(source, /js-select-artifact/);
   assert.match(source, /function galleryCollectionId/);
-  assert.match(source, /customFolder \|\| folderCollectionId/);
+  assert.match(source, /const explicitCollection = String\(it\?\.collectionId \|\| ''\)\.trim\(\)/);
+  assert.match(source, /explicitCollection \|\| customFolder \|\| folderCollectionId/);
   assert.match(source, /function exportItemsForGallery/);
+  assert.match(source, /galleryCollectionId\(item\) === activeCollection \|\| mediaKeys\.has\(item\.sourceArtifactKey\)/);
   assert.match(gallery, /exportItemsForGallery\(items, activeGalleryCollection\)/);
   assert.match(gallery, /const metadataItems = activeCollection/);
   assert.match(gallery, /metadataItems\.map\(metadataCard\)/);
