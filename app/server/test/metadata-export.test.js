@@ -91,6 +91,43 @@ test('collection manifest maps images to hosted metadata TokenURIs as styled she
   assert.doesNotMatch(entries.get('xl/worksheets/sheet1.xml'), /sep=,/);
 });
 
+test('collection manifest reconciles nested hosted paths by unique metadata basename', () => {
+  const manifest = buildCollectionManifest([
+    {
+      sourcePath: 'images/1.png',
+      outputPath: '1.json',
+      metadata: { name: 'One', image: 'https://vessel.example/media/1.png' },
+    },
+    {
+      sourcePath: 'images/2.png',
+      outputPath: '2.json',
+      metadata: { name: 'Two', image: 'https://vessel.example/media/2.png' },
+    },
+  ], [
+    { sourcePath: 'Vessel Live Batch/metadata/1.json', url: 'https://vessel.example/metadata/1.json' },
+    { sourcePath: 'Vessel Live Batch/metadata/2.json', url: 'https://vessel.example/metadata/2.json' },
+  ]);
+
+  assert.deepEqual(manifest.tokenUris, [
+    'https://vessel.example/metadata/1.json',
+    'https://vessel.example/metadata/2.json',
+  ]);
+});
+
+test('collection manifest does not guess when nested hosted basenames collide', () => {
+  const manifest = buildCollectionManifest([{
+    sourcePath: 'images/1.png',
+    outputPath: '1.json',
+    metadata: { name: 'One', image: 'https://vessel.example/media/1.png' },
+  }], [
+    { sourcePath: 'First/metadata/1.json', url: 'https://vessel.example/first/1.json' },
+    { sourcePath: 'Second/metadata/1.json', url: 'https://vessel.example/second/1.json' },
+  ]);
+
+  assert.deepEqual(manifest.tokenUris, []);
+  assert.equal(manifest.rows[0].metadataUrl, '');
+});
+
 test('batch ZIP contains deterministic JSON paths and a redacted report', async () => {
   const zip = await buildMetadataZip([
     { outputPath: 'metadata/002.json', serialized: '{"name":"Two"}\n' },

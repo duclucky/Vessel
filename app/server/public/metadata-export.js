@@ -109,6 +109,14 @@ function basename(value) {
   return String(value || '').replaceAll('\\', '/').split('/').pop() || '';
 }
 
+function manifestPath(value) {
+  return String(value || '')
+    .trim()
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+    .replace(/\/{2,}/g, '/');
+}
+
 function hostedUrl(result) {
   return String(result?.url || result?.tokenUri || '').trim();
 }
@@ -286,14 +294,22 @@ export function buildCollectionManifest(items, hostedResults = [], {
   collectionName = '',
 } = {}) {
   const resultsByPath = new Map();
+  const resultsByBasename = new Map();
   for (const result of hostedResults || []) {
-    const path = String(result?.sourcePath || result?.metadataPath || result?.path || '').replaceAll('\\', '/');
-    if (path) resultsByPath.set(path, result);
+    const path = manifestPath(result?.sourcePath || result?.metadataPath || result?.path);
+    if (!path) continue;
+    resultsByPath.set(path, result);
+    const fileName = basename(path);
+    const candidates = resultsByBasename.get(fileName) || [];
+    candidates.push(result);
+    resultsByBasename.set(fileName, candidates);
   }
 
   const rows = (items || []).map((item) => {
-    const metadataPath = String(item?.outputPath || '').replaceAll('\\', '/');
-    const result = resultsByPath.get(metadataPath) || resultsByPath.get(basename(metadataPath));
+    const metadataPath = manifestPath(item?.outputPath);
+    const basenameMatches = resultsByBasename.get(basename(metadataPath)) || [];
+    const result = resultsByPath.get(metadataPath)
+      || (basenameMatches.length === 1 ? basenameMatches[0] : null);
     return Object.freeze({
       collection: String(collectionName || ''),
       itemName: String(item?.metadata?.name || ''),
