@@ -86,6 +86,7 @@ test('Metadata is discoverable from desktop and mobile navigation on every page'
     'gallery.html',
     'latency.html',
     'metadata.html',
+    'launch.html',
   ]) {
     const html = readPage(page);
     const links = html.match(/href="\/metadata\.html"[^>]*>Metadata<\/a>/g) || [];
@@ -93,7 +94,7 @@ test('Metadata is discoverable from desktop and mobile navigation on every page'
   }
 });
 
-test('the five-link navigation stays collapsed until the large breakpoint', () => {
+test('the six-link navigation stays collapsed until the large breakpoint', () => {
   for (const page of [
     'index.html',
     'identity.html',
@@ -101,6 +102,7 @@ test('the five-link navigation stays collapsed until the large breakpoint', () =
     'gallery.html',
     'latency.html',
     'metadata.html',
+    'launch.html',
   ]) {
     const html = readPage(page);
     assert.match(html, /hidden items-center gap-7 lg:flex/, page);

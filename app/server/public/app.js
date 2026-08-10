@@ -13,6 +13,7 @@ import { createBatchQueue, runBatchQueue } from './batch-upload.js';
 import { collectDirectoryFiles, supportsDirectoryPicker } from './directory-picker.js';
 import { contentAddressedBlobName, sha256FileHex } from './content-address.js';
 import { initMetadataPage } from './metadata-page.js';
+import { initLaunchKitPage } from './launch-kit-page.js';
 import { buildStyledWorkbook, downloadBlob } from './metadata-export.js';
 import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
@@ -2074,6 +2075,18 @@ async function initMetadata() {
   walletController()?.subscribe?.((next) => metadataPage.refreshWallet(next));
 }
 
+async function initLaunch() {
+  return initLaunchKitPage({
+    document,
+    location,
+    ledger,
+    getWalletState: () => window.VesselWallets?.getState?.() || {},
+    groupVaultCollections,
+    notify: toast,
+    downloadBlob,
+  });
+}
+
 /* ------------------------------- boot --------------------------------- */
 let walletUi = null;
 const deprecatedWalletKeys = ['vessel_addr', 'vessel_sa', 'vessel_verified'];
@@ -2094,7 +2107,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   renderWallet();
   const p = page();
-  ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, collection: initCollection, proof: initProof, latency: initLatency, metadata: initMetadata }[p] || (() => {}))();
+  ({ index: initLanding, identity: initIdentity, upload: initUpload, gallery: initGallery, collection: initCollection, proof: initProof, latency: initLatency, metadata: initMetadata, launch: initLaunch }[p] || (() => {}))();
 });
 
 window.Vessel = { copy, api, walletController };

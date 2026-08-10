@@ -13,7 +13,7 @@ import {
 
 const pages = [
   'index.html', 'identity.html', 'upload.html', 'gallery.html',
-  'latency.html', 'metadata.html',
+  'latency.html', 'metadata.html', 'launch.html',
 ];
 const publicPages = fs.readdirSync(publicDir).filter((file) => file.endsWith('.html'));
 
@@ -74,7 +74,7 @@ test('browser modules parse after the shell consolidation', async () => {
 
 test('wallet bundle source is present and every dApp page loads it before app.js', () => {
   assert.equal(fs.existsSync(path.join(publicDir, 'vessel-wallets.js')), true);
-  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html']) {
+  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html', 'launch.html']) {
     const html = readPage(page);
     assert.match(html, /<script src="\/vessel-wallets\.js"><\/script>/, page);
     assert.ok(
@@ -85,7 +85,7 @@ test('wallet bundle source is present and every dApp page loads it before app.js
 });
 
 test('every dApp page uses a real wallet-summary button', () => {
-  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html']) {
+  for (const page of ['identity.html', 'upload.html', 'gallery.html', 'latency.html', 'metadata.html', 'launch.html']) {
     const html = readPage(page);
     assert.match(html, /<button\b[^>]*data-wallet-summary[^>]*>/, `${page}: wallet button`);
     assert.doesNotMatch(html, /<a\b[^>]*data-wallet-summary/, `${page}: wallet action must not be a link`);
