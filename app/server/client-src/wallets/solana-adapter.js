@@ -153,6 +153,17 @@ export function createSolanaAdapter(descriptor, { legacyProvider } = {}) {
   return {
     daaProvider: () => daaProvider,
     officialWallet: () => officialWalletFor(),
+    async signMessage(message) {
+      const selected = requireAccount();
+      const signature = await officialWalletFor(selected).signMessage(new TextEncoder().encode(message));
+      return {
+        chain: 'solana',
+        address: selected.address,
+        message,
+        signature: btoa(String.fromCharCode(...new Uint8Array(signature))),
+        publicKey: selected.address,
+      };
+    },
     setStorageAddress(value) {
       storageAddress = String(value || '');
     },

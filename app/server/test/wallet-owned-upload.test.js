@@ -26,6 +26,7 @@ function fixture({
   writes = true,
   pendingOnce = false,
   shelbyNetwork,
+  oneApprovalBeta,
   balances = { aptOctas: 1_000_000, shelbyUsdUnits: 1_000_000 },
 } = {}) {
   let session = sessionFor(chain);
@@ -33,6 +34,8 @@ function fixture({
   const recoveryCalls = [];
   let settlementCalls = 0;
   let walletUploadCalls = 0;
+  let authorizationCalls = 0;
+  let oneApprovalUploadCalls = 0;
   let pending = pendingOnce;
   const quote = Object.freeze({
     quoteId: 'quote-1',
@@ -96,6 +99,7 @@ function fixture({
         configVersion: '1',
         [chain]: quote.settlementDeployment.chain,
       },
+      oneApprovalBeta,
     };
     if (path === '/api/quotes/upload') return quote;
     if (path === '/api/quotes/validate') return { quote, requiresConfirmation: false };
@@ -116,6 +120,30 @@ function fixture({
         throw Object.assign(new Error('Receipt pending'), { code: 'receipt_pending' });
       }
       return { paidAuthorization: 'paid-auth', receipt: { transactionId: id } };
+    },
+    authorizeUploadSession: async ({ message, intent }) => {
+      authorizationCalls += 1;
+      assert.match(message, /VESSEL_UPLOAD_SESSION/);
+      assert.equal(intent.fileHash, HASH);
+      return {
+        message,
+        signature: 'wallet-session-signature',
+        address: session.sourceAddress,
+        chain: session.chain,
+      };
+    },
+    submitOneApprovalUpload: async ({ authorization, intent }) => {
+      oneApprovalUploadCalls += 1;
+      assert.equal(authorization.signature, 'wallet-session-signature');
+      assert.equal(intent.fileHash, HASH);
+      return {
+        key: `media/${HASH}.json`,
+        url: `https://example.test/api/media/media/${HASH}.json`,
+        size: file.size,
+        contentType: file.type,
+        account: `0x${'55'.repeat(32)}`,
+        authorizationId: 'one-approval-auth-1',
+      };
     },
     createUploadIntent: (input) => Object.freeze({
       operation: 'upload',
@@ -141,6 +169,8 @@ function fixture({
     quote,
     get settlementCalls() { return settlementCalls; },
     get walletUploadCalls() { return walletUploadCalls; },
+    get authorizationCalls() { return authorizationCalls; },
+    get oneApprovalUploadCalls() { return oneApprovalUploadCalls; },
     changeSession(next) { session = next; },
   };
 }
@@ -172,6 +202,28 @@ test('service settles, registers, and writes one immutable Aptos file context', 
   assert.equal(flow.settlementCalls, 1);
   assert.equal(flow.walletUploadCalls, 1);
   assert.deepEqual(flow.recoveryCalls.at(-1), ['complete']);
+});
+
+test('one-approval beta uploads through a bounded session authorization instead of three wallet transactions', async () => {
+  const flow = fixture({
+    oneApprovalBeta: { enabled: true, chains: ['aptos', 'solana', 'evm'] },
+  });
+  const result = await flow.service.upload(
+    await flow.service.validate(await flow.service.quote(file, { days: 30 })),
+  );
+
+  assert.equal(result.authorizedByYou, true);
+  assert.equal(result.ownedByYou, false);
+  assert.equal(result.paymentMode, 'one-approval-beta');
+  assert.equal(result.account, `0x${'55'.repeat(32)}`);
+  assert.equal(result.quotedAccountingMicro, '10000');
+  assert.equal(result.storageCostAccountingMicro, '6000');
+  assert.equal(result.gasAccountingMicro, '3000');
+  assert.equal(result.serviceFeeAccountingMicro, '1000');
+  assert.equal(flow.authorizationCalls, 1);
+  assert.equal(flow.oneApprovalUploadCalls, 1);
+  assert.equal(flow.settlementCalls, 0);
+  assert.equal(flow.walletUploadCalls, 0);
 });
 
 test('Aptos contract upload checks ShelbyUSD before opening Petra', async () => {

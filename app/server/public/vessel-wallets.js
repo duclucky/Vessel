@@ -12559,6 +12559,22 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
           await feature("aptos:signAndSubmitTransaction", "signAndSubmitTransaction").signAndSubmitTransaction({ payload: data })
         );
       },
+      async signMessage(message) {
+        const signer = feature("aptos:signMessage", "signMessage", { optional: true });
+        if (!signer) throw walletError(`${descriptor.name} does not support one-approval session signing`, "one_approval_unavailable");
+        const response = await signer.signMessage({
+          message,
+          nonce: "vessel-upload-session"
+        });
+        const args = response?.status ? approvedArgs(response) : response;
+        return {
+          chain: "aptos",
+          address: session?.sourceAddress,
+          message: args?.fullMessage || message,
+          signature: args?.signature?.toString?.() || String(args?.signature || ""),
+          publicKey: args?.publicKey?.toString?.() || String(args?.publicKey || "")
+        };
+      },
       subscribe(listener) {
         listeners2.add(listener);
         bindEvents();
@@ -52388,11 +52404,25 @@ ${suffix}`;
       }
       return signed2.args;
     }
+    async function signMessage(message) {
+      if (!session?.sourceAddress) throw evmError("Connect an EVM wallet before signing", "provider_unavailable");
+      const signature = await walletRequest({
+        method: "personal_sign",
+        params: [message, session.sourceAddress]
+      });
+      return {
+        chain: "evm",
+        address: session.sourceAddress,
+        message,
+        signature: String(signature || "")
+      };
+    }
     return Object.freeze({
       provider,
       connect,
       ensureNetwork,
       signAptosTransaction,
+      signMessage,
       disconnect() {
         session = null;
         officialShelby?.disconnect?.();
@@ -58047,6 +58077,17 @@ Message: ${transactionMessage}.
     return {
       daaProvider: () => daaProvider,
       officialWallet: () => officialWalletFor(),
+      async signMessage(message) {
+        const selected = requireAccount();
+        const signature = await officialWalletFor(selected).signMessage(new TextEncoder().encode(message));
+        return {
+          chain: "solana",
+          address: selected.address,
+          message,
+          signature: btoa(String.fromCharCode(...new Uint8Array(signature))),
+          publicKey: selected.address
+        };
+      },
       setStorageAddress(value) {
         storageAddress = String(value || "");
       },
@@ -58338,6 +58379,20 @@ Message: ${transactionMessage}.
           contractQuote,
           contractSignature
         })
+      };
+    },
+    async authorizeUploadSession({ message }) {
+      const session = controller.getState().session;
+      const adapter = controller.getActiveAdapter();
+      if (!session || typeof adapter?.signMessage !== "function") {
+        throw new Error("This wallet cannot create a one-approval upload session");
+      }
+      const signed2 = await adapter.signMessage(message);
+      return {
+        ...signed2,
+        chain: signed2.chain || session.chain,
+        address: signed2.address || session.sourceAddress,
+        storageAddress: session.storageAddress
       };
     },
     async listArtifacts() {

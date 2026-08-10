@@ -26,9 +26,9 @@
 
   <main id="main-content" class="vessel-page pb-24 pt-40 md:pt-52">
     <header class="mx-auto max-w-3xl text-center">
-      <p class="vessel-kicker text-primary-container">Wallet-owned upload</p>
+      <p class="vessel-kicker text-primary-container">One-approval beta upload</p>
       <h1 class="mt-5 font-display text-5xl font-bold tracking-[-0.04em] md:text-7xl">Initialize an Artifact</h1>
-      <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Aptos, Solana, and Ethereum wallets approve a source-chain Vessel charge that records a Vessel fee receipt. Solana and Ethereum use official Shelby DAA for the storage identity. The quote includes Shelby storage cost, testnet DAA gas funding, and the 1% Vessel service fee.</p>
+      <p class="mx-auto mt-5 max-w-2xl text-base leading-7 text-on-surface-variant md:text-lg">Aptos, Solana, and Ethereum wallets approve one bounded upload session. Solana and Ethereum still use official Shelby DAA for identity, while Vessel uses a beta ShelbyNet service account to finish the register, write, and commit steps. The proof links the artifact to the wallet, file hash, retention, and quoted cost.</p>
     </header>
 
     <section class="mt-14 grid gap-6 lg:grid-cols-[0.68fr_1.32fr]" aria-label="Wallet-owned Shelby upload">
@@ -37,7 +37,7 @@
           <p class="vessel-kicker text-primary">What happens</p>
           <ol class="mt-6 space-y-5">
             <li class="flex gap-4"><span class="vessel-technical flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary-container/20 text-xs text-primary">01</span><div><h2 class="font-display font-semibold">Your wallet signs</h2><p class="mt-1 text-sm leading-6 text-on-surface-variant">The connected wallet authorizes the blob namespace; Vessel never receives a seed phrase.</p></div></li>
-            <li class="flex gap-4"><span class="vessel-technical flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-secondary/20 text-xs text-secondary">02</span><div><h2 class="font-display font-semibold">A contract issues the receipt</h2><p class="mt-1 text-sm leading-6 text-on-surface-variant">The source-chain Vessel charge accounts for Shelby storage cost and testnet DAA gas funding, then adds the 1% Vessel service fee.</p></div></li>
+            <li class="flex gap-4"><span class="vessel-technical flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-secondary/20 text-xs text-secondary">02</span><div><h2 class="font-display font-semibold">Vessel runs the Shelby write</h2><p class="mt-1 text-sm leading-6 text-on-surface-variant">The signed session is bound to the selected file hash, wallet, retention window, and maximum quoted cost. Strict wallet-owned settlement remains available as a fallback.</p></div></li>
             <li class="flex gap-4"><span class="vessel-technical flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-tertiary-container/20 text-xs text-tertiary-container">03</span><div><h2 class="font-display font-semibold">Shelby stores</h2><p class="mt-1 text-sm leading-6 text-on-surface-variant">The registered bytes are written under your native or derived Aptos storage address.</p></div></li>
           </ol>
         </article>
@@ -59,7 +59,7 @@
             <input id="file-input" class="sr-only" type="file" accept="image/*,video/*,application/json,text/plain">
             <input id="folder-input" class="sr-only" type="file" webkitdirectory multiple accept="image/*,video/*,application/json,text/plain">
             <p class="vessel-technical mt-6 text-[11px] text-outline">25 MB per file · 1 GB beta limit · testnet artifacts expire</p>
-            <p class="mt-3 max-w-lg text-xs leading-5 text-on-surface-variant">The mainnet release will support larger batches. The wallet may request approval for each file because every artifact receives its own Vessel fee receipt.</p>
+            <p class="mt-3 max-w-lg text-xs leading-5 text-on-surface-variant">The mainnet release will support larger batches. One-approval beta uses one wallet signature per selected artifact or upload session; strict wallet-owned mode may still request multiple approvals.</p>
           </div>
 
           <section id="batch-summary" class="mt-6 hidden rounded-control border border-primary-container/15 bg-surface-lowest/45 p-5" aria-labelledby="batch-summary-title">

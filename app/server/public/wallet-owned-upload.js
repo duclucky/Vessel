@@ -74,6 +74,30 @@ function positiveUnits(value) {
   return BigInt(text);
 }
 
+function oneApprovalEnabled(config, chain) {
+  const beta = config?.oneApprovalBeta;
+  if (!beta?.enabled) return false;
+  const chains = Array.isArray(beta.chains) ? beta.chains.map((item) => String(item).toLowerCase()) : [];
+  return chains.length === 0 || chains.includes(String(chain || '').toLowerCase());
+}
+
+function oneApprovalMessage({ intent, quote }) {
+  return [
+    'VESSEL_UPLOAD_SESSION',
+    `Chain: ${intent.chain}`,
+    `Source: ${intent.sourceAddress}`,
+    `Storage: ${intent.storageAddress}`,
+    `FileHash: ${intent.fileHash}`,
+    `BlobName: ${intent.blobName}`,
+    `SizeBytes: ${intent.sizeBytes}`,
+    `RetentionDays: ${intent.days}`,
+    `ExpirationMicros: ${intent.expirationMicros}`,
+    `MaxAccountingMicro: ${quote.totalAccountingMicro}`,
+    `QuoteId: ${quote.quoteId}`,
+    `QuoteExpiresAtMs: ${quote.expiresAtMs}`,
+  ].join('\n');
+}
+
 async function assertAptosSettlementBalance({ request, session, quote, signal }) {
   const required = positiveUnits(
     quote?.nativeServiceFeeShelbyUsdUnits
@@ -97,6 +121,8 @@ export function createWalletOwnedUploadService({
   getSolana = () => null,
   recovery = noopRecovery,
   settleContractQuote,
+  authorizeUploadSession,
+  submitOneApprovalUpload,
   createUploadIntent,
   sha256FileHex,
   contentAddressedBlobName,
@@ -118,6 +144,28 @@ export function createWalletOwnedUploadService({
 
   const getController = () => (typeof controller === 'function' ? controller() : controller);
   const state = () => getController()?.getState?.() || {};
+  const defaultAuthorizeUploadSession = (input) => {
+    const signer = authorizeUploadSession || getController()?.authorizeUploadSession;
+    if (typeof signer !== 'function') {
+      throw uploadError('This wallet cannot create a one-approval upload session', 'one_approval_unavailable');
+    }
+    return signer(input);
+  };
+  const defaultSubmitOneApprovalUpload = ({ file: uploadFile, intent, quote, authorization, signal }) => {
+    if (typeof submitOneApprovalUpload === 'function') {
+      return submitOneApprovalUpload({ file: uploadFile, intent, quote, authorization, signal });
+    }
+    const form = new FormData();
+    form.append('file', uploadFile);
+    form.append('quoteToken', quote.quoteToken);
+    form.append('uploadContext', JSON.stringify(intent));
+    form.append('authorization', JSON.stringify(authorization));
+    return request('/api/one-approval/uploads', {
+      method: 'POST',
+      signal,
+      form,
+    });
+  };
 
   function requireSession() {
     const current = state();
@@ -280,6 +328,50 @@ export function createWalletOwnedUploadService({
     }
     const config = validated.config || await loadConfig(callbacks.signal);
     let settlement = validated.settlement;
+
+    if (!settlement && oneApprovalEnabled(config, session.chain)) {
+      callbacks.onStep?.('sessionApproval');
+      const message = oneApprovalMessage({ intent: validated.intent, quote: validated.quote });
+      const authorization = await defaultAuthorizeUploadSession({
+        message,
+        intent: validated.intent,
+        quote: validated.quote,
+        session,
+      });
+      recovery.advance(validated.quote.quoteId, 'paid', {
+        paymentSignature: authorization?.signature || authorization?.transactionId || authorization?.id,
+      });
+      callbacks.onStep?.('uploading');
+      const result = await defaultSubmitOneApprovalUpload({
+        file: validated.file,
+        intent: validated.intent,
+        quote: validated.quote,
+        authorization: Object.freeze({
+          ...authorization,
+          message,
+          chain: authorization?.chain || session.chain,
+          address: authorization?.address || session.sourceAddress,
+          storageAddress: session.storageAddress,
+        }),
+        signal: callbacks.signal,
+      });
+      recovery.complete(validated.quote.quoteId);
+      return Object.freeze({
+        ...result,
+        contentType: validated.file.type || result.contentType,
+        ownedByYou: false,
+        authorizedByYou: true,
+        paymentMode: 'one-approval-beta',
+        sourceAddress: session.sourceAddress,
+        storageAddress: session.storageAddress,
+        quotedAccountingMicro: validated.quote.totalAccountingMicro,
+        storageCostAccountingMicro: validated.quote.storageAccountingMicro,
+        gasAccountingMicro: validated.quote.gasAccountingMicro,
+        serviceFeeAccountingMicro: validated.quote.serviceFeeAccountingMicro,
+        totalAccountingMicro: validated.quote.totalAccountingMicro,
+        lastReconciledAt: now(),
+      });
+    }
 
     if (!settlement) {
       if (session.chain === 'solana') {

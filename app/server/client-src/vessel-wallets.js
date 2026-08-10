@@ -145,6 +145,20 @@ window.VesselWallets = {
       }),
     };
   },
+  async authorizeUploadSession({ message }) {
+    const session = controller.getState().session;
+    const adapter = controller.getActiveAdapter();
+    if (!session || typeof adapter?.signMessage !== 'function') {
+      throw new Error('This wallet cannot create a one-approval upload session');
+    }
+    const signed = await adapter.signMessage(message);
+    return {
+      ...signed,
+      chain: signed.chain || session.chain,
+      address: signed.address || session.sourceAddress,
+      storageAddress: session.storageAddress,
+    };
+  },
   async listArtifacts() {
     const session = controller.getState().session;
     if (!session?.storageAddress) return [];

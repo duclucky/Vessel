@@ -220,6 +220,7 @@ function initUpload() {
 
   const stepPct = {
     encoding: 20,
+    sessionApproval: 35,
     signing: 40,
     settlementApproval: 55,
     settlementPending: 65,
@@ -230,6 +231,7 @@ function initUpload() {
   };
   const stepMsg = {
     encoding: 'ENCODING COMMITMENTS',
+    sessionApproval: 'APPROVE UPLOAD SESSION',
     signing: 'SIGNING OWNERSHIP',
     settlementApproval: 'APPROVE VESSEL FEE RECEIPT',
     settlementPending: 'CONFIRMING FEE RECEIPT',
@@ -932,6 +934,9 @@ function initUpload() {
       const paid = r.paidUsdc ? ` · paid ${r.paidUsdc} USDC` : '';
       toast('Stored on Shelby — owned by YOUR wallet ✓' + (r.paidUsdc ? `, paid${paid}` : ''), 'ok');
       const k = $('#result-key'); if (k) k.textContent = r.key + '  (owned by your wallet' + paid + ')';
+    } else if (r.authorizedByYou) {
+      toast('Stored on Shelby — one-approval beta session authorized by your wallet', 'ok');
+      const k = $('#result-key'); if (k) k.textContent = `${r.key}  (authorized by your wallet · beta service account)`;
     }
     $('#copy-url')?.addEventListener('click', () => copy(r.url), { once: false });
     const meta = $('#to-metadata'); if (meta) meta.onclick = () => (location.href = '/metadata.html');

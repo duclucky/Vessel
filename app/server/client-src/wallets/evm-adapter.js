@@ -172,11 +172,26 @@ export function createEvmDaaAdapter({
     return signed.args;
   }
 
+  async function signMessage(message) {
+    if (!session?.sourceAddress) throw evmError('Connect an EVM wallet before signing', 'provider_unavailable');
+    const signature = await walletRequest({
+      method: 'personal_sign',
+      params: [message, session.sourceAddress],
+    });
+    return {
+      chain: 'evm',
+      address: session.sourceAddress,
+      message,
+      signature: String(signature || ''),
+    };
+  }
+
   return Object.freeze({
     provider,
     connect,
     ensureNetwork,
     signAptosTransaction,
+    signMessage,
     disconnect() {
       session = null;
       officialShelby?.disconnect?.();

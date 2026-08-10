@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { Aptos, AptosConfig } from '@aptos-labs/ts-sdk';
@@ -286,6 +287,61 @@ app.post('/api/upload', upload.single('file'), async (req, res) => {
       : config.defaultStorageDays * 86_400;
     const result = await store.put(key, data, { contentType: mime, owner: req.body?.owner, expiresInSec });
     send(res, 200, result);
+  } catch (e) { fail(res, e); }
+});
+
+app.post('/api/one-approval/uploads', upload.single('file'), async (req, res) => {
+  try {
+    if (!requireShelbyWrites(res)) return;
+    if (!config.oneApprovalBetaEnabled) {
+      return send(res, 503, {
+        error: 'One-approval beta uploads are disabled',
+        code: 'one_approval_disabled',
+      });
+    }
+    if (!quoteManager) {
+      return send(res, 503, {
+        error: 'Live Shelby pricing is unavailable',
+        code: 'pricing_unavailable',
+        retriable: true,
+      });
+    }
+    if (!req.file) return send(res, 400, { error: 'file field required', code: 'file_required' });
+    const context = normalizeUploadQuoteContext(JSON.parse(String(req.body?.uploadContext || '{}')));
+    const quote = quoteManager.validate(String(req.body?.quoteToken || ''), context);
+    const authorization = JSON.parse(String(req.body?.authorization || '{}'));
+    const signedMessage = String(authorization.message || '');
+    if (
+      String(authorization.chain || '').toLowerCase() !== context.chain
+      || String(authorization.address || '').toLowerCase() !== String(context.sourceAddress).toLowerCase()
+      || !signedMessage.includes('VESSEL_UPLOAD_SESSION')
+      || !signedMessage.includes(`FileHash: ${context.fileHash}`)
+      || !signedMessage.includes(`QuoteId: ${quote.quoteId}`)
+      || !String(authorization.signature || authorization.transactionId || authorization.id || '').trim()
+    ) {
+      return send(res, 401, { error: 'Invalid upload session authorization', code: 'invalid_upload_authorization' });
+    }
+    const actualHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+    if (actualHash !== context.fileHash) {
+      return send(res, 409, { error: 'Uploaded file does not match the signed session hash', code: 'file_hash_changed' });
+    }
+    const expiresInSec = Math.max(60, Math.ceil((context.expirationMicros / 1_000 - Date.now()) / 1000));
+    const result = await store.put(context.blobName, new Uint8Array(req.file.buffer), {
+      contentType: context.contentType,
+      owner: context.sourceAddress,
+      expiresInSec,
+    });
+    send(res, 200, {
+      ...result,
+      account: store.address?.toString?.() || '',
+      sourceAddress: context.sourceAddress,
+      storageAddress: context.storageAddress,
+      authorizationId: crypto.createHash('sha256')
+        .update(`${quote.quoteId}:${context.fileHash}:${authorization.signature || authorization.transactionId || authorization.id}`)
+        .digest('hex')
+        .slice(0, 24),
+      paymentMode: 'one-approval-beta',
+    });
   } catch (e) { fail(res, e); }
 });
 
@@ -616,6 +672,11 @@ app.get('/api/config', (_req, res) => {
       solana: settlementDeployments.solana,
       ...(settlementDeployments.evm ? { evm: settlementDeployments.evm } : {}),
     } : { enabled: false },
+    oneApprovalBeta: {
+      enabled: config.oneApprovalBetaEnabled,
+      chains: ['aptos', 'solana', 'evm'],
+      custody: 'vessel-service-account',
+    },
     sponsored: !!paidAuthorizations
       && !!shelbyGateway
       && settlementDeployments.enabled,

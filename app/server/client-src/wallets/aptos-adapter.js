@@ -147,6 +147,22 @@ export function createAptosAdapter(descriptor, { targetNetwork: targetNetworkInp
           .signAndSubmitTransaction({ payload: data }),
       );
     },
+    async signMessage(message) {
+      const signer = feature('aptos:signMessage', 'signMessage', { optional: true });
+      if (!signer) throw walletError(`${descriptor.name} does not support one-approval session signing`, 'one_approval_unavailable');
+      const response = await signer.signMessage({
+        message,
+        nonce: 'vessel-upload-session',
+      });
+      const args = response?.status ? approvedArgs(response) : response;
+      return {
+        chain: 'aptos',
+        address: session?.sourceAddress,
+        message: args?.fullMessage || message,
+        signature: args?.signature?.toString?.() || String(args?.signature || ''),
+        publicKey: args?.publicKey?.toString?.() || String(args?.publicKey || ''),
+      };
+    },
     subscribe(listener) {
       listeners.add(listener);
       bindEvents();

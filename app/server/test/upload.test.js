@@ -54,14 +54,13 @@ test('Upload preserves every runtime state and explains both payment paths', () 
     assert.equal(ids.has(id), true, id);
   }
   assert.equal(hasInlineTailwindConfig(html), false);
-  assert.match(html, /Wallet-owned upload/i);
-  assert.match(html, /source-chain Vessel charge/i);
+  assert.match(html, /One-approval beta upload/i);
+  assert.match(html, /bounded upload session/i);
   assert.match(html, /Aptos, Solana, and Ethereum wallets/i);
   assert.match(html, /official Shelby DAA/i);
-  assert.match(html, /Vessel service fee \(1%\)/i);
-  assert.match(html, /Shelby storage cost/i);
-  assert.match(html, /testnet DAA gas funding/i);
-  assert.match(html, /Vessel fee receipt/i);
+  assert.match(html, /beta ShelbyNet service account/i);
+  assert.match(html, /file hash, retention, and quoted cost/i);
+  assert.match(html, /Strict wallet-owned settlement remains available as a fallback/i);
   assert.doesNotMatch(html, /Aptos sends the Vessel contract fee/i);
   assert.match(html, /Test tokens — no real monetary value/);
   assert.match(html, /role="radiogroup"[^>]*aria-labelledby="retention-title"/);
@@ -74,16 +73,19 @@ test('Upload preserves every runtime state and explains both payment paths', () 
   assert.match(html, /id="batch-progress"[^>]*max="100"/);
   assert.match(html, /1 GB beta limit/i);
   assert.match(html, /mainnet release will support larger batches/i);
-  assert.match(html, /wallet may request approval for each file/i);
+  assert.match(html, /One-approval beta uses one wallet signature/i);
   assert.doesNotMatch(html, /faucet/i);
   assert.doesNotMatch(html, /Vessel service fee \(2%\)/i);
   assert.doesNotMatch(html, /AES|encrypted|immutable|weekly/i);
 });
 
-test('Upload routes through wallet sessions without funding links or server-managed fallback', () => {
+test('Upload defaults to one-approval beta while keeping strict wallet settlement code available', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const service = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
   assert.match(service, /controllerInstance\.upload\(validated\.file/);
+  assert.match(service, /\/api\/one-approval\/uploads/);
+  assert.match(service, /oneApprovalBeta/);
+  assert.match(source, /APPROVE UPLOAD SESSION/);
   assert.match(source, /insufficient_apt/);
   assert.match(source, /insufficient_shelby_usd/);
   assert.match(source, /settleContractQuote\(\{/);

@@ -67,6 +67,7 @@ export const config = {
   walletAptosEnabled: process.env.WALLET_APTOS_ENABLED !== 'false',
   walletSolanaEnabled: process.env.WALLET_SOLANA_ENABLED !== 'false',
   walletEvmEnabled: process.env.WALLET_EVM_ENABLED === 'true',
+  oneApprovalBetaEnabled: process.env.ONE_APPROVAL_BETA_ENABLED !== 'false',
   gasStationAccount: process.env.GAS_STATION_ACCOUNT || '', // PUBLIC fee-payer acct that sponsors gas+ShelbyUSD
   gasStationApiKey: process.env.GAS_STATION_API_KEY || '',  // SERVER-ONLY: never sent to the browser
   dynamicQuotesEnabled: process.env.DYNAMIC_QUOTES_ENABLED === 'true',
