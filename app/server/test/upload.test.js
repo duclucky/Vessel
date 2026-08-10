@@ -82,10 +82,12 @@ test('Upload preserves every runtime state and explains both payment paths', () 
 test('Upload defaults to one-approval beta while keeping strict wallet settlement code available', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const service = fs.readFileSync(path.join(publicDir, 'wallet-owned-upload.js'), 'utf8');
+  const session = fs.readFileSync(path.join(publicDir, 'one-approval-session.js'), 'utf8');
   assert.match(service, /controllerInstance\.upload\(validated\.file/);
   assert.match(service, /\/api\/one-approval\/uploads/);
   assert.match(service, /\/api\/one-approval\/batch-uploads/);
-  assert.match(service, /VESSEL_BATCH_UPLOAD_SESSION/);
+  assert.match(service, /from '\.\/one-approval-session\.js'/);
+  assert.match(session, /VESSEL_BATCH_UPLOAD_SESSION/);
   assert.match(service, /oneApprovalBeta/);
   assert.match(source, /APPROVE UPLOAD SESSION/);
   assert.match(source, /insufficient_apt/);
