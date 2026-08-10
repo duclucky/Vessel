@@ -41,3 +41,20 @@ test('app dispatch includes launch initializer hook', () => {
   assert.match(app, /initLaunchKitPage/);
   assert.match(app, /launch:\s*initLaunch/);
 });
+
+test('Launch Kit controller is imported and receives ledger collection dependencies', () => {
+  const app = readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  assert.match(app, /import\s+\{\s*initLaunchKitPage\s*\}\s+from '\.\/launch-kit-page\.js'/);
+  assert.match(app, /ledger,/);
+  assert.match(app, /getWalletState:\s*\(\)\s*=>\s*window\.VesselWallets/);
+  assert.match(app, /groupVaultCollections/);
+  assert.match(app, /downloadBlob/);
+});
+
+test('Launch Kit page controller avoids local file APIs', () => {
+  const source = readFileSync(path.join(publicDir, 'launch-kit-page.js'), 'utf8');
+  assert.match(source, /buildLaunchItems/);
+  assert.match(source, /validateLaunchKit/);
+  assert.match(source, /buildLaunchOutputs/);
+  assert.doesNotMatch(source, /showOpenFilePicker|webkitdirectory|input\.type\s*=\s*['"]file['"]/);
+});
