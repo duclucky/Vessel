@@ -1259,6 +1259,7 @@ async function initGallery() {
   let activeGalleryCollection = '';
   let selectedGalleryKeys = new Set();
   let gallerySelectMode = false;
+  let galleryExportUrl = '';
   // Gallery = the visitor's OWN uploads (owned by their DAA account), tracked in this browser.
   let items = loadMine();
   const walletState = walletController().getState();
@@ -1274,14 +1275,32 @@ async function initGallery() {
   const count = $('#artifact-count');
   if (count) count.textContent = `${items.length} ${items.length === 1 ? 'artifact' : 'artifacts'}`;
   renderFeeDashboard(items);
-  if (exportCsv) {
-    exportCsv.disabled = !items.length;
-    exportCsv.onclick = () => {
-      const exportItems = exportItemsForGallery(items, activeGalleryCollection);
-      const baseName = activeGalleryCollection || 'vessel-gallery';
-      downloadBlob(galleryManifestWorkbook(exportItems), `${baseName}-manifest.xlsx`, document);
-    };
-  }
+  const clearGalleryExport = () => {
+    if (galleryExportUrl) URL.revokeObjectURL(galleryExportUrl);
+    galleryExportUrl = '';
+    exportCsv?.removeAttribute('href');
+    exportCsv?.removeAttribute('download');
+  };
+  const prepareGalleryExport = (activeCollection) => {
+    if (!exportCsv) return;
+    clearGalleryExport();
+    const exportItems = exportItemsForGallery(items, activeGalleryCollection);
+    const baseName = activeGalleryCollection || 'vessel-gallery';
+    const label = exportCsv.querySelector('[data-export-label]');
+    if (label) label.textContent = activeCollection ? 'Export This Folder XLSX' : 'Export Styled XLSX';
+    const unavailable = !exportItems.length;
+    exportCsv.setAttribute('aria-disabled', String(unavailable));
+    exportCsv.classList.toggle('opacity-50', unavailable);
+    exportCsv.classList.toggle('cursor-not-allowed', unavailable);
+    if (unavailable) return;
+    galleryExportUrl = URL.createObjectURL(galleryManifestWorkbook(exportItems));
+    exportCsv.href = galleryExportUrl;
+    exportCsv.download = `${baseName}-manifest.xlsx`;
+  };
+  exportCsv?.addEventListener('click', (event) => {
+    if (exportCsv.getAttribute('aria-disabled') === 'true') event.preventDefault();
+  });
+  window.addEventListener('pagehide', clearGalleryExport, { once: true });
   if (selectMode) {
     selectMode.disabled = !items.some(isMediaArtifact);
     selectMode.onclick = () => {
@@ -1389,11 +1408,7 @@ async function initGallery() {
     imageEmpty?.classList.toggle('hidden', mediaCards.length > (activeCollection ? 0 : 1));
     metadataEmpty?.classList.toggle('hidden', metadataItems.length > 0);
     back?.classList.toggle('hidden', !activeCollection);
-    if (exportCsv) {
-      const exportItems = exportItemsForGallery(items, activeGalleryCollection);
-      exportCsv.disabled = !exportItems.length;
-      exportCsv.textContent = activeCollection ? 'Export This Folder XLSX' : 'Export Styled XLSX';
-    }
+    prepareGalleryExport(activeCollection);
     if (status) {
       status.textContent = activeCollection
         ? `${activeCollection.name}: ${activeCollection.items.length} media file${activeCollection.items.length === 1 ? '' : 's'} shown by original folder filename.`

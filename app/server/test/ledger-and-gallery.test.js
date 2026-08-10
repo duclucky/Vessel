@@ -249,6 +249,17 @@ test('Gallery exposes absolute URLs and a visible styled sheet export for extern
   assert.match(metadataCard, /toAppUrl\(it\.sourceArtifactUrl/);
 });
 
+test('Gallery XLSX export uses a native prepared download link', () => {
+  const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
+  const html = readPage('gallery.html');
+
+  assert.match(html, /<a[^>]+id="gallery-export-csv"[^>]+download/i);
+  assert.match(source, /URL\.createObjectURL\(galleryManifestWorkbook\(exportItems\)\)/);
+  assert.match(source, /exportCsv\.href = galleryExportUrl/);
+  assert.match(source, /exportCsv\.download = `\$\{baseName\}-manifest\.xlsx`/);
+  assert.doesNotMatch(source, /exportCsv\.onclick = \(\) => \{[\s\S]*?downloadBlob\(galleryManifestWorkbook/);
+});
+
 test('Gallery XLSX export is styled and presentation-friendly for spreadsheet users', () => {
   const source = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8');
   const exporter = fs.readFileSync(path.join(publicDir, 'metadata-export.js'), 'utf8');
