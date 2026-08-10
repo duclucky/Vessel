@@ -1,3 +1,5 @@
+import { normalizeAptosLikeAddress } from './address-utils.js';
+
 const SHA256_HEX = /^[a-f0-9]{64}$/i;
 
 export async function sha256FileHex(file) {
@@ -39,7 +41,7 @@ export function contentAddressedBlobName(file, fileHash) {
 }
 
 export function vesselBlobUrl({ origin, storageAddress, blobName } = {}) {
-  const account = String(storageAddress || '').trim();
+  const account = normalizeAptosLikeAddress(storageAddress);
   const segments = String(blobName || '').split('/');
   if (!account || segments.some((segment) => !segment || segment === '.' || segment === '..')) {
     throw Object.assign(new Error('Storage address and blob name are required'), { code: 'blob_url_invalid' });

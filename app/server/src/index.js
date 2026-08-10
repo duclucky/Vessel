@@ -250,6 +250,12 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 const send = (res, status, body) => res.status(status).json(body);
+function normalizeShelbyAccountParam(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  const hex = raw.replace(/^@/, '').replace(/^0x/, '');
+  return /^[0-9a-f]{64}$/.test(hex) ? `0x${hex}` : '';
+}
+
 function requireShelbyWrites(res) {
   const blocked = shelbyWriteGate(config.shelbyWritesEnabled);
   if (!blocked) return true;
@@ -487,8 +493,8 @@ app.get('/api/list', async (req, res) => {
 app.get('/api/shelby/artifacts', async (req, res) => {
   try {
     if (!shelbyClient) return send(res, 503, { error: 'Shelby API access is unavailable' });
-    const account = String(req.query.account || '').toLowerCase();
-    if (!/^0x[0-9a-f]{64}$/.test(account)) {
+    const account = normalizeShelbyAccountParam(req.query.account);
+    if (!account) {
       return send(res, 400, { error: 'valid Shelby account required', code: 'invalid_storage_address' });
     }
     const rows = await shelbyClient.coordination.getAccountBlobs({ account });
@@ -512,8 +518,8 @@ app.get('/api/shelby/artifacts', async (req, res) => {
 app.get('/api/shelby/accounts/:account/balances', async (req, res) => {
   try {
     if (!shelbyClient) return send(res, 503, { error: 'Shelby API access is unavailable' });
-    const account = String(req.params.account || '').toLowerCase();
-    if (!/^0x[0-9a-f]{64}$/.test(account)) {
+    const account = normalizeShelbyAccountParam(req.params.account);
+    if (!account) {
       return send(res, 400, { error: 'valid Shelby account required', code: 'invalid_storage_address' });
     }
     const [aptOctas, rows] = await Promise.all([
@@ -551,9 +557,9 @@ app.get('/api/shelby/blobs/:account/*', async (req, res) => {
     if (!shelbyClient || !config.shelbyRpcApiKey) {
       return send(res, 503, { error: 'Shelby API access is unavailable' });
     }
-    const account = String(req.params.account || '').toLowerCase();
+    const account = normalizeShelbyAccountParam(req.params.account);
     const blobName = String(req.params[0] || '');
-    if (!/^0x[0-9a-f]{64}$/.test(account) || !blobName || blobName.includes('..')) {
+    if (!account || !blobName || blobName.includes('..')) {
       return send(res, 400, { error: 'invalid Shelby blob path', code: 'invalid_blob_name' });
     }
     const upstreamHeaders = { Authorization: `Bearer ${config.shelbyRpcApiKey}` };

@@ -1,3 +1,5 @@
+import { canonicalWalletAddress, normalizeAptosLikeAddress } from './address-utils.js';
+
 export const LS = {
   addr: 'vessel_addr',
   sa: 'vessel_sa',
@@ -11,7 +13,7 @@ export const UPLOAD_HISTORY_LIMIT = 3000;
 
 export function createLedger(storage = globalThis.localStorage, now = Date.now) {
   function normalizeAddress(value) {
-    return String(value || '').toLowerCase();
+    return canonicalWalletAddress(value);
   }
 
   function loadMine() {
@@ -96,7 +98,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   }
 
   function rememberCollectionManifest(manifest) {
-    const storageAddress = String(manifest?.storageAddress || '');
+    const storageAddress = normalizeAptosLikeAddress(manifest?.storageAddress);
     const id = String(manifest?.id || manifest?.name || '').trim();
     if (!storageAddress || !id) throw new TypeError('Collection manifest requires an id and storage address');
     const next = {
@@ -150,8 +152,8 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
         sourcePath: result.sourcePath || '',
         expiresAt: result.expirationMicros / 1_000,
         expirationMicros: result.expirationMicros,
-        account: result.account,
-        storageAddress: result.account,
+        account: normalizeAptosLikeAddress(result.account),
+        storageAddress: normalizeAptosLikeAddress(result.account),
         state: 'active',
         registerTransactionHash: result.registerTransactionHash || result.transactionHash,
         acknowledgementHash: result.acknowledgementHash,

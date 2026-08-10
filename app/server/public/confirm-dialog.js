@@ -26,7 +26,7 @@ export function confirmAction(options, document = globalThis.document) {
 
     const titleNode = document.createElement('h2');
     titleNode.id = `${uid}-title`;
-    titleNode.className = 'font-display text-3xl font-semibold';
+    titleNode.className = 'vessel-dialog-title font-display text-3xl font-semibold';
     titleNode.textContent = title;
 
     const messageNode = document.createElement('p');

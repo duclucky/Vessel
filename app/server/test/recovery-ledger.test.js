@@ -79,6 +79,27 @@ test('recovery ledger advances allowlisted upload stages without storing file or
   assert.equal(normalizeWalletIdentity(identity), 'aptos:0xabc:0xabc');
 });
 
+test('recovery wallet matching treats @ and 0x Shelby addresses as the same account', () => {
+  const storageHex = '4d'.repeat(32);
+
+  assert.equal(
+    normalizeWalletIdentity({
+      chain: 'solana',
+      sourceAddress: 'SourceWallet111',
+      storageAddress: `@${storageHex}`,
+    }),
+    `solana:sourcewallet111:0x${storageHex}`,
+  );
+  assert.equal(
+    normalizeWalletIdentity({
+      chain: 'solana',
+      sourceAddress: 'SourceWallet111',
+      storageAddress: `0x${storageHex}`,
+    }),
+    `solana:sourcewallet111:0x${storageHex}`,
+  );
+});
+
 test('a submitted contract transaction remains recoverable for 24 hours', () => {
   const storage = memoryStorage();
   let current = 1_000;

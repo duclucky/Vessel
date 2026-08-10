@@ -37,6 +37,12 @@ test('Shelby API routes use the configured runtime instead of hard-coded Aptos T
   assert.doesNotMatch(server, /network:\s*Network\.TESTNET/);
 });
 
+test('Shelby API routes normalize Aptos-style @ account parameters', () => {
+  assert.match(server, /function normalizeShelbyAccountParam/);
+  assert.match(server, /normalizeShelbyAccountParam\(req\.query\.account\)/);
+  assert.match(server, /normalizeShelbyAccountParam\(req\.params\.account\)/);
+});
+
 test('Shelby read proxy forwards a bounded byte range and preserves partial response metadata', () => {
   assert.match(server, /\^bytes=\\d\+-\\d\*\$/);
   assert.match(server, /upstreamHeaders\.Range = requestedRange/);

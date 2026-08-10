@@ -196,5 +196,6 @@ test('app passes collection manifest persistence into metadata page', () => {
 
   assert.match(metadata, /saveCollectionManifest:/);
   assert.match(metadata, /ledger\.rememberCollectionManifest/);
-  assert.match(metadata, /storageAddress:.*session\.storageAddress/s);
+  assert.match(metadata, /normalizeAptosLikeAddress\(session\.storageAddress\)/);
+  assert.match(metadata, /storageAddress,/);
 });

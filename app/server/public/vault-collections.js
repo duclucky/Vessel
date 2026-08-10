@@ -1,10 +1,10 @@
+import { canonicalWalletAddress } from './address-utils.js';
+
 const IMAGE_TYPE = /^image\//i;
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
 
 function canonicalAddress(value) {
-  const text = String(value || '').toLowerCase();
-  if (!/^0x[0-9a-f]+$/.test(text)) return text;
-  return `0x${text.slice(2).replace(/^0+/, '') || '0'}`;
+  return canonicalWalletAddress(value);
 }
 
 function safeSourcePath(value) {

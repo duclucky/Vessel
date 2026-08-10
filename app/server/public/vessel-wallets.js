@@ -12297,6 +12297,34 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   // client-src/wallets/session.js
   init_process();
   init_buffer();
+
+  // client-src/wallets/aptos-address.js
+  init_process();
+  init_buffer();
+  var APTOS_HEX = /^[0-9a-f]{1,64}$/;
+  var FULL_APTOS_HEX = /^[0-9a-f]{64}$/;
+  function normalizeAptosAddress(value, field = "Aptos address") {
+    const text = String(value?.toString?.() ?? value ?? "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
+    if (!APTOS_HEX.test(text)) {
+      const error = new Error(`${field} is invalid`);
+      error.code = "provider_unavailable";
+      throw error;
+    }
+    return `0x${text}`;
+  }
+  function normalizeAptosAddressIfPossible(value) {
+    const raw = String(value?.toString?.() ?? value ?? "").trim();
+    if (!raw) return "";
+    const lowered = raw.toLowerCase();
+    const hex = lowered.replace(/^@/, "").replace(/^0x/, "");
+    if (lowered.startsWith("@") && APTOS_HEX.test(hex)) {
+      return `0x${hex}`;
+    }
+    if (lowered.startsWith("0x") && FULL_APTOS_HEX.test(hex)) return `0x${hex}`;
+    return raw;
+  }
+
+  // client-src/wallets/session.js
   var KEYS = {
     id: "vessel.wallet.id",
     chain: "vessel.wallet.chain"
@@ -12306,7 +12334,13 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
     let activeAdapter = null;
     let offAdapter = null;
     const listeners2 = /* @__PURE__ */ new Set();
+    const normalizeSession = (session) => {
+      if (!session) return null;
+      const storageAddress = normalizeAptosAddressIfPossible(session.storageAddress);
+      return storageAddress === session.storageAddress ? session : { ...session, storageAddress };
+    };
     const publish = (patch) => {
+      if ("session" in patch) patch.session = normalizeSession(patch.session);
       state = { ...state, ...patch };
       listeners2.forEach((listener) => listener(state));
     };
@@ -12366,7 +12400,7 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
         }
         attachAdapter(descriptor, session);
         publish({ session, status: "ready", error: "" });
-        return session;
+        return state.session;
       } catch (error) {
         const networkRequired = ["wrong_network", "switch_unsupported"].includes(error?.code);
         if (networkRequired && error.session) attachAdapter(descriptor, error.session);
@@ -12426,22 +12460,6 @@ globalThis.__vesselBase = (typeof location !== "undefined" ? location.origin + "
   // client-src/wallets/aptos-adapter.js
   init_process();
   init_buffer();
-
-  // client-src/wallets/aptos-address.js
-  init_process();
-  init_buffer();
-  var APTOS_HEX = /^[0-9a-f]{1,64}$/;
-  function normalizeAptosAddress(value, field = "Aptos address") {
-    const text = String(value?.toString?.() ?? value ?? "").trim().toLowerCase().replace(/^@/, "").replace(/^0x/, "");
-    if (!APTOS_HEX.test(text)) {
-      const error = new Error(`${field} is invalid`);
-      error.code = "provider_unavailable";
-      throw error;
-    }
-    return `0x${text}`;
-  }
-
-  // client-src/wallets/aptos-adapter.js
   var DEFAULT_TARGET_NETWORK = Object.freeze({
     name: "testnet",
     chainId: 2,

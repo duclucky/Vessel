@@ -75,6 +75,16 @@ test('upload quote is signed, wallet-bound, and valid for five minutes', async (
   );
 });
 
+test('quote context normalizes Aptos-style @ storage addresses before signing', () => {
+  const storageHex = '4d'.repeat(32);
+  const context = normalizeUploadQuoteContext({
+    ...baseContext,
+    storageAddress: `@${storageHex}`,
+  });
+
+  assert.equal(context.storageAddress, `0x${storageHex}`);
+});
+
 test('public quote reports the retention clock used to calculate expiration', async () => {
   const manager = QuoteManager.forTest({
     secret: SECRET,

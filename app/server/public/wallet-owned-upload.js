@@ -1,4 +1,5 @@
 import { createBatchUploadManifest } from './batch-upload.js';
+import { normalizeAptosLikeAddress } from './address-utils.js';
 
 const noopRecovery = Object.freeze({
   save() {},
@@ -13,8 +14,15 @@ function uploadError(message, code, details = {}) {
 function walletKey(state) {
   const session = state?.status === 'ready' ? state.session : null;
   return session
-    ? `${session.chain}:${session.sourceAddress}:${session.storageAddress}`.toLowerCase()
+    ? `${session.chain}:${session.sourceAddress}:${normalizeAptosLikeAddress(session.storageAddress)}`.toLowerCase()
     : '';
+}
+
+function normalizeSession(session) {
+  return Object.freeze({
+    ...session,
+    storageAddress: normalizeAptosLikeAddress(session?.storageAddress),
+  });
 }
 
 function deploymentFor(chain, quote, config) {
@@ -254,7 +262,7 @@ export function createWalletOwnedUploadService({
     }
     const fileHash = await sha256FileHex(file);
     const blobName = contentAddressedBlobName(file, fileHash);
-    const session = walletState.session;
+    const session = normalizeSession(walletState.session);
     const sourceNetwork = sourceNetworkFor(session, config);
     const storageNetwork = storageNetworkFor(config);
     const signedQuote = await request('/api/quotes/upload', {
@@ -320,7 +328,7 @@ export function createWalletOwnedUploadService({
   async function quoteBatch(items, { days, signal } = {}) {
     const walletState = requireSession();
     const config = await loadConfig(signal);
-    const session = walletState.session;
+    const session = normalizeSession(walletState.session);
     if (!oneApprovalEnabled(config, session.chain)) {
       throw uploadError('One-approval batch upload is unavailable for this wallet', 'one_approval_batch_unavailable');
     }
@@ -456,7 +464,7 @@ export function createWalletOwnedUploadService({
       throw uploadError('Review the updated price before continuing', 'price_confirmation_required');
     }
     const walletState = assertWallet(validated.walletKey);
-    const session = walletState.session;
+    const session = normalizeSession(walletState.session);
     const controllerInstance = getController();
     const fileHash = await sha256FileHex(validated.file);
     if (fileHash !== validated.intent.fileHash) {
@@ -628,7 +636,7 @@ export function createWalletOwnedUploadService({
       throw uploadError('Review the updated price before continuing', 'price_confirmation_required');
     }
     const walletState = assertWallet(validated.walletKey);
-    const session = walletState.session;
+    const session = normalizeSession(walletState.session);
     const config = validated.config || await loadConfig(callbacks.signal);
     if (!oneApprovalEnabled(config, session.chain)) {
       throw uploadError('One-approval batch upload is unavailable for this wallet', 'one_approval_batch_unavailable');
@@ -690,7 +698,11 @@ export function createWalletOwnedUploadService({
   async function resume(file, record, callbacks = {}) {
     if (!record?.context || !record?.stage) throw uploadError('Recovery record is required', 'recovery_required');
     const current = requireSession();
-    const expectedWallet = [record.context.chain, record.context.sourceAddress, record.context.storageAddress]
+    const expectedWallet = [
+      record.context.chain,
+      record.context.sourceAddress,
+      normalizeAptosLikeAddress(record.context.storageAddress),
+    ]
       .join(':').toLowerCase();
     if (walletKey(current) !== expectedWallet) throw uploadError('Reconnect the original wallet', 'wallet_changed');
     const hash = await sha256FileHex(file);
@@ -706,7 +718,11 @@ export function createWalletOwnedUploadService({
       const matched = artifacts.find((item) => item.blobNameSuffix === record.context.blobName && item.isWritten);
       if (!matched) throw uploadError('Shelby acknowledgement is still pending', 'acknowledgement_pending', { retriable: true });
       recovery.complete(record.id);
-      return Object.freeze({ ...matched, ownedByYou: true, account: record.context.storageAddress });
+      return Object.freeze({
+        ...matched,
+        ownedByYou: true,
+        account: normalizeAptosLikeAddress(record.context.storageAddress),
+      });
     }
 
     let settlement;

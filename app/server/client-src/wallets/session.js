@@ -1,3 +1,5 @@
+import { normalizeAptosAddressIfPossible } from './aptos-address.js';
+
 const KEYS = {
   id: 'vessel.wallet.id',
   chain: 'vessel.wallet.chain',
@@ -9,7 +11,14 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
   let offAdapter = null;
   const listeners = new Set();
 
+  const normalizeSession = (session) => {
+    if (!session) return null;
+    const storageAddress = normalizeAptosAddressIfPossible(session.storageAddress);
+    return storageAddress === session.storageAddress ? session : { ...session, storageAddress };
+  };
+
   const publish = (patch) => {
+    if ('session' in patch) patch.session = normalizeSession(patch.session);
     state = { ...state, ...patch };
     listeners.forEach((listener) => listener(state));
   };
@@ -78,7 +87,7 @@ export function createWalletController({ registry, resolveAdapter, storage }) {
 
       attachAdapter(descriptor, session);
       publish({ session, status: 'ready', error: '' });
-      return session;
+      return state.session;
     } catch (error) {
       const networkRequired = ['wrong_network', 'switch_unsupported'].includes(error?.code);
       if (networkRequired && error.session) attachAdapter(descriptor, error.session);

@@ -18,6 +18,15 @@ const requiredText = (value, field) => {
   return result;
 };
 
+const normalizeAptosLikeAddress = (value, field) => {
+  const result = requiredText(value, field).toLowerCase();
+  const hex = result.replace(/^@/, '').replace(/^0x/, '');
+  if ((result.startsWith('@') || result.startsWith('0x')) && /^[0-9a-f]{1,64}$/.test(hex)) {
+    return `0x${hex}`;
+  }
+  return result;
+};
+
 const safePositiveInteger = (value, field) => {
   const result = Number(value);
   if (!Number.isSafeInteger(result) || result <= 0) {
@@ -59,8 +68,10 @@ export function normalizeUploadQuoteContext(input = {}) {
     chain,
     sourceNetwork,
     storageNetwork: requiredText(input.storageNetwork || 'shelby-testnet', 'storageNetwork'),
-    sourceAddress: requiredText(input.sourceAddress, 'sourceAddress'),
-    storageAddress: requiredText(input.storageAddress, 'storageAddress'),
+    sourceAddress: chain === 'aptos'
+      ? normalizeAptosLikeAddress(input.sourceAddress, 'sourceAddress')
+      : requiredText(input.sourceAddress, 'sourceAddress'),
+    storageAddress: normalizeAptosLikeAddress(input.storageAddress, 'storageAddress'),
     fileHash,
     blobName: requiredText(input.blobName, 'blobName'),
     sizeBytes: safePositiveInteger(input.sizeBytes, 'sizeBytes'),

@@ -1,3 +1,5 @@
+import { normalizeAptosLikeAddress } from './address-utils.js';
+
 export const RECOVERY_KEY = 'vessel_recovery_v1';
 
 const STAGES = new Set([
@@ -33,7 +35,11 @@ const pick = (input, fields) => Object.fromEntries(
 
 export function normalizeWalletIdentity(identity) {
   if (typeof identity === 'string') return identity.toLowerCase();
-  return [identity?.chain, identity?.sourceAddress, identity?.storageAddress]
+  return [
+    identity?.chain,
+    identity?.sourceAddress,
+    normalizeAptosLikeAddress(identity?.storageAddress),
+  ]
     .map((value) => String(value || '').toLowerCase())
     .join(':');
 }

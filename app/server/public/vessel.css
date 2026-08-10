@@ -38,8 +38,10 @@ details[open] > .vessel-nav { z-index: 2; background: #090d16; border-color: rgb
 :where(button, summary, label[for]) { cursor: pointer; }
 :where(button, input, textarea):disabled { cursor: not-allowed; opacity: 0.55; }
 :where(a, button, input, textarea, summary):focus-visible { outline: 2px solid #5ee6ff; outline-offset: 4px; }
-.vessel-input { width: 100%; min-height: 48px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; background: rgba(12, 14, 19, 0.7); padding: 0.85rem 1rem; color: #e2e2e9; font: 400 16px/1.5 Geist, sans-serif; transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
-input.vessel-input, textarea.vessel-input { background: rgba(12, 14, 19, 0.7); color: #e2e2e9; }
+.vessel-input { width: 100%; min-width: 0; max-width: 100%; min-height: 48px; border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 1rem; background: rgba(12, 14, 19, 0.7); padding: 0.85rem 1rem; color: #e2e2e9; font: 400 16px/1.5 Geist, sans-serif; transition: border-color 0.2s, box-shadow 0.2s, background-color 0.2s; }
+input.vessel-input { overflow: hidden; background: rgba(12, 14, 19, 0.7); color: #e2e2e9; text-overflow: ellipsis; white-space: nowrap; }
+input.vessel-input:focus { text-overflow: clip; }
+textarea.vessel-input { overflow: auto; background: rgba(12, 14, 19, 0.7); color: #e2e2e9; overflow-wrap: anywhere; word-break: break-word; resize: vertical; }
 .vessel-input::placeholder { color: #7d8785; }
 .vessel-input:hover { border-color: rgba(181, 255, 240, 0.22); }
 .vessel-input:focus { border-color: rgba(94, 230, 255, 0.65); box-shadow: 0 0 0 3px rgba(94, 230, 255, 0.12); outline: none; }
@@ -135,9 +137,10 @@ input.vessel-input, textarea.vessel-input { background: rgba(12, 14, 19, 0.7); c
 .wallet-account-actions .vessel-button { padding-inline: 14px; }
 .wallet-disconnect-button { border: 1px solid rgb(255 180 171 / 0.24); color: #ffb4ab; background: rgb(255 180 171 / 0.06); }
 .vessel-dialog-backdrop { position: fixed; inset: 0; z-index: 10002; display: grid; place-items: center; padding: 16px; background: rgb(3 5 10 / 0.82); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
-.vessel-dialog { width: min(520px, 100%); border-radius: 28px; padding: 28px; background: rgb(17 19 24 / 0.97); box-shadow: 0 32px 96px rgb(0 0 0 / 0.58); }
+.vessel-dialog { width: min(520px, 100%); max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); overflow: auto; border-radius: 28px; padding: 28px; background: rgb(17 19 24 / 0.97); box-shadow: 0 32px 96px rgb(0 0 0 / 0.58); }
 .vessel-dialog h2 { margin: 12px 0 0; color: #f0f1f7; letter-spacing: -0.04em; }
-.vessel-dialog-message { margin: 18px 0 0; line-height: 1.65; }
+.vessel-dialog-title { max-width: 100%; overflow-wrap: anywhere; word-break: break-word; line-height: 1.12; }
+.vessel-dialog-message { margin: 18px 0 0; line-height: 1.65; overflow-wrap: anywhere; word-break: break-word; }
 .vessel-dialog-actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; margin-top: 28px; }
 .vessel-dialog-actions .vessel-button { min-width: 0; padding-inline: 20px; }
 .vessel-button-danger { border: 1px solid rgb(255 180 171 / 0.28); color: #ffb4ab; background: rgb(255 180 171 / 0.08); }

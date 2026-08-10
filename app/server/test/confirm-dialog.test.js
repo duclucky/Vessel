@@ -11,10 +11,22 @@ test('confirmation dialog exposes the accessible modal contract', () => {
   assert.match(source, /export function confirmAction/);
   assert.match(source, /role', 'dialog'/);
   assert.match(source, /aria-modal', 'true'/);
+  assert.match(source, /vessel-dialog-title/);
   assert.match(source, /keydown/);
   assert.match(source, /Escape/);
   assert.match(source, /shiftKey/);
   assert.match(source, /opener\?\.focus/);
+});
+
+test('dialog and text fields do not let long hashes overflow the viewport', () => {
+  const css = read('vessel.css');
+  const app = read('app.js');
+
+  assert.match(css, /\.vessel-dialog-title\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /input\.vessel-input\s*\{[\s\S]*text-overflow:\s*ellipsis/);
+  assert.match(css, /textarea\.vessel-input\s*\{[\s\S]*overflow-wrap:\s*anywhere/);
+  assert.match(app, /metadataHostDisplayName/);
+  assert.doesNotMatch(app, /title:\s*`Host \$\{file\.name\}/);
 });
 
 test('Gallery uses Vessel copy and never opens a browser confirmation', () => {

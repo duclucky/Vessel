@@ -16,6 +16,7 @@ import { initMetadataPage } from './metadata-page.js';
 import { buildStyledWorkbook, downloadBlob } from './metadata-export.js';
 import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
+import { normalizeAptosLikeAddress } from './address-utils.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -93,7 +94,7 @@ let activeWalletIdentity = '';
 
 const walletIdentityKey = (next) => (
   next?.status === 'ready' && next.session
-    ? `${next.session.chain}:${next.session.sourceAddress}:${next.session.storageAddress}`
+    ? `${next.session.chain}:${next.session.sourceAddress}:${normalizeAptosLikeAddress(next.session.storageAddress)}`
     : ''
 );
 
@@ -345,7 +346,12 @@ function initUpload() {
     const current = activeUploadContext;
     if (!current) return;
     const walletState = walletController().getState();
-    if (walletIdentityKey(walletState) !== `${current.intent.chain}:${current.intent.sourceAddress}:${current.intent.storageAddress}`) {
+    const currentWalletKey = [
+      current.intent.chain,
+      current.intent.sourceAddress,
+      normalizeAptosLikeAddress(current.intent.storageAddress),
+    ].join(':');
+    if (walletIdentityKey(walletState) !== currentWalletKey) {
       activeUploadContext = null;
       quoteUi.render({ kind: 'unavailable', message: 'The connected wallet changed. Request a new quote.' });
       return;
@@ -510,7 +516,7 @@ function initUpload() {
         walletKey: [
           record.context.chain,
           record.context.sourceAddress,
-          record.context.storageAddress,
+          normalizeAptosLikeAddress(record.context.storageAddress),
         ].join(':').toLowerCase(),
         settlement: Object.freeze({
           paidAuthorization: record.paidAuthorization,
@@ -536,7 +542,7 @@ function initUpload() {
           size: Number(matched.size || record.context.sizeBytes || 0),
           contentType: matched.contentType || record.context.contentType,
           ownedByYou: true,
-          account: record.context.storageAddress,
+          account: normalizeAptosLikeAddress(record.context.storageAddress),
           expirationMicros: Number(matched.expirationMicros || record.context.expirationMicros),
           registerTransactionHash: record.registerTransactionHash,
           acknowledgementHash: record.acknowledgementHash,
@@ -939,7 +945,12 @@ function initUpload() {
     }
 
     const walletState = walletController().getState();
-    const session = walletState.session;
+    const session = walletState.session
+      ? Object.freeze({
+        ...walletState.session,
+        storageAddress: normalizeAptosLikeAddress(walletState.session.storageAddress),
+      })
+      : null;
     if (!session || walletState.status !== 'ready') {
       toast('Connect a wallet before uploading', 'warn');
       const opener = document.querySelector('[data-wallet-summary]');
@@ -1596,7 +1607,8 @@ async function initCollection() {
     return;
   }
   const requested = new URLSearchParams(location.search).get('id') || '';
-  const manifests = loadCollectionManifests(state.session.storageAddress);
+  const storageAddress = normalizeAptosLikeAddress(state.session.storageAddress);
+  const manifests = loadCollectionManifests(storageAddress);
   const manifest = manifests.find((entry) => entry.id === requested) || manifests[0];
   if (!manifest) {
     if (status) status.textContent = 'No hosted collection manifest is saved for this wallet yet.';
@@ -1605,7 +1617,7 @@ async function initCollection() {
   }
 
   title.textContent = manifest.name;
-  if (status) status.textContent = `Saved manifest for ${shortMid(state.session.storageAddress, 8)}. Export it before the current testnet wipe.`;
+  if (status) status.textContent = `Saved manifest for ${shortMid(storageAddress, 8)}. Export it before the current testnet wipe.`;
   if (count) count.textContent = `${manifest.rows.length} ${manifest.rows.length === 1 ? 'item' : 'items'}`;
   const absoluteTokenText = manifest.tokenUris.length ? `${manifest.tokenUris.map(toAppUrl).join('\n')}\n` : '';
   if (tokenList) tokenList.value = absoluteTokenText;
@@ -1727,7 +1739,7 @@ async function initProof() {
 
   const state = walletController()?.getState?.();
   const manifest = collectionId && state?.session?.storageAddress
-    ? loadCollectionManifests(state.session.storageAddress).find((entry) => entry.id === collectionId)
+    ? loadCollectionManifests(normalizeAptosLikeAddress(state.session.storageAddress)).find((entry) => entry.id === collectionId)
     : null;
   if (collectionList && manifest?.rows?.length) {
     collectionList.replaceChildren(...manifest.rows.slice(0, 100).map((row) => {
@@ -1801,9 +1813,10 @@ async function initMetadata() {
     const controller = walletController();
     const state = controller?.getState?.();
     if (state?.status !== 'ready' || !state.session?.storageAddress) return [];
+    const storageAddress = normalizeAptosLikeAddress(state.session.storageAddress);
     if (cfg.shelbyWritesEnabled === false) {
       return groupVaultCollections(loadMine(), {
-        storageAddress: state.session.storageAddress,
+        storageAddress,
         now: Date.now(),
         verification: 'vault-cache',
       });
@@ -1812,7 +1825,7 @@ async function initMetadata() {
     const reconciled = controller.reconcileArtifacts(loadMine(), remote);
     replaceMine(reconciled);
     return groupVaultCollections(reconciled, {
-      storageAddress: state.session.storageAddress,
+      storageAddress,
       now: Date.now(),
     });
   }
@@ -1862,11 +1875,20 @@ async function initMetadata() {
     );
   }
 
+  function metadataHostDisplayName(file, sourcePath = '') {
+    const candidate = String(sourcePath || file?.vesselRelativePath || file?.name || 'metadata.json');
+    const fileName = candidate.split('/').filter(Boolean).pop() || candidate;
+    const hashJson = /^([a-f0-9]{64})\.json$/i.exec(fileName);
+    if (hashJson) return `TokenURI JSON ${shortMid(hashJson[1], 8)}`;
+    return candidate.length > 44 ? shortMid(candidate, 16) : candidate;
+  }
+
   async function hostMetadataFiles(files, { days, sourcePath, sourcePaths, onUpdate } = {}) {
     const results = [];
     for (let index = 0; index < files.length; index += 1) {
       const file = files[index];
       const path = sourcePaths?.[index] || sourcePath || file.name;
+      const displayName = metadataHostDisplayName(file, path);
       onUpdate?.({ phase: 'quoting', index, total: files.length, path });
       const fileHash = await sha256FileHex(file);
       const blobName = contentAddressedBlobName(file, fileHash);
@@ -1904,7 +1926,7 @@ async function initMetadata() {
       const approved = await confirmAction({
         opener: $('#single-host-shelby') || $('#batch-host-shelby'),
         kicker: files.length > 1 ? `METADATA ${index + 1} OF ${files.length}` : 'TOKENURI QUOTE',
-        title: `Host ${file.name} for ${quoted.quote.days} days?`,
+        title: `Host ${displayName} for ${quoted.quote.days} days?`,
         message: `${total} total, including Shelby storage cost, testnet DAA gas funding, and the Vessel service fee. Your connected wallet will approve the Vessel fee receipt.`,
         cancelLabel: 'NOT NOW',
         confirmLabel: 'APPROVE & HOST',
@@ -1970,10 +1992,11 @@ async function initMetadata() {
     saveCollectionManifest: (manifest, { collection } = {}) => {
       const session = walletController()?.getState?.().session;
       if (!session?.storageAddress || !manifest?.rows?.length) return;
+      const storageAddress = normalizeAptosLikeAddress(session.storageAddress);
       ledger.rememberCollectionManifest({
         id: collection?.id || manifest.collectionName,
         name: collection?.name || manifest.collectionName,
-        storageAddress: session.storageAddress,
+        storageAddress,
         rows: manifest.rows,
         tokenUris: manifest.tokenUris,
       });

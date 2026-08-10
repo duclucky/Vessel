@@ -51,3 +51,15 @@ test('Vessel read URLs encode the account and every blob path segment', () => {
     'https://vessel.example/api/shelby/blobs/0xabc/media/cover%20one%23.png',
   );
 });
+
+test('Vessel read URLs normalize Aptos-style @ accounts from legacy Shelby state', () => {
+  const account = '4d'.repeat(32);
+  assert.equal(
+    vesselBlobUrl({
+      origin: 'https://vessel.example/',
+      storageAddress: `@${account}`,
+      blobName: 'media/token.json',
+    }),
+    `https://vessel.example/api/shelby/blobs/0x${account}/media/token.json`,
+  );
+});
