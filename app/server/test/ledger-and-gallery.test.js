@@ -214,7 +214,7 @@ test('Gallery exposes absolute URLs and a visible styled sheet export for extern
   const metadataCard = source.slice(metadataCardStart, metadataCardEnd);
 
   assert.equal(ids.has('gallery-export-csv'), true, 'Gallery should expose a sheet export button');
-  assert.match(html, /Export Styled Sheet/i);
+  assert.match(html, /Export Styled XLSX/i);
   assert.match(source, /function toAppUrl/);
   assert.match(source, /function galleryManifestWorkbook/);
   assert.match(source, /gallery-export-csv/);
@@ -228,7 +228,7 @@ test('Gallery XLSX export is styled and presentation-friendly for spreadsheet us
   const exporter = fs.readFileSync(path.join(publicDir, 'metadata-export.js'), 'utf8');
   const html = readPage('gallery.html');
 
-  assert.match(html, /Export Styled Sheet/i);
+  assert.match(html, /Export Styled XLSX/i);
   assert.match(source, /buildStyledWorkbook/);
   assert.match(source, /function formatCsvUtc/);
   assert.match(source, /function formatCsvSizeMb/);
@@ -278,7 +278,7 @@ test('Gallery supports media selection and folder-scoped sheet exports', () => {
   assert.match(gallery, /exportItemsForGallery\(items, activeGalleryCollection\)/);
   assert.match(gallery, /const metadataItems = activeCollection/);
   assert.match(gallery, /metadataItems\.map\(metadataCard\)/);
-  assert.match(gallery, /Export This Folder Sheet/);
+  assert.match(gallery, /Export This Folder XLSX/);
 });
 
 test('Collection detail page exposes NFT set summary and TokenURI actions', () => {
@@ -299,6 +299,8 @@ test('Collection detail page exposes NFT set summary and TokenURI actions', () =
   assert.match(app, /loadCollectionManifests/);
   assert.match(app, /collection-copy-tokenuris/);
   assert.match(app, /collection-export-manifest/);
+  assert.match(readPage('collection.html'), /Export manifest XLSX/i);
+  assert.doesNotMatch(readPage('collection.html'), /Export manifest CSV/i);
   assert.match(app, /collection: initCollection/);
 });
 

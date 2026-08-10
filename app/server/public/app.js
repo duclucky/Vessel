@@ -1390,7 +1390,7 @@ async function initGallery() {
     if (exportCsv) {
       const exportItems = exportItemsForGallery(items, activeGalleryCollection);
       exportCsv.disabled = !exportItems.length;
-      exportCsv.textContent = activeCollection ? 'Export This Folder Sheet' : 'Export Styled Sheet';
+      exportCsv.textContent = activeCollection ? 'Export This Folder XLSX' : 'Export Styled XLSX';
     }
     if (status) {
       status.textContent = activeCollection
