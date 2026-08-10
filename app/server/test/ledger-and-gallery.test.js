@@ -65,6 +65,30 @@ test('server-managed result is selected but not represented as wallet-owned', ()
   assert.deepEqual(ledger.loadMine(), []);
 });
 
+test('wallet-authorized one-approval upload is tracked without claiming native ownership', () => {
+  const ledger = createLedger(memoryStorage(), () => 1_000);
+  ledger.commitUpload({
+    key: 'media/authorized.png',
+    url: 'https://shelby.example/authorized.png',
+    size: 7,
+    contentType: 'image/png',
+    sourcePath: 'VesselBatchTest/01-nebula.png',
+    ownedByYou: false,
+    authorizedByYou: true,
+    paymentMode: 'one-approval-beta-batch',
+    account: '0xabc',
+    expiresAt: 2_592_001_000,
+  });
+
+  const [saved] = ledger.loadMine();
+  assert.equal(saved?.key, 'media/authorized.png');
+  assert.equal(saved?.sourcePath, 'VesselBatchTest/01-nebula.png');
+  assert.equal(saved?.ownedByYou, false);
+  assert.equal(saved?.authorizedByYou, true);
+  assert.equal(saved?.paymentMode, 'one-approval-beta-batch');
+  assert.equal(saved?.expirationMicros, 2_592_001_000_000);
+});
+
 test('Gallery can select an existing wallet-owned artifact for Metadata Atelier', () => {
   const storage = memoryStorage();
   const ledger = createLedger(storage);

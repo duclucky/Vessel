@@ -140,8 +140,13 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
   function commitUpload(result) {
     storage.setItem(LS.sel, result.key);
     storage.setItem(`${LS.sel}_url`, result.url);
-    if (result.ownedByYou) {
-      if (!Number.isSafeInteger(result.expirationMicros) || result.expirationMicros <= 0) {
+    if (result.ownedByYou || result.authorizedByYou) {
+      const expirationMicros = Number.isSafeInteger(result.expirationMicros)
+        ? result.expirationMicros
+        : Number.isSafeInteger(result.expiresAt)
+          ? result.expiresAt * 1_000
+          : 0;
+      if (!Number.isSafeInteger(expirationMicros) || expirationMicros <= 0) {
         throw new TypeError('Authoritative Shelby expiration is required');
       }
       rememberMine({
@@ -150,10 +155,13 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
         size: result.size,
         contentType: result.contentType || '',
         sourcePath: result.sourcePath || '',
-        expiresAt: result.expirationMicros / 1_000,
-        expirationMicros: result.expirationMicros,
+        expiresAt: expirationMicros / 1_000,
+        expirationMicros,
         account: normalizeAptosLikeAddress(result.account),
-        storageAddress: normalizeAptosLikeAddress(result.account),
+        storageAddress: normalizeAptosLikeAddress(result.storageAddress || result.account),
+        ownedByYou: result.ownedByYou === true,
+        authorizedByYou: result.authorizedByYou === true,
+        paymentMode: result.paymentMode || '',
         state: 'active',
         registerTransactionHash: result.registerTransactionHash || result.transactionHash,
         acknowledgementHash: result.acknowledgementHash,
