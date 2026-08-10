@@ -89,6 +89,30 @@ test('verifies an EVM personal_sign signature over the exact canonical upload se
   }), true);
 });
 
+test('verifies against the nested breakdown shape returned by server quote validation', async () => {
+  const signer = Wallet.createRandom();
+  const context = { ...baseContext, chain: 'evm', sourceAddress: signer.address };
+  const message = oneApprovalMessage({ intent: context, quote });
+  const validatedQuote = {
+    quoteId: quote.quoteId,
+    expiresAtMs: quote.expiresAtMs,
+    breakdown: { totalAccountingMicro: quote.totalAccountingMicro },
+  };
+  const verifier = createOneApprovalAuthorizationVerifier();
+
+  assert.equal(await verifier({
+    context,
+    quote: validatedQuote,
+    authorization: {
+      chain: 'evm',
+      address: signer.address,
+      message,
+      signedMessage: message,
+      signature: await signer.signMessage(message),
+    },
+  }), true);
+});
+
 test('verifies the canonical batch message rather than a single-file marker substring', async () => {
   const signer = Wallet.createRandom();
   const context = { ...baseContext, chain: 'evm', sourceAddress: signer.address };

@@ -19,9 +19,14 @@ const BASE64_ED25519 = /^[A-Za-z0-9+/]{86}==$/;
 const lower = (value) => String(value || '').trim().toLowerCase();
 
 function expectedMessage({ context, quote, manifest }) {
+  const canonicalQuote = {
+    ...quote,
+    totalAccountingMicro: quote?.totalAccountingMicro
+      ?? quote?.breakdown?.totalAccountingMicro,
+  };
   return manifest
-    ? oneApprovalBatchMessage({ intent: context, quote, manifest })
-    : oneApprovalMessage({ intent: context, quote });
+    ? oneApprovalBatchMessage({ intent: context, quote: canonicalQuote, manifest })
+    : oneApprovalMessage({ intent: context, quote: canonicalQuote });
 }
 
 async function verifyAptos({ authorization, context, message, getAptosAuthenticationKey }) {
@@ -98,4 +103,3 @@ export function createOneApprovalAuthorizationVerifier({
     }
   };
 }
-
