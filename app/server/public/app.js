@@ -17,6 +17,7 @@ import { buildStyledWorkbook, downloadBlob } from './metadata-export.js';
 import { groupVaultCollections } from './vault-collections.js';
 import { createWalletOwnedUploadService } from './wallet-owned-upload.js';
 import { normalizeAptosLikeAddress } from './address-utils.js';
+import { accountingMicro, summarizeFeeReceipts } from './fee-accounting.js';
 
 const API = location.origin;
 const ledger = createLedger(localStorage);
@@ -757,6 +758,7 @@ function initUpload() {
           gasAccountingMicro: result.gasAccountingMicro,
           serviceFeeAccountingMicro: result.serviceFeeAccountingMicro,
           totalAccountingMicro: result.totalAccountingMicro,
+          paymentGroupId: result.authorizationId || '',
           lastReconciledAt: result.lastReconciledAt,
         });
         batchQueue.markSucceeded(item.id, stored);
@@ -1411,39 +1413,14 @@ async function initGallery() {
   });
   renderGallerySections();
 }
-function accountingMicro(value) {
-  try {
-    const text = String(value ?? '').trim();
-    return text ? BigInt(text) : 0n;
-  } catch {
-    return 0n;
-  }
-}
 function formatAccountingUsd(micro) {
   const value = accountingMicro(micro);
   const whole = value / 1_000_000n;
   const frac = String(value % 1_000_000n).padStart(6, '0');
   return `$${whole}.${frac}`;
 }
-function hasAccountingValue(item, field) {
-  return item?.[field] !== undefined && item?.[field] !== null && String(item[field]).trim() !== '';
-}
-function hasAccountingBreakdown(item) {
-  return hasAccountingValue(item, 'storageCostAccountingMicro')
-    && hasAccountingValue(item, 'serviceFeeAccountingMicro');
-}
 function renderFeeDashboard(items) {
-  const totals = (items || []).reduce((sum, item) => {
-    const total = accountingMicro(item.totalAccountingMicro || item.quotedAccountingMicro);
-    const hasBreakdown = hasAccountingBreakdown(item);
-    return {
-      total: sum.total + total,
-      storage: sum.storage + (hasBreakdown ? accountingMicro(item.storageCostAccountingMicro) : 0n),
-      service: sum.service + (hasBreakdown ? accountingMicro(item.serviceFeeAccountingMicro) : 0n),
-      unitemized: sum.unitemized + (total > 0n && !hasBreakdown ? total : 0n),
-      breakdownCount: sum.breakdownCount + (hasBreakdown ? 1 : 0),
-    };
-  }, { total: 0n, storage: 0n, service: 0n, unitemized: 0n, breakdownCount: 0 });
+  const totals = summarizeFeeReceipts(items);
   const setMoney = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = formatAccountingUsd(value); };
   const setText = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = value; };
   setMoney('fee-total-paid', totals.total);

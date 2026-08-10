@@ -76,6 +76,7 @@ test('wallet-authorized one-approval upload is tracked without claiming native o
     ownedByYou: false,
     authorizedByYou: true,
     paymentMode: 'one-approval-beta-batch',
+    paymentGroupId: 'batch-auth-1',
     account: '0xabc',
     expiresAt: 2_592_001_000,
   });
@@ -86,6 +87,7 @@ test('wallet-authorized one-approval upload is tracked without claiming native o
   assert.equal(saved?.ownedByYou, false);
   assert.equal(saved?.authorizedByYou, true);
   assert.equal(saved?.paymentMode, 'one-approval-beta-batch');
+  assert.equal(saved?.paymentGroupId, 'batch-auth-1');
   assert.equal(saved?.expirationMicros, 2_592_001_000_000);
 });
 
@@ -201,7 +203,7 @@ test('Gallery renders an aggregate fee dashboard from local upload history', () 
   assert.match(source, /storageCostAccountingMicro/);
   assert.match(source, /serviceFeeAccountingMicro/);
   assert.match(source, /totalAccountingMicro/);
-  assert.match(source, /hasAccountingBreakdown/);
+  assert.match(source, /summarizeFeeReceipts/);
   assert.match(source, /Not recorded/);
   assert.match(source, /fee-unitemized/);
 });

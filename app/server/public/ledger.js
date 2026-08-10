@@ -162,6 +162,7 @@ export function createLedger(storage = globalThis.localStorage, now = Date.now) 
         ownedByYou: result.ownedByYou === true,
         authorizedByYou: result.authorizedByYou === true,
         paymentMode: result.paymentMode || '',
+        paymentGroupId: result.paymentGroupId || '',
         state: 'active',
         registerTransactionHash: result.registerTransactionHash || result.transactionHash,
         acknowledgementHash: result.acknowledgementHash,
