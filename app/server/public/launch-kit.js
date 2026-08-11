@@ -1,6 +1,7 @@
 const HTTPS_OR_DECENTRALIZED = /^(https:\/\/|ipfs:\/\/|ar:\/\/)/i;
 const IMAGE_EXTENSION = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+const UNIX_MILLISECONDS_THRESHOLD = 100_000_000_000;
 
 export const DEFAULT_LAUNCH_TARGETS = Object.freeze({
   evmErc721: true,
@@ -34,6 +35,13 @@ function sourcePath(item) {
 
 function sourceSort(left, right) {
   return collator.compare(sourcePath(left), sourcePath(right));
+}
+
+function expirationIso(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+  const milliseconds = timestamp > UNIX_MILLISECONDS_THRESHOLD ? timestamp : timestamp * 1000;
+  return new Date(milliseconds).toISOString();
 }
 
 function manifestRowsForCollection(manifests, collection) {
@@ -135,7 +143,7 @@ export function buildLaunchItems(collection, manifests = [], options = {}) {
       metadataKey: text(item?.metadataKey || item?.sourceArtifactKey || row?.metadataPath),
       contentType: text(item?.contentType),
       sizeBytes: Number(item?.size || item?.sizeBytes || 0),
-      expiresAt: item?.expiresAt ? new Date(Number(item.expiresAt) * 1000).toISOString() : '',
+      expiresAt: expirationIso(item?.expiresAt),
       attributes: Object.freeze(inferAttributes(item, row)),
     });
   }));

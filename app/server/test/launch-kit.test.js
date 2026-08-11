@@ -87,6 +87,17 @@ test('launch items preserve folder filenames and hosted TokenURI relationships',
   assert.equal(items[1].displayName, 'Genesis #2');
 });
 
+test('launch items preserve Vault expiration timestamps stored in milliseconds', () => {
+  const expiresAt = Date.UTC(2026, 8, 7, 6, 31, 24);
+  const collection = {
+    ...collectionFixture(),
+    items: collectionFixture().items.map((item) => ({ ...item, expiresAt })),
+  };
+  const items = buildLaunchItems(collection, manifestFixture(), { tokenIdStart: 1 });
+
+  assert.equal(items[0].expiresAt, '2026-09-07T06:31:24.000Z');
+});
+
 test('chain output generators create expected handoff rows', () => {
   const collection = collectionFixture();
   const profile = {
