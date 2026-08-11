@@ -175,6 +175,7 @@ function zipBytes(entries) {
     ...centralParts,
     endOfCentralDirectory(entries.length, centralSize, localOffset),
   ]);
+  return bytes;
 }
 
 function zipEntries(entries, type = 'application/zip') {
