@@ -8,10 +8,10 @@ Wallet-owned hot storage, cross-chain fee receipts, and canonical NFT metadata f
 - Supported storage runtimes: Aptos Testnet and ShelbyNet
 - Currently available runtime: ShelbyNet
 - Fee receipt networks: Aptos Testnet, Solana Devnet, and Ethereum Sepolia
-- Status: public testnet beta
+- Status: ShelbyNet testnet beta
 - Source: [github.com/duclucky/Vessel](https://github.com/duclucky/Vessel)
 
-Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued Vessel fee receipt evidence. The application does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
+Vessel is an end-to-end NFT media workspace. A user connects an existing wallet, establishes a wallet-controlled Shelby storage identity, prepares individual assets or collection folders, generates NFT metadata, and receives contract-issued Vessel fee receipt evidence. Vessel does not mint NFTs. It produces media and metadata URLs that an NFT contract or marketplace can consume.
 
 The codebase and configuration support both Aptos Testnet and ShelbyNet storage runtimes. The production beta currently exposes ShelbyNet as the live route. Aptos Testnet is implemented, retained, and intentionally disabled from the public entry so it can be re-enabled for fallback, regression checks, or a runtime switch without deleting the testnet path.
 
@@ -33,8 +33,9 @@ Vessel currently combines these journeys in one web application:
 4. **Wallet-scoped Vault and Gallery**: records successful artifacts for the connected wallet and exposes copy, preview, and removal actions.
 5. **Canonical NFT metadata**: creates cross-chain JSON for one NFT, including traits and media fields.
 6. **Collection metadata export**: groups an uploaded collection from Vault history, reuses its Shelby media URLs, and exports deterministic JSON files as a ZIP.
-7. **Latency evidence**: compares a real Shelby read with a configured public IPFS gateway and reports unavailable measurements honestly.
-8. **Vessel fee receipt**: validates a signed quote and accepts a contract receipt from the supported chain instead of treating a transfer to an ordinary wallet as payment evidence.
+7. **Multichain NFT Launch Kit**: turns Vault collections into EVM, Solana, and Aptos handoff packages for NFT builders.
+8. **Latency evidence**: compares a real Shelby read with a configured public IPFS gateway and reports unavailable measurements honestly.
+9. **Vessel fee receipt**: validates a signed quote and accepts a contract receipt from the supported chain instead of treating a transfer to an ordinary wallet as payment evidence.
 
 ## Current network status
 
@@ -84,7 +85,23 @@ Metadata supports two modes:
 
 Hosting the generated JSON uses the same active Shelby runtime and write gate as media upload.
 
-### 5. Inspect latency
+### 5. Prepare a multichain launch package
+
+Open Launch Kit after media and metadata are recorded in Vault. Select a collection, choose the target handoff formats, review validation issues, and download a package for the chain team or launch operator.
+
+The Launch Kit exports:
+
+- OpenSea-compatible `contractURI.json`.
+- Ethereum ERC-721 TokenURI rows.
+- Ethereum ERC-1155 TokenURI rows with 64-character `{id}` hex IDs.
+- Solana Metaplex Core asset rows.
+- Solana Token Metadata legacy asset rows.
+- Aptos Digital Asset collection and token URI rows.
+- A validation workbook and launch checklist.
+
+The Launch Kit is a handoff layer. It does not mint NFTs, deploy NFT contracts, call marketplace APIs, or make ShelbyNet beta URLs permanent. It packages the URLs and metadata already created by the wallet-owned storage workflow.
+
+### 6. Inspect latency
 
 The Latency page fetches the configured Shelby artifact and an optional IPFS comparison asset. It displays actual results only. A missing or unavailable comparison remains `n/a`.
 

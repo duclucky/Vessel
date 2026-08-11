@@ -41,7 +41,7 @@ test('Landing exposes ShelbyNet live and leaves Aptos Testnet in maintenance', (
   assert.match(html, /data-network-option="aptos-testnet"/);
   assert.match(html, /data-network-status="maintenance"/);
   assert.match(html, /Aptos Testnet/i);
-  assert.match(html, /Implemented\s*\/\s*disabled/i);
+  assert.match(html, /Maintenance/i);
   assert.match(html, /aria-disabled="true"/);
   assert.match(html, /data-network-option="shelbynet"/);
   assert.match(html, /data-network-status="live"/);
@@ -76,6 +76,7 @@ test('Landing names current storage, metadata, and proof capabilities', () => {
     'Wallet-scoped Vault',
     'NFT metadata',
     'Collection JSON export',
+    'Multichain NFT Launch Kit',
     'Latency proof',
     'Flexible retention',
     'Vessel fee receipts',
@@ -100,4 +101,12 @@ test('Landing explains both chain paths and honest beta safeguards', () => {
   assert.match(html, /mainnet readiness/i);
   assert.doesNotMatch(html, /API is paused|public API is not available/i);
   assert.doesNotMatch(html, /permanent storage|production SLA|guaranteed availability|encrypted|immutable blobs/i);
+});
+
+test('README positions the Launch Kit and current network availability accurately', () => {
+  const readme = fs.readFileSync(path.resolve(publicDir, '..', '..', '..', 'README.md'), 'utf8');
+  assert.match(readme, /Multichain NFT Launch Kit/i);
+  assert.match(readme, /ShelbyNet testnet beta/i);
+  assert.match(readme, /Vessel does not mint NFTs/i);
+  assert.match(readme, /Aptos Testnet is implemented, retained, and intentionally disabled/i);
 });
